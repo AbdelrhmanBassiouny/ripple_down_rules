@@ -15,41 +15,6 @@ from pycram.object_descriptors.generic import ObjectDescription as GenericObject
 from pycram.world_concepts.world_object import Object
 
 
-def str_to_operator_fn(rule_str: str) -> Tuple[Optional[str], Optional[str], Optional[Callable]]:
-    """
-    Convert a string containing a rule to a function that represents the rule.
-
-    :param rule_str: A string that contains the rule.
-    :return: A function that represents the rule.
-    """
-    func = None
-    op = None
-    arg1 = None
-    arg2 = None
-    if '=' not in rule_str:
-        if "<" in rule_str:
-            func = lambda x, y: x < y
-            op = "<"
-        elif ">" in rule_str:
-            func = lambda x, y: x > y
-            op = ">"
-    elif '=' in rule_str:
-        if "<=" in rule_str:
-            func = lambda x, y: x <= y
-            op = "<="
-        elif ">=" in rule_str:
-            func = lambda x, y: x >= y
-            op = ">="
-        elif "==" in rule_str:
-            func = lambda x, y: x == y
-            op = "=="
-    if op is not None:
-        arg1, arg2 = rule_str.split(op)
-        arg1 = arg1.strip()
-        arg2 = arg2.strip()
-    return arg1, arg2, func
-
-
 def check_if_object_is_supported(obj: Object, distance: Optional[float] = 0.03) -> bool:
     """
     Check if the object is supported by any other object.

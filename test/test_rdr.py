@@ -1,3 +1,4 @@
+import os
 from unittest import TestCase
 
 import pandas as pd
@@ -5,7 +6,7 @@ from typing_extensions import List
 from ucimlrepo import fetch_ucirepo, dotdict
 
 from episode_segmenter.helpers import create_cases_from_dataframe
-from episode_segmenter.ripple_down_rules import Case, Attribute, SingleClassRDR, Category
+from episode_segmenter.ripple_down_rules import Case, SingleClassRDR, Category
 
 
 class TestRDR(TestCase):
@@ -30,7 +31,7 @@ class TestRDR(TestCase):
         cls.all_cases = create_cases_from_dataframe(cls.X, ids)
         # print category names
         cls.category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
-        cls.category_id_to_name = {i+1: name for i, name in enumerate(cls.category_names)}
+        cls.category_id_to_name = {i + 1: name for i, name in enumerate(cls.category_names)}
         cls.targets = [cls.category_id_to_name[i] for i in cls.y.values.flatten()]
 
     @classmethod
@@ -62,6 +63,7 @@ class TestRDR(TestCase):
 
     def test_fit_scrdr(self):
         scrdr = SingleClassRDR()
-        scrdr.fit(self.all_cases, [Category(t) for t in self.targets])
+        scrdr.fit(self.all_cases, [Category(t) for t in self.targets], n_iter=20)
+        scrdr.render_tree(use_dot_exporter=True, filename="scrdr")
         cat = scrdr.classify(self.all_cases[50])
         self.assertEqual(cat.name, self.targets[50])
