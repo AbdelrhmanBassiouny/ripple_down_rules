@@ -404,11 +404,15 @@ class SingleClassRDR:
             return
         self.fig.clf()
         graph = tree_to_graph(self.start_rule)
-        self.fig.set_size_inches(graph.number_of_nodes() + 5, graph.number_of_nodes() + 3)
+        fig_sz_x = 10
+        fig_sz_y = 9
+        self.fig.set_size_inches(fig_sz_x, fig_sz_y)
         pos = nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot")
         # scale down pos
-        pos = {k: (v[0] / 4, v[1] / 4) for k, v in pos.items()}
-        nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=4000,
+        max_pos_x = max([v[0] for v in pos.values()])
+        max_pos_y = max([v[1] for v in pos.values()])
+        pos = {k: (v[0] * fig_sz_x / max_pos_x, v[1] * fig_sz_y / max_pos_y) for k, v in pos.items()}
+        nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=2000,
                 ax=self.fig.gca(), node_shape="o", font_size=8)
         nx.draw_networkx_edge_labels(graph, pos, edge_labels=nx.get_edge_attributes(graph, 'weight'),
                                      ax=self.fig.gca(), rotate=False, clip_on=False)
