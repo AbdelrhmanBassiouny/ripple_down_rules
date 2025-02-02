@@ -6,7 +6,8 @@ from typing_extensions import List
 from ucimlrepo import fetch_ucirepo, dotdict
 
 from pyrdr.helpers import create_cases_from_dataframe
-from pyrdr.rdr import Case, SingleClassRDR, Category
+from pyrdr.datastructures import Case, Category
+from pyrdr.rdr import SingleClassRDR
 
 
 class TestRDR(TestCase):
