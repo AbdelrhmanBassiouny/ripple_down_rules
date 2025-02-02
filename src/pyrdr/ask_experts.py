@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 from orderedset import OrderedSet
-from typing_extensions import Optional, Dict
+from typing_extensions import Optional, Dict, TYPE_CHECKING
 
 from .datastructures import Attribute, str_to_operator_fn, Condition, Case, Category
 from .failures import InvalidOperator
 
+if TYPE_CHECKING:
+    from .rdr import Rule
+
 
 def ask_human(x: Case, target: Category, pred: Optional[Rule] = None,
               diff_attributes: Optional[Dict[str, Attribute]] = None) -> Dict[str, Condition]:
+    """
+    Ask the human to provide the differentiating features between two cases.
+
+    :param x: The case to classify.
+    :param target: The target category to compare the case with.
+    :param pred: The predicted rule.
+    :param diff_attributes: The differentiating attributes between the predicted rule and the case.
+    :return: The differentiating features as new rule conditions.
+    """
     if pred:
         action = "Refinement" if pred.fired else "Alternative"
         print(f"{action} needed for rule:\n")
