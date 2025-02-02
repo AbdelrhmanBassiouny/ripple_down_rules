@@ -1,7 +1,7 @@
 import pandas as pd
 from typing_extensions import List
 
-from .ripple_down_rules import Case, Attribute
+from .rdr import Case, Attribute
 
 
 def create_cases_from_dataframe(df: pd.DataFrame, ids: List[str]) -> List[Case]:

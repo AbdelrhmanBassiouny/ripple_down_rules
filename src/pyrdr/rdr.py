@@ -9,6 +9,8 @@ from matplotlib import pyplot as plt
 from sqlalchemy.util import OrderedSet
 from typing_extensions import List, Any, Optional, Self, Dict, Callable, Tuple
 
+from pyrdr.utils import tree_to_graph
+
 
 class Category:
     def __init__(self, name: str):
@@ -169,6 +171,8 @@ class Rule(NodeMixin):
     corner_case: Optional[Case] = None
     refinement: Optional[Rule] = None
     alternative: Optional[Rule] = None
+    all_rules: Dict[str, Rule] = {}
+    rule_idx: int = 0
 
     def __init__(self, conditions: Dict[str, Condition], category: Category,
                  edge_weight: Optional[str] = None,
@@ -180,6 +184,16 @@ class Rule(NodeMixin):
         self.conclusion = category
         self.parent = parent
         self.weight = edge_weight if parent is not None else None
+        self._name = self.__str__()
+        self.update_all_rules()
+
+    def update_all_rules(self):
+        if self.name in self.all_rules:
+            self.all_rules[self.name].append(self)
+            self.rule_idx = len(self.all_rules[self.name]) - 1
+            self.name += f"_{self.rule_idx}"
+        else:
+            self.all_rules[self.name] = [self]
 
     def _post_detach(self, parent):
         """
@@ -216,12 +230,18 @@ class Rule(NodeMixin):
             return self
 
     def add_alternative(self, x: Case, conditions: Dict[str, Condition], category: Category):
-        self.alternative = Rule(conditions, category, corner_case=Case(x.id_, list(x.attributes.values())),
-                                parent=self, edge_weight="else if")
+        if self.alternative:
+            self.alternative.add_alternative(x, conditions, category)
+        else:
+            self.alternative = Rule(conditions, category, corner_case=Case(x.id_, list(x.attributes.values())),
+                                    parent=self, edge_weight="else if")
 
     def add_refinement(self, x: Case, conditions: Dict[str, Condition], category: Category):
-        self.refinement = Rule(conditions, category, corner_case=Case(x.id_, list(x.attributes.values())),
-                               parent=self, edge_weight="except if")
+        if self.refinement:
+            self.refinement.add_alternative(x, conditions, category)
+        else:
+            self.refinement = Rule(conditions, category, corner_case=Case(x.id_, list(x.attributes.values())),
+                                   parent=self, edge_weight="except if")
 
     def get_different_attributes(self, x: Case) -> Dict[str, Attribute]:
         return {a.name: a for a in self.corner_case.attributes.values()
@@ -229,7 +249,11 @@ class Rule(NodeMixin):
 
     @property
     def name(self):
-        return self.__str__()
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
 
     def __str__(self, sep="\n"):
         conditions = f"^{sep}".join([str(c) for c in list(self.conditions.values())])
@@ -244,14 +268,29 @@ class SingleClassRDR:
     start_rule: Optional[Rule] = None
 
     def __init__(self, start_rule: Optional[Rule] = None):
+        """
+        A single class ripple down rule classifier.
+
+        :param start_rule: The starting rule for the classifier.
+        """
         self.start_rule = start_rule
-        self.stop_tree = False
+        self.fig: Optional[plt.Figure] = None
 
     def classify(self, x: Case, target: Optional[Category] = None) -> Category:
+        """
+        Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
+        comparing the case with the target category if provided.
+
+        :param x: The case to classify.
+        :param target: The target category to compare the case with.
+        :return: The category that the case belongs to.
+        """
         if not self.start_rule:
             conditions = self.ask_user(x, target)
             self.start_rule = Rule(conditions, target, corner_case=Case(x.id_, list(x.attributes.values())))
+
         pred = self.start_rule(x)
+
         if target and pred.conclusion != target:
             diff_attributes = pred.get_different_attributes(x)
             conditions = self.ask_user(x, target, pred, diff_attributes)
@@ -259,6 +298,7 @@ class SingleClassRDR:
                 pred.add_refinement(x, conditions, target)
             else:
                 pred.add_alternative(x, conditions, target)
+
         return pred.conclusion
 
     @staticmethod
@@ -267,12 +307,10 @@ class SingleClassRDR:
         if pred:
             action = "Refinement" if pred.fired else "Alternative"
             print(f"{action} needed for rule:\n")
-            if pred.fired:
-                all_attributes = list(pred.corner_case.attributes.values()) + list(x.attributes.values())
-            else:
-                all_attributes = list(x.attributes.values())
+        if pred and pred.fired:
+            all_attributes = list(pred.corner_case.attributes.values()) + list(x.attributes.values())
         else:
-            print("Please provide the first rule:")
+            print("Please provide a rule for case:")
             all_attributes = list(x.attributes.values())
 
         all_names = OrderedSet([a.name for a in all_attributes])
@@ -294,7 +332,7 @@ class SingleClassRDR:
 
         if pred and pred.fired and diff_attributes:
             diff = {name: "Y" if name in diff_attributes else "N" for name in all_names}
-            diff_row = ljust(f"diff: ")
+            diff_row = ljust(f"diff: ") + ljust(" ")
             diff_row += "".join([f"{ljust(diff[name])}" for name in all_names])
             print(diff_row)
 
@@ -360,33 +398,17 @@ class SingleClassRDR:
             de.to_dotfile(f"{filename}{'.dot'}")
             de.to_picture(f"{filename}{'.png'}")
 
-    def tree_to_graph(self):
-        """Convert anytree to a networkx graph."""
-        graph = nx.DiGraph()
-
-        def add_edges(node):
-            if node not in graph.nodes:
-                graph.add_node(node.name)
-            for child in node.children:
-                if node not in graph.nodes:
-                    graph.add_node(child.name)
-                graph.add_edge(node.name, child.name, weight=child.weight)
-                add_edges(child)
-
-        add_edges(self.start_rule)
-        return graph
-
     def draw_tree(self):
         """Draw the tree using matplotlib and networkx."""
         if self.start_rule is None:
             return
         self.fig.clf()
-        graph = self.tree_to_graph()
+        graph = tree_to_graph(self.start_rule)
         self.fig.set_size_inches(graph.number_of_nodes() + 5, graph.number_of_nodes() + 3)
         pos = nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot")
         # scale down pos
-        pos = {k: (v[0] / 2, v[1] / 2) for k, v in pos.items()}
-        nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=8000,
+        pos = {k: (v[0] / 4, v[1] / 4) for k, v in pos.items()}
+        nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=4000,
                 ax=self.fig.gca(), node_shape="o", font_size=8)
         nx.draw_networkx_edge_labels(graph, pos, edge_labels=nx.get_edge_attributes(graph, 'weight'),
                                      ax=self.fig.gca(), rotate=False, clip_on=False)
