@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import logging
-import threading
-import time
 
 import networkx as nx
 from anytree import RenderTree, NodeMixin
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from matplotlib.animation import FuncAnimation
 from sqlalchemy.util import OrderedSet
 from typing_extensions import List, Any, Optional, Self, Dict, Callable, Tuple
 
@@ -167,7 +164,7 @@ class Case:
 
 
 class Rule(NodeMixin):
-    category: Category
+    conclusion: Category
     fired: bool = False
     corner_case: Optional[Case] = None
     refinement: Optional[Rule] = None
@@ -180,7 +177,7 @@ class Rule(NodeMixin):
         super(Rule, self).__init__()
         self.conditions = conditions
         self.corner_case = corner_case
-        self.category = category
+        self.conclusion = category
         self.parent = parent
         self.weight = edge_weight if parent is not None else None
 
@@ -199,6 +196,12 @@ class Rule(NodeMixin):
         return self.conditions.get(attribute_name, None)
 
     def match(self, x: Case) -> Rule:
+        """
+        Check if the rule or its refinement or its alternative matches the case.
+
+        :param x: The case to match.
+        :return: The rule that matches the case.
+        """
         for att_name, condition in self.conditions.items():
             if att_name not in x.attributes:
                 self.fired = False
@@ -207,7 +210,10 @@ class Rule(NodeMixin):
                 self.fired = False
                 return self.alternative(x) if self.alternative else self
         self.fired = True
-        return self.refinement(x) if self.refinement else self
+        if self.refinement and self.refinement(x).fired:
+            return self.refinement(x)
+        else:
+            return self
 
     def add_alternative(self, x: Case, conditions: Dict[str, Condition], category: Category):
         self.alternative = Rule(conditions, category, corner_case=Case(x.id_, list(x.attributes.values())),
@@ -218,7 +224,8 @@ class Rule(NodeMixin):
                                parent=self, edge_weight="except if")
 
     def get_different_attributes(self, x: Case) -> Dict[str, Attribute]:
-        return {a.name: a for a in self.corner_case.attributes if a not in x.attributes}
+        return {a.name: a for a in self.corner_case.attributes.values()
+                if a not in x.attributes.values()}
 
     @property
     def name(self):
@@ -226,7 +233,7 @@ class Rule(NodeMixin):
 
     def __str__(self, sep="\n"):
         conditions = f"^{sep}".join([str(c) for c in list(self.conditions.values())])
-        conditions += f"{sep}=> {self.category.name}"
+        conditions += f"{sep}=> {self.conclusion.name}"
         return conditions
 
     def __repr__(self):
@@ -245,18 +252,14 @@ class SingleClassRDR:
             conditions = self.ask_user(x, target)
             self.start_rule = Rule(conditions, target, corner_case=Case(x.id_, list(x.attributes.values())))
         pred = self.start_rule(x)
-        if pred is not self.start_rule:
-            print(f"returned rule is not the start rule")
-        else:
-            print(f"returned rule is the start rule")
-        if target and pred.category != target:
+        if target and pred.conclusion != target:
             diff_attributes = pred.get_different_attributes(x)
             conditions = self.ask_user(x, target, pred, diff_attributes)
             if pred.fired:
                 pred.add_refinement(x, conditions, target)
             else:
                 pred.add_alternative(x, conditions, target)
-        return pred.category
+        return pred.conclusion
 
     @staticmethod
     def ask_user(x: Case, target: Category, pred: Optional[Rule] = None,
@@ -264,7 +267,10 @@ class SingleClassRDR:
         if pred:
             action = "Refinement" if pred.fired else "Alternative"
             print(f"{action} needed for rule:\n")
-            all_attributes = list(pred.corner_case.attributes.values()) + list(x.attributes.values())
+            if pred.fired:
+                all_attributes = list(pred.corner_case.attributes.values()) + list(x.attributes.values())
+            else:
+                all_attributes = list(x.attributes.values())
         else:
             print("Please provide the first rule:")
             all_attributes = list(x.attributes.values())
@@ -281,14 +287,16 @@ class SingleClassRDR:
         names_row += "".join([f"{ljust(name)}" for name in all_names + ["type"]])
         print(names_row)
 
-        if pred:
+        if pred and pred.fired:
             pred.corner_case.print_values(all_names, is_corner_case=True,
                                           ljust_sz=max_len)
         x.print_values(all_names, target, ljust_sz=max_len)
 
-        if diff_attributes:
+        if pred and pred.fired and diff_attributes:
             diff = {name: "Y" if name in diff_attributes else "N" for name in all_names}
-            print("".join([f" different : {ljust(diff[name])}" for name in all_names]))
+            diff_row = ljust(f"diff: ")
+            diff_row += "".join([f"{ljust(diff[name])}" for name in all_names])
+            print(diff_row)
 
         # take user input
         rule_conditions = {}
@@ -297,17 +305,20 @@ class SingleClassRDR:
             value = input()
             rules = value.split(",")
             done = True
+            messages = []
             for rule in rules:
                 rule = rule.strip()
                 name, value, operator = str_to_operator_fn(rule)
                 if name and value and operator:
                     if name not in all_names:
-                        print(f"Attribute {name} not found in the attributes list please enter it again:")
+                        messages.append(f"Attribute {name} not found in the attributes list please enter it again")
                         done = False
                         continue
                     rule_conditions[name] = Condition(name, int(value), operator)
             if done:
                 return rule_conditions
+            elif len(messages) > 0:
+                print("\n".join(messages))
 
     def fit(self, x_batch: List[Case], y_batch: List[Category],
             n_iter: int = 100):
@@ -336,7 +347,7 @@ class SingleClassRDR:
         return f'style="bold", label=" {weight}"'  # Properly formatted
 
     def render_tree(self, use_dot_exporter: bool = False,
-                    filename: str = "scrdr.dot"):
+                    filename: str = "scrdr"):
         if not self.start_rule:
             logging.warning("No rules to render")
             return
@@ -361,6 +372,7 @@ class SingleClassRDR:
                     graph.add_node(child.name)
                 graph.add_edge(node.name, child.name, weight=child.weight)
                 add_edges(child)
+
         add_edges(self.start_rule)
         return graph
 
@@ -375,5 +387,7 @@ class SingleClassRDR:
         # scale down pos
         pos = {k: (v[0] / 2, v[1] / 2) for k, v in pos.items()}
         nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=8000,
-                ax=self.fig.gca())
+                ax=self.fig.gca(), node_shape="o", font_size=8)
+        nx.draw_networkx_edge_labels(graph, pos, edge_labels=nx.get_edge_attributes(graph, 'weight'),
+                                     ax=self.fig.gca(), rotate=False, clip_on=False)
         plt.pause(0.1)
