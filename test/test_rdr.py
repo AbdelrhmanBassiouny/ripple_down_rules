@@ -63,7 +63,7 @@ class TestRDR(TestCase):
 
     def test_fit_scrdr(self):
         scrdr = SingleClassRDR()
-        scrdr.fit(self.all_cases, [Category(t) for t in self.targets])
+        scrdr.fit(self.all_cases, [Category(t) for t in self.targets], n_iter=20)
         scrdr.render_tree(use_dot_exporter=True, filename="scrdr")
         cat = scrdr.classify(self.all_cases[50])
         self.assertEqual(cat.name, self.targets[50])

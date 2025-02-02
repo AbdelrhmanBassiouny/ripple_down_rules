@@ -375,7 +375,8 @@ class SingleClassRDR:
                 if i >= n_iter:
                     break
         plt.ioff()
-        plt.close(self.fig)
+        print(f"Finished training in {i} iterations")
+        plt.show()
 
     @staticmethod
     def edge_attr_debug(parent, child):
