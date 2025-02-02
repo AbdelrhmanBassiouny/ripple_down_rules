@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 
 import networkx as nx
 from anytree import RenderTree, NodeMixin
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
+from orderedset import OrderedSet
 from typing_extensions import List, Optional, Self, Dict, Callable
 
 from .ask_experts import ask_human
-from .datastructures import Category, Attribute, Condition, Case
+from .datastructures import Category, Attribute, Condition, Case, Stop
 from .utils import tree_to_graph
 
 
@@ -65,31 +67,30 @@ class Rule(NodeMixin):
         :return: The rule that matches the case.
         """
         for att_name, condition in self.conditions.items():
-            if att_name not in x.attributes:
-                self.fired = False
-                return self.alternative(x) if self.alternative else self
-            elif not condition(x.attributes[att_name].value):
+            if att_name not in x.attributes or not condition(x.attributes[att_name].value):
                 self.fired = False
                 return self.alternative(x) if self.alternative else self
         self.fired = True
-        if self.refinement and self.refinement(x).fired:
-            return self.refinement(x)
-        else:
-            return self
+        refined_rule = self.refinement(x) if self.refinement else None
+        return refined_rule if refined_rule and refined_rule.fired else self
 
     def add_alternative(self, x: Case, conditions: Dict[str, Condition], category: Category):
         if self.alternative:
             self.alternative.add_alternative(x, conditions, category)
         else:
-            self.alternative = Rule(conditions, category, corner_case=Case(x.id_, list(x.attributes.values())),
-                                    parent=self, edge_weight="else if")
+            self.alternative = self.add_connected_rule(conditions, category, x, edge_weight="else if")
 
     def add_refinement(self, x: Case, conditions: Dict[str, Condition], category: Category):
         if self.refinement:
             self.refinement.add_alternative(x, conditions, category)
         else:
-            self.refinement = Rule(conditions, category, corner_case=Case(x.id_, list(x.attributes.values())),
-                                   parent=self, edge_weight="except if")
+            self.refinement = self.add_connected_rule(conditions, category, x, edge_weight="except if")
+
+    def add_connected_rule(self, conditions: Dict[str, Condition], category: Category,
+                           corner_case: Case,
+                           edge_weight: Optional[str] = None):
+        return Rule(conditions, category, corner_case=Case(corner_case.id_, list(corner_case.attributes.values())),
+                    parent=self, edge_weight=edge_weight)
 
     def get_different_attributes(self, x: Case) -> Dict[str, Attribute]:
         return {a.name: a for a in self.corner_case.attributes.values()
@@ -112,8 +113,110 @@ class Rule(NodeMixin):
         return self.__str__()
 
 
-class SingleClassRDR:
+class RippleDownRules(ABC):
+
     start_rule: Optional[Rule] = None
+    """
+    The starting rule for the classifier tree.
+    """
+    fig: Optional[plt.Figure] = None
+    """
+    The figure to draw the tree on.
+    """
+
+    @abstractmethod
+    def classify(self, x: Case, target: Optional[Category] = None,
+                    ask_expert: Optional[Callable] = None) -> Category:
+        """
+        Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
+        comparing the case with the target category if provided.
+
+        :param x: The case to classify.
+        :param target: The target category to compare the case with.
+        :param ask_expert: The expert function to ask for differentiating features as new rule conditions.
+        :return: The category that the case belongs to.
+        """
+        pass
+
+    def fit(self, x_batch: List[Case], y_batch: List[Category],
+            n_iter: int = 100):
+        """
+        Fit the classifier to a batch of cases and categories.
+
+        :param x_batch: The batch of cases to fit the classifier to.
+        :param y_batch: The batch of categories to fit the classifier to.
+        :param n_iter: The number of iterations to fit the classifier for.
+        """
+        plt.ion()
+        # Start tree updating in a separate thread
+        self.fig = plt.figure()
+        all_pred = 0
+        i = 0
+        while all_pred != len(y_batch) and i < n_iter:
+            all_pred = 0
+            for x, y in zip(x_batch, y_batch):
+                pred_cat = self.classify(x, y)
+                pred_cat = list(pred_cat) if isinstance(pred_cat, list) else [pred_cat]
+                all_pred += len(pred_cat) == 1 and pred_cat[0] == y
+                self.draw_tree()
+                i += 1
+                if i >= n_iter:
+                    break
+        plt.ioff()
+        print(f"Finished training in {i} iterations")
+        plt.show()
+
+    @staticmethod
+    def edge_attr_setter(parent, child):
+        """
+        Set the edge attributes for the dot exporter.
+        """
+        if child is None or child.weight is None:
+            return ""
+        return f'style="bold", label=" {child.weight}"'
+
+    def render_tree(self, use_dot_exporter: bool = False,
+                    filename: str = "scrdr"):
+        """
+        Render the tree using the console and optionally export it to a dot file.
+
+        :param use_dot_exporter: Whether to export the tree to a dot file.
+        :param filename: The name of the file to export the tree to.
+        """
+        if not self.start_rule:
+            logging.warning("No rules to render")
+            return
+        for pre, _, node in RenderTree(self.start_rule):
+            print(f"{pre}{node.weight or ''} {node.__str__(sep='')}")
+        if use_dot_exporter:
+            de = DotExporter(self.start_rule,
+                             edgeattrfunc=self.edge_attr_setter
+                             )
+            de.to_dotfile(f"{filename}{'.dot'}")
+            de.to_picture(f"{filename}{'.png'}")
+
+    def draw_tree(self):
+        """Draw the tree using matplotlib and networkx."""
+        if self.start_rule is None:
+            return
+        self.fig.clf()
+        graph = tree_to_graph(self.start_rule)
+        fig_sz_x = 10
+        fig_sz_y = 9
+        self.fig.set_size_inches(fig_sz_x, fig_sz_y)
+        pos = nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot")
+        # scale down pos
+        max_pos_x = max([v[0] for v in pos.values()])
+        max_pos_y = max([v[1] for v in pos.values()])
+        pos = {k: (v[0] * fig_sz_x / max_pos_x, v[1] * fig_sz_y / max_pos_y) for k, v in pos.items()}
+        nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=2000,
+                ax=self.fig.gca(), node_shape="o", font_size=8)
+        nx.draw_networkx_edge_labels(graph, pos, edge_labels=nx.get_edge_attributes(graph, 'weight'),
+                                     ax=self.fig.gca(), rotate=False, clip_on=False)
+        plt.pause(0.1)
+
+
+class SingleClassRDR(RippleDownRules):
 
     def __init__(self, start_rule: Optional[Rule] = None):
         """
@@ -152,63 +255,65 @@ class SingleClassRDR:
 
         return pred.conclusion
 
-    def fit(self, x_batch: List[Case], y_batch: List[Category],
-            n_iter: int = 100):
-        plt.ion()
-        # Start tree updating in a separate thread
-        self.fig = plt.figure()
-        all_pred = 0
-        i = 0
-        while all_pred != len(y_batch) and i < n_iter:
-            all_pred = 0
-            for x, y in zip(x_batch, y_batch):
-                pred_cat = self.classify(x, y)
-                all_pred += pred_cat == y
-                self.draw_tree()
-                i += 1
-                if i >= n_iter:
-                    break
-        plt.ioff()
-        print(f"Finished training in {i} iterations")
-        plt.show()
 
-    @staticmethod
-    def edge_attr_debug(parent, child):
-        if child is None:
-            return ""
-        weight = child.weight if child.weight is not None else 0  # Ensure weight is not None
-        return f'style="bold", label=" {weight}"'  # Properly formatted
+class MultiClassRDR(RippleDownRules):
+    def __init__(self, start_rules: Optional[List[Rule]] = None):
+        self.start_rules = start_rules
 
-    def render_tree(self, use_dot_exporter: bool = False,
-                    filename: str = "scrdr"):
-        if not self.start_rule:
-            logging.warning("No rules to render")
-            return
-        for pre, _, node in RenderTree(self.start_rule):
-            print(f"{pre}{node.weight or ''} {node.__str__(sep='')}")
-        if use_dot_exporter:
-            de = DotExporter(self.start_rule,
-                             edgeattrfunc=self.edge_attr_debug
-                             )
-            de.to_dotfile(f"{filename}{'.dot'}")
-            de.to_picture(f"{filename}{'.png'}")
+    @property
+    def start_rule(self):
+        return self.start_rules[0] if self.start_rules else None
 
-    def draw_tree(self):
-        """Draw the tree using matplotlib and networkx."""
-        if self.start_rule is None:
-            return
-        self.fig.clf()
-        graph = tree_to_graph(self.start_rule)
-        fig_sz_x = 10
-        fig_sz_y = 9
-        self.fig.set_size_inches(fig_sz_x, fig_sz_y)
-        pos = nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot")
-        # scale down pos
-        max_pos_x = max([v[0] for v in pos.values()])
-        max_pos_y = max([v[1] for v in pos.values()])
-        pos = {k: (v[0] * fig_sz_x / max_pos_x, v[1] * fig_sz_y / max_pos_y) for k, v in pos.items()}
-        nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=2000,
-                ax=self.fig.gca(), node_shape="o", font_size=8)
-        nx.draw_networkx_edge_labels(graph, pos, edge_labels=nx.get_edge_attributes(graph, 'weight'),
-                                     ax=self.fig.gca(), rotate=False, clip_on=False)
-        plt.pause(0.1)
+    def classify(self, x: Case, target: Optional[Category] = None,
+                 ask_expert: Optional[Callable] = None) -> List[Category]:
+        """
+        Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
+         or missing by comparing the case with the target category if provided.
+
+        :param x: The case to classify.
+        :param target: The target category to compare the case with.
+        :param ask_expert: The expert function to ask for differentiating features as new rule conditions.
+        :return: The conclusions that the case belongs to.
+        """
+        ask_expert = ask_expert if ask_expert else ask_human
+        if not self.start_rules:
+            conditions = ask_expert(x, target)
+            self.start_rules = [Rule(conditions, target, corner_case=Case(x.id_, list(x.attributes.values())))]
+
+        rule_idx = 0
+        evaluated_rules = []
+        conclusions = []
+        stop_rule_conditions = None
+        while rule_idx < len(self.start_rules):
+            evaluated_rule = self.start_rules[rule_idx](x)
+            if evaluated_rule.fired and evaluated_rule.conclusion == Stop():
+                rule_idx += 1
+                continue
+            if target and evaluated_rule.fired and evaluated_rule.conclusion != target:
+                diff_attributes = evaluated_rule.get_different_attributes(x)
+                conditions = ask_expert(x, target, evaluated_rule, diff_attributes)
+                evaluated_rule.add_refinement(x, conditions, Stop())
+                stop_rule_conditions = conditions
+                rule_idx += 1
+            elif (target and not evaluated_rule.fired
+                  and rule_idx == len(self.start_rules)-1 and target not in conclusions):
+                # Nothing fired and there is a target that should have fired
+                if stop_rule_conditions:
+                    conditions = stop_rule_conditions
+                    stop_rule_conditions = None
+                else:
+                    conditions = ask_expert(x, target)
+                self.add_top_rule(conditions, target, x)
+                rule_idx = 0  # Have to check all rules again to make sure only this new rule fires
+            elif evaluated_rule.fired:  # Rule fired and target is correct or there is no target to compare
+                evaluated_rules.append(evaluated_rule)
+                conclusions.append(evaluated_rule.conclusion)
+                rule_idx += 1
+            else:  # Nothing fired and there is no target
+                rule_idx += 1
+
+        return list(OrderedSet(conclusions))
+
+    def add_top_rule(self, conditions: Dict[str, Condition], category: Category, corner_case: Case):
+        self.start_rules.append(self.start_rules[-1].add_connected_rule(conditions, category, corner_case,
+                                                                        edge_weight="next"))

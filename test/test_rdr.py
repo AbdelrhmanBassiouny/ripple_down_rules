@@ -7,7 +7,7 @@ from ucimlrepo import fetch_ucirepo, dotdict
 
 from pyrdr.helpers import create_cases_from_dataframe
 from pyrdr.datastructures import Case, Category
-from pyrdr.rdr import SingleClassRDR
+from pyrdr.rdr import SingleClassRDR, MultiClassRDR
 
 
 class TestRDR(TestCase):
@@ -68,3 +68,15 @@ class TestRDR(TestCase):
         scrdr.render_tree(use_dot_exporter=True, filename="scrdr")
         cat = scrdr.classify(self.all_cases[50])
         self.assertEqual(cat.name, self.targets[50])
+
+    def test_classify_mcrdr(self):
+        mcrdr = MultiClassRDR()
+        cats = mcrdr.classify(self.all_cases[0], Category(self.targets[0]))
+        self.assertEqual(cats[0].name, self.targets[0])
+
+    def test_fit_mcrdr(self):
+        mcrdr = MultiClassRDR()
+        mcrdr.fit(self.all_cases, [Category(t) for t in self.targets], n_iter=20)
+        mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr")
+        cats = mcrdr.classify(self.all_cases[50])
+        self.assertEqual(cats[0].name, self.targets[50])
