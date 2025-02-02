@@ -1,0 +1,90 @@
+digraph tree {
+    "milk == 1
+=> mammal";
+    "aquatic == 1
+=> fish";
+    "feathers == 1
+=> bird";
+    "backbone == 0^
+breathes == 0
+=> molusc";
+    "eggs == 1^
+breathes == 1^
+backbone == 0
+=> insect";
+    "tail == 1^
+backbone == 1^
+breathes == 1
+=> reptile";
+    "backbone == 0^
+breathes == 1^
+fins == 0^
+tail == 1
+=> molusc";
+    "legs == 0
+=> molusc";
+    "backbone == 0^
+fins == 0
+=> molusc";
+    "feathers == 1
+=> bird_1";
+    "breathes == 1^
+fins == 0
+=> amphibian";
+    "fins == 0^
+legs == 0
+=> reptile";
+    "milk == 1
+=> mammal" -> "aquatic == 1
+=> fish" [style="bold", label=" else if"];
+    "aquatic == 1
+=> fish" -> "feathers == 1
+=> bird" [style="bold", label=" else if"];
+    "aquatic == 1
+=> fish" -> "backbone == 0^
+fins == 0
+=> molusc" [style="bold", label=" except if"];
+    "feathers == 1
+=> bird" -> "backbone == 0^
+breathes == 0
+=> molusc" [style="bold", label=" else if"];
+    "backbone == 0^
+breathes == 0
+=> molusc" -> "eggs == 1^
+breathes == 1^
+backbone == 0
+=> insect" [style="bold", label=" else if"];
+    "eggs == 1^
+breathes == 1^
+backbone == 0
+=> insect" -> "tail == 1^
+backbone == 1^
+breathes == 1
+=> reptile" [style="bold", label=" else if"];
+    "eggs == 1^
+breathes == 1^
+backbone == 0
+=> insect" -> "legs == 0
+=> molusc" [style="bold", label=" except if"];
+    "tail == 1^
+backbone == 1^
+breathes == 1
+=> reptile" -> "backbone == 0^
+breathes == 1^
+fins == 0^
+tail == 1
+=> molusc" [style="bold", label=" else if"];
+    "backbone == 0^
+fins == 0
+=> molusc" -> "feathers == 1
+=> bird_1" [style="bold", label=" else if"];
+    "feathers == 1
+=> bird_1" -> "breathes == 1^
+fins == 0
+=> amphibian" [style="bold", label=" else if"];
+    "breathes == 1^
+fins == 0
+=> amphibian" -> "fins == 0^
+legs == 0
+=> reptile" [style="bold", label=" else if"];
+}
