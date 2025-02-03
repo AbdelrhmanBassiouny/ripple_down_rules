@@ -130,9 +130,11 @@ class Condition:
 
 
 class Case:
-    def __init__(self, id_: str, attributes: List[Attribute]):
+    def __init__(self, id_: str, attributes: List[Attribute],
+                 conclusions: Optional[List[Category]] = None):
         self.attributes = {a.name: a for a in attributes}
         self.id_ = id_
+        self.conclusions: Optional[List[Category]] = conclusions
 
     @property
     def attribute_values(self):
@@ -162,6 +164,8 @@ class Case:
                              for name in all_names])
         if target:
             case_row += f"{self.ljust(target.name, sz=ljust_sz)}"
+        if self.conclusions:
+            case_row += ",".join([f"{self.ljust(c.name, sz=ljust_sz)}" for c in self.conclusions])
         print(case_row)
 
     def __str__(self):

@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 from orderedset import OrderedSet
 from typing_extensions import List, Optional, Self, Dict, Callable
 
-from .ask_experts import ask_human
+from .experts import Expert, Human
 from .datastructures import Category, Attribute, Condition, Case, Stop, MCRDRMode
 from .utils import tree_to_graph
 
@@ -196,27 +196,27 @@ class RippleDownRules(ABC):
 
     @abstractmethod
     def classify(self, x: Case, target: Optional[Category] = None,
-                 ask_expert: Optional[Callable] = None) -> Category:
+                 expert: Optional[Expert] = None) -> Category:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
 
         :param x: The case to classify.
         :param target: The target category to compare the case with.
-        :param ask_expert: The expert function to ask for differentiating features as new rule conditions.
+        :param expert: The expert to ask for differentiating features as new rule conditions.
         :return: The category that the case belongs to.
         """
         pass
 
     def fit(self, x_batch: List[Case], y_batch: List[Category],
-            ask_expert: Optional[Callable] = None,
+            expert: Optional[Expert] = None,
             n_iter: int = None):
         """
         Fit the classifier to a batch of cases and categories.
 
         :param x_batch: The batch of cases to fit the classifier to.
         :param y_batch: The batch of categories to fit the classifier to.
-        :param ask_expert: The expert function to ask for differentiating features as new rule conditions.
+        :param expert: The expert to ask for differentiating features as new rule conditions.
         :param n_iter: The number of iterations to fit the classifier for.
         """
         plt.ion()
@@ -229,7 +229,7 @@ class RippleDownRules(ABC):
                 or (not n_iter and all_pred != len(y_batch)):
             all_pred = 0
             for x, y in zip(x_batch, y_batch):
-                pred_cat = self.classify(x, y, ask_expert=ask_expert)
+                pred_cat = self.classify(x, y, expert=expert)
                 pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
                 match = len(pred_cat) == 1 and pred_cat[0] == y
                 if not match:
@@ -309,26 +309,25 @@ class SingleClassRDR(RippleDownRules):
         self.fig: Optional[plt.Figure] = None
 
     def classify(self, x: Case, target: Optional[Category] = None,
-                 ask_expert: Optional[Callable] = None) -> Category:
+                 expert: Optional[Expert] = None) -> Category:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
 
         :param x: The case to classify.
         :param target: The target category to compare the case with.
-        :param ask_expert: The expert function to ask for differentiating features as new rule conditions.
+        :param expert: The expert to ask for differentiating features as new rule conditions.
         :return: The category that the case belongs to.
         """
-        ask_expert = ask_expert if ask_expert else ask_human
+        expert = expert if expert else Human()
         if not self.start_rule:
-            conditions = ask_expert(x, target)
+            conditions = expert.ask_for_conditions(x, target)
             self.start_rule = Rule(conditions, target, corner_case=Case(x.id_, list(x.attributes.values())))
 
         pred = self.start_rule(x)
 
         if target and pred.conclusion != target:
-            diff_attributes = pred.get_different_attributes(x)
-            conditions = ask_expert(x, target, pred, diff_attributes)
+            conditions = expert.ask_for_conditions(x, target, pred)
             if pred.fired:
                 pred.add_refinement(x, conditions, target)
             else:
@@ -362,20 +361,21 @@ class MultiClassRDR(RippleDownRules):
         return self.start_rules[0] if self.start_rules else None
 
     def classify(self, x: Case, target: Optional[Category] = None,
-                 ask_expert: Optional[Callable] = None) -> List[Category]:
+                 expert: Optional[Expert] = None, add_extra_conclusions: bool = False) -> List[Category]:
         """
         Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
          or missing by comparing the case with the target category if provided.
 
         :param x: The case to classify.
         :param target: The target category to compare the case with.
-        :param ask_expert: The expert function to ask for differentiating features as new rule conditions.
+        :param expert: The expert to ask for differentiating features as new rule conditions or for extra conclusions.
+        :param add_extra_conclusions: Whether to add extra conclusions after classification is done.
         :return: The conclusions that the case belongs to.
         """
-        ask_expert = ask_expert if ask_expert else ask_human
+        expert = expert if expert else Human()
         self.all_expert_answers = [] if not self.all_expert_answers else self.all_expert_answers
         if not self.start_rules:
-            conditions = ask_expert(x, target)
+            conditions = expert.ask_for_conditions(x, target)
             self.all_expert_answers.append(conditions)
             self.start_rules = [Rule(conditions, target, corner_case=Case(x.id_, list(x.attributes.values())))]
 
@@ -387,8 +387,7 @@ class MultiClassRDR(RippleDownRules):
             evaluated_rule = self.start_rules[rule_idx](x)
 
             if target and evaluated_rule.fired and evaluated_rule.conclusion not in [target, Stop()]:
-                diff_attributes = evaluated_rule.get_different_attributes(x)
-                conditions = ask_expert(x, target, evaluated_rule, diff_attributes)
+                conditions = expert.ask_for_conditions(x, target, evaluated_rule)
                 self.all_expert_answers.append(conditions)
                 evaluated_rule.add_refinement(x, conditions, Stop())
                 if self.mode == MCRDRMode.StopPlusRule:
@@ -407,12 +406,19 @@ class MultiClassRDR(RippleDownRules):
                     conditions = stop_rule_conditions
                     stop_rule_conditions = None
                 else:
-                    conditions = ask_expert(x, target)
+                    conditions = expert.ask_for_conditions(x, target)
                     self.all_expert_answers.append(conditions)
                 self.add_top_rule(conditions, target, x)
                 rule_idx = 0  # Have to check all rules again to make sure only this new rule fires
-                continue
-            rule_idx += 1
+            else:
+                rule_idx += 1
+
+            if add_extra_conclusions and target and target in conclusions and rule_idx >= len(self.start_rules) - 1:
+                # Add extra conclusions if needed
+                extra_conclusions = expert.ask_for_extra_conclusions(x, list(OrderedSet(conclusions)))
+                for conclusion, conditions in extra_conclusions.items():
+                    self.add_top_rule(conditions, conclusion, x)
+
         return list(OrderedSet(conclusions))
 
     def add_top_rule(self, conditions: Dict[str, Condition], conclusion: Category, corner_case: Case):

@@ -5,6 +5,7 @@ from typing_extensions import List
 from ucimlrepo import fetch_ucirepo, dotdict
 
 from pyrdr.datastructures import Case, Category, str_to_operator_fn, Condition, MCRDRMode
+from pyrdr.experts import Expert
 from pyrdr.helpers import create_cases_from_dataframe
 from pyrdr.rdr import SingleClassRDR, MultiClassRDR
 
@@ -74,23 +75,32 @@ class TestRDR(TestCase):
         self.assertEqual(cats[0].name, self.targets[0])
 
     def test_fit_mcrdr(self):
-        self.expert_answer_idx = 0
-        all_expert_conditions = self.mcrdr_test_expert()
-
-        def expert(x, target, corner_case=None, diff_att=None):
-            answer = all_expert_conditions[self.expert_answer_idx]
-            self.expert_answer_idx += 1
-            return answer
-
+        expert = MCRDRTester()
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
-                  ask_expert=expert)
+                  expert=expert)
         mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr")
         cats = mcrdr.classify(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
 
+
+class MCRDRTester(Expert):
+
+    def __init__(self, mode: MCRDRMode = MCRDRMode.StopOnly):
+        self.mode = mode
+        self.all_expert_answers = self.get_all_expert_answers(mode)
+        self.current_answer_idx = 0
+
+    def ask_for_conditions(self, x: Case, target: Category, last_evaluated_rule=None):
+        answer = self.all_expert_answers[self.current_answer_idx]
+        self.current_answer_idx += 1
+        return answer
+
+    def ask_for_extra_conclusions(self, x: Case, current_conclusions=None):
+        pass
+
     @staticmethod
-    def mcrdr_test_expert(mode: MCRDRMode = MCRDRMode.StopOnly):
+    def get_all_expert_answers(mode: MCRDRMode):
         if mode == MCRDRMode.StopPlusRule:
             all_expert_answers = [
                 {'milk': "milk == 1.0"},
