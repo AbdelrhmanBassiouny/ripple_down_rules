@@ -1,7 +1,6 @@
 import json
 import os
-import pickle
-from unittest import TestCase, skip
+from unittest import TestCase
 
 import pandas as pd
 from typing_extensions import List, Optional
@@ -116,7 +115,7 @@ class TestRDR(TestCase):
 
     def test_fit_mcrdr_stop_only(self):
         draw_tree = False
-        expert = RDRTester()
+        expert = MCRDRTester()
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
                   expert=expert, draw_tree=draw_tree)
@@ -126,7 +125,7 @@ class TestRDR(TestCase):
 
     def test_fit_mcrdr_stop_plus_rule(self):
         draw_tree = False
-        expert = RDRTester(MCRDRMode.StopPlusRule)
+        expert = MCRDRTester(MCRDRMode.StopPlusRule)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
                   expert=expert, draw_tree=draw_tree)
@@ -156,7 +155,7 @@ class TestRDR(TestCase):
     def test_fit_mcrdr_with_extra_conclusions(self):
         draw_tree = False
         use_loaded_answers = True
-        expert = RDRTester()
+        expert = MCRDRTester()
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
                   add_extra_conclusions=False, expert=expert, draw_tree=draw_tree)
@@ -174,7 +173,7 @@ class TestRDR(TestCase):
             expert.save_answers(file_name)
 
 
-class RDRTester(Expert):
+class MCRDRTester(Expert):
 
     def __init__(self, mode: MCRDRMode = MCRDRMode.StopOnly):
         self.mode = mode
@@ -192,58 +191,13 @@ class RDRTester(Expert):
     @staticmethod
     def get_all_expert_answers(mode: MCRDRMode):
         if mode == MCRDRMode.StopPlusRule:
-            all_expert_answers = [
-                {'milk': "milk == 1.0"},
-                {'aquatic': "aquatic == 1.0"},
-                {'feathers': "feathers == 1.0"},
-                {'backbone': "backbone == 0.0", 'breathes': "breathes == 0.0"},
-                {'backbone': "backbone == 0.0", 'fins': "fins == 0.0"},
-                {'milk': "milk == 1.0"},
-                {'feathers': "feathers == 1.0"},
-                {'eggs': "eggs == 1.0", 'breathes': "breathes == 1.0", 'backbone': "backbone == 0.0",
-                 'milk': "milk == 0.0", 'fins': "fins == 0.0", 'aquatic': "aquatic == 0.0"},
-                {'breathes': "breathes == 1.0", 'fins': "fins == 0.0"},
-                {'milk': "milk == 1.0"},
-                {'backbone': "backbone == 0.0", 'aquatic': "aquatic == 0.0"},
-                {'feathers': "feathers == 1.0"},
-                {'tail': "tail == 1.0"},
-                {'milk': "milk == 1.0"},
-                {'feathers': "feathers == 1.0"},
-                {'backbone': "backbone == 0.0"},
-                {'aquatic': "aquatic == 1.0", 'breathes': "breathes == 0.0", 'fins': "fins == 1.0"},
-                {'fins': "fins == 0.0"},
-                {'legs': "legs == 0.0"},
-                {'tail': "tail == 0.0"},
-                {'backbone': "backbone == 0.0", 'breathes': "breathes == 1.0", 'fins': "fins == 0.0",
-                 'feathers': "feathers == 0.0", 'milk': "milk == 0.0"}]
+            json_file = os.path.join(os.getcwd(), "mcrdr_stop_plus_rule_answers_fit.json")
+            with open(json_file, "r") as f:
+                all_expert_answers = json.load(f)
         elif mode == MCRDRMode.StopOnly:
-            all_expert_answers = [
-                {"milk": "milk == 1.0"},
-                {"aquatic": "aquatic == 1.0"},
-                {"feathers": "feathers == 1.0"},
-                {"backbone": "backbone == 0.0", "breathes": "breathes == 0.0", "legs": "legs == 0.0"},
-                {"backbone": "backbone == 0.0", "fins": "fins == 0.0"},
-                {"backbone": "backbone == 0.0", "breathes": "breathes == 0.0", "fins": "fins == 0.0",
-                 "milk": "milk == 0.0", "feathers": "feathers == 0.0"},
-                {"milk": "milk == 1.0"},
-                {"feathers": "feathers == 1.0"},
-                {"eggs": "eggs == 1.0", "backbone": "backbone == 0.0", "breathes": "breathes == 1.0",
-                 "milk": "milk == 0.0", "feathers": "feathers == 0.0", "aquatic": "aquatic == 0.0",
-                 "fins": "fins == 0.0"},
-                {"breathes": "breathes == 1.0", "fins": "fins == 0.0"},
-                {"aquatic": "aquatic == 1.0", "breathes": "breathes == 1.0", "feathers": "feathers == 0.0",
-                 "milk": "milk == 0.0", "backbone": "backbone == 1.0", "fins": "fins == 0.0"},
-                {"feathers": "feathers == 0.0", "milk": "milk == 0.0", "backbone": "backbone == 1.0",
-                 "tail": "tail == 1.0"},
-                {"feathers": "feathers == 0.0", "milk": "milk == 0.0", "fins": "fins == 0.0",
-                 "backbone": "backbone == 0.0", "breathes": "breathes == 1.0"},
-                {"aquatic": "aquatic == 1.0", "fins": "fins == 1.0", "breathes": "breathes == 0.0"},
-                {"fins": "fins == 0.0", "tail": "tail == 1.0"},
-                {"legs": "legs == 0.0"},
-                {"eggs": "eggs == 1.0", "tail": "tail == 0.0"},
-                {"milk": "milk == 0.0", "feathers": "feathers == 0.0", "backbone": "backbone == 0.0",
-                 "fins": "fins == 0.0"}
-            ]
+            json_file = os.path.join(os.getcwd(), "mcrdr_stop_only_answers_fit.json")
+            with open(json_file, "r") as f:
+                all_expert_answers = json.load(f)
         all_expert_conditions = [{name: str_to_operator_fn(c) for name, c in a.items()} for a in all_expert_answers]
         all_expert_conditions = [
             {name: Condition(n, float(value), operator) for name, (n, value, operator) in a.items()}
@@ -254,4 +208,3 @@ class RDRTester(Expert):
                                      target: Optional[Category] = None,
                                      current_conclusions: Optional[List[Category]] = None) -> bool:
         pass
-
