@@ -406,18 +406,8 @@ class MultiClassRDR(RippleDownRules):
 
             if (target and evaluated_rule.fired
                     and evaluated_rule.conclusion not in [target, Stop(), *extra_conclusions]):
-                conclusions = list(OrderedSet(self.conclusions))
-                if evaluated_rule.conclusion not in self.expert_accepted_conclusions:
-                    if (add_extra_conclusions and expert.ask_if_conclusion_is_correct(x, evaluated_rule.conclusion,
-                                                                                     target=target,
-                                                                                     current_conclusions=conclusions)):
-                        self.add_conclusion(evaluated_rule)
-                        self.expert_accepted_conclusions.append(evaluated_rule.conclusion)
-                    else:
-                        conditions = expert.ask_for_conditions(x, target, evaluated_rule)
-                        evaluated_rule.add_refinement(x, conditions, Stop())
-                        if self.mode == MCRDRMode.StopPlusRule:
-                            self.stop_rule_conditions = conditions
+                # Rule fired and conclusion is different from target
+                self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule, add_extra_conclusions)
 
             elif evaluated_rule.fired and evaluated_rule.conclusion != Stop():
                 # Rule fired and target is correct or there is no target to compare
@@ -426,12 +416,7 @@ class MultiClassRDR(RippleDownRules):
             if (target and rule_idx >= len(self.start_rules) - 1
                     and target not in self.conclusions):
                 # Nothing fired and there is a target that should have fired
-                if self.stop_rule_conditions and self.mode == MCRDRMode.StopPlusRule:
-                    conditions = self.stop_rule_conditions
-                    self.stop_rule_conditions = None
-                else:
-                    conditions = expert.ask_for_conditions(x, target)
-                self.add_top_rule(conditions, target, x)
+                self.add_rule_for_case(x, target, expert)
                 rule_idx = 0  # Have to check all rules again to make sure only this new rule fires
             else:
                 rule_idx += 1
@@ -440,15 +425,73 @@ class MultiClassRDR(RippleDownRules):
                     and target and target in self.conclusions
                     and rule_idx == len(self.start_rules)):
                 # Add extra conclusions if needed
-                conclusions = list(OrderedSet(self.conclusions))
-                print("current conclusions:", conclusions)
-                extra_conclusions_dict = expert.ask_for_extra_conclusions(x, conclusions)
-                if extra_conclusions_dict:
-                    for conclusion, conditions in extra_conclusions_dict.items():
-                        self.add_top_rule(conditions, conclusion, x)
-                        extra_conclusions.append(conclusion)
+                extra_conclusions.extend(self.ask_expert_for_extra_conclusions(expert, x))
 
         return list(OrderedSet(self.conclusions))
+
+    def stop_wrong_conclusion_else_add_it(self, x: Case, target: Category, expert: Expert, evaluated_rule: Rule,
+                                          add_extra_conclusions: bool):
+        """
+        Stop a wrong conclusion by adding a stopping rule.
+        """
+        if evaluated_rule.conclusion in self.expert_accepted_conclusions:
+            return
+        elif not self.is_conclusion_is_correct(x, target, expert, evaluated_rule, add_extra_conclusions):
+            conditions = expert.ask_for_conditions(x, target, evaluated_rule)
+            evaluated_rule.add_refinement(x, conditions, Stop())
+            if self.mode == MCRDRMode.StopPlusRule:
+                self.stop_rule_conditions = conditions
+
+    def is_conclusion_is_correct(self, x: Case, target: Category, expert: Expert, evaluated_rule: Rule,
+                                 add_extra_conclusions: bool) -> bool:
+        """
+        Ask the expert if the conclusion is correct, and add it to the conclusions if it is.
+
+        :param x: The case to classify.
+        :param target: The target category to compare the case with.
+        :param expert: The expert to ask for differentiating features as new rule conditions.
+        :param evaluated_rule: The evaluated rule to ask the expert about.
+        :param add_extra_conclusions: Whether adding extra conclusions after classification is allowed.
+        :return: Whether the conclusion is correct or not.
+        """
+        conclusions = list(OrderedSet(self.conclusions))
+        if (add_extra_conclusions and expert.ask_if_conclusion_is_correct(x, evaluated_rule.conclusion,
+                                                                          target=target,
+                                                                          current_conclusions=conclusions)):
+            self.add_conclusion(evaluated_rule)
+            self.expert_accepted_conclusions.append(evaluated_rule.conclusion)
+            return True
+        return False
+
+    def add_rule_for_case(self, x: Case, target: Category, expert: Expert):
+        """
+        Add a rule for a case that has not been classified with any conclusion.
+        """
+        if self.stop_rule_conditions and self.mode == MCRDRMode.StopPlusRule:
+            conditions = self.stop_rule_conditions
+            self.stop_rule_conditions = None
+        else:
+            conditions = expert.ask_for_conditions(x, target)
+        self.add_top_rule(conditions, target, x)
+
+    def ask_expert_for_extra_conclusions(self, expert: Expert, x: Case) -> List[Category]:
+        """
+        Ask the expert for extra conclusions when no more conclusions can be made.
+
+        :param expert: The expert to ask for extra conclusions.
+        :param x: The case to ask extra conclusions for.
+        :return: The extra conclusions that the expert has provided.
+        """
+        extra_conclusions = []
+        conclusions = list(OrderedSet(self.conclusions))
+        if not expert.use_loaded_answers:
+            print("current conclusions:", conclusions)
+        extra_conclusions_dict = expert.ask_for_extra_conclusions(x, conclusions)
+        if extra_conclusions_dict:
+            for conclusion, conditions in extra_conclusions_dict.items():
+                self.add_top_rule(conditions, conclusion, x)
+                extra_conclusions.append(conclusion)
+        return extra_conclusions
 
     def add_conclusion(self, evaluated_rule: Rule):
         """

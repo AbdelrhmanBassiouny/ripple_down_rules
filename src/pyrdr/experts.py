@@ -25,6 +25,10 @@ class Expert(ABC):
     """
     A list of all expert answers, used for testing purposes.
     """
+    use_loaded_answers: bool = False
+    """
+    A flag to indicate if the expert should use loaded answers or not.
+    """
 
     @abstractmethod
     def ask_for_conditions(self, x: Case, target: Category, last_evaluated_rule: Optional[Rule] = None)\
