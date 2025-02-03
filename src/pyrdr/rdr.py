@@ -467,3 +467,20 @@ class MultiClassRDR(RippleDownRules):
         """
         self.start_rules.append(self.start_rules[-1].add_connected_rule(conditions, conclusion, corner_case,
                                                                         edge_weight="next"))
+
+
+class GeneralRDR(RippleDownRules):
+    """
+    A general ripple down rules classifier, which can draw multiple conclusions for a case, but each conclusion is part
+    of a set of mutually exclusive conclusions. Whenever a conclusion is made, the classification restarts from the
+    starting rule, and all the rules that belong to the class of the made conclusion are not checked again. This
+    continues until no more rules can be fired. In addition, previous conclusions can be used as conditions or input to
+    the next classification/cycle.
+    Another possible mode is to have rules that are considered final, when fired, inference will not be restarted,
+     and only a refinement can be made to the final rule, those can also be used in another SCRD of their own that
+     gets called when the final rule fires.
+    """
+    def classify(self, x: Case, target: Optional[Category] = None,
+                 expert: Optional[Expert] = None,
+                 **kwargs) -> Category:
+        pass

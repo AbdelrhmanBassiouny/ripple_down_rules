@@ -22,6 +22,14 @@ class MCRDRMode(Enum):
 
 
 class Category:
+    """
+    A category is an abstract concept that represents a class or a label. In a classification problem, a category
+    represents a class or a label that a case can be classified into. In RDR it is referred to as a conclusion.
+    It is important to know that a concept can be an attribute or a category depending on the context, for example,
+    in the case when one is trying to infer the species of an animal, the species is a category, but when one is trying
+    to infer if a species flies or not, the concept of flying becomes a category while the species becomes an attribute.
+    """
+
     def __init__(self, name: str):
         self.name = name
 
@@ -41,11 +49,21 @@ class Category:
 
 
 class Stop(Category):
+    """
+    A stop category is a special category that represents the stopping of the classification to prevent a wrong
+    conclusion from being made.
+    """
+
     def __init__(self):
         super().__init__("null")
 
 
 class Attribute:
+    """
+    An attribute is a name-value pair that represents a feature of a case.
+    an attribute can be used to compare two cases and to make a conclusion about a case.
+    """
+
     def __init__(self, name: str, value: Any):
         self.name = name
         self.value = value
@@ -58,6 +76,9 @@ class Attribute:
 
 
 class Operator(ABC):
+    """
+    An operator is a function that compares two values and returns a boolean value.
+    """
 
     @property
     @abstractmethod
@@ -76,6 +97,9 @@ class Operator(ABC):
 
 
 class Equal(Operator):
+    """
+    An equal operator that checks if two values are equal.
+    """
 
     def __call__(self, x: Any, y: Any) -> bool:
         return x == y
@@ -86,6 +110,10 @@ class Equal(Operator):
 
 
 class Greater(Operator):
+    """
+    A greater operator that checks if the first value is greater than the second value.
+    """
+
     def __call__(self, x: Any, y: Any) -> bool:
         return x > y
 
@@ -95,6 +123,10 @@ class Greater(Operator):
 
 
 class GreaterEqual(Operator):
+    """
+    A greater or equal operator that checks if the first value is greater or equal to the second value.
+    """
+
     def __call__(self, x: Any, y: Any) -> bool:
         return x >= y
 
@@ -104,6 +136,10 @@ class GreaterEqual(Operator):
 
 
 class Less(Operator):
+    """
+    A less operator that checks if the first value is less than the second value.
+    """
+
     def __call__(self, x: Any, y: Any) -> bool:
         return x < y
 
@@ -113,6 +149,9 @@ class Less(Operator):
 
 
 class LessEqual(Operator):
+    """
+    A less or equal operator that checks if the first value is less or equal to the second value.
+    """
 
     def __call__(self, x: Any, y: Any) -> bool:
         return x <= y
@@ -147,7 +186,17 @@ def str_to_operator_fn(rule_str: str) -> Tuple[Optional[str], Optional[str], Opt
 
 
 class Condition:
+    """
+    A condition is a constraint on an attribute that must be satisfied for a case to be classified into a category.
+    """
     def __init__(self, name: str, value: Any, operator: Operator):
+        """
+        Create a condition.
+
+        :param name: The name of the attribute that the condition is applied to.
+        :param value: The value of the constraint.
+        :param operator: The operator to compare the value to other values.
+        """
         self.name = name
         self.value = value
         self.operator = operator
@@ -163,8 +212,19 @@ class Condition:
 
 
 class Case:
+    """
+    A case is a collection of attributes that represents an instance that can be classified into a category or
+    multiple categories.
+    """
     def __init__(self, id_: str, attributes: List[Attribute],
                  conclusions: Optional[List[Category]] = None):
+        """
+        Create a case.
+
+        :param id_: The id of the case.
+        :param attributes: The attributes of the case.
+        :param conclusions: The conclusions that has been made about the case.
+        """
         self.attributes = {a.name: a for a in attributes}
         self.id_ = id_
         self.conclusions: Optional[List[Category]] = conclusions
