@@ -1,6 +1,23 @@
+from enum import Enum, auto
+
 from typing_extensions import Any, Callable, Tuple, Optional, List
 
 from .failures import InvalidOperator
+
+
+class MCRDRMode(Enum):
+    """
+    The modes of the MultiClassRDR.
+    """
+    StopOnly = auto()
+    """
+    StopOnly mode, stop wrong conclusion from being made and does not add a new rule to make the correct conclusion.
+    """
+    StopPlusRule = auto()
+    """
+    StopPlusRule mode, stop wrong conclusion from being made and adds a new rule with same conditions as stopping rule
+     to make the correct conclusion.
+    """
 
 
 class Category:

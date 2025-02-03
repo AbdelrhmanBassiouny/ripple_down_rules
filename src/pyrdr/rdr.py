@@ -11,7 +11,7 @@ from orderedset import OrderedSet
 from typing_extensions import List, Optional, Self, Dict, Callable
 
 from .ask_experts import ask_human
-from .datastructures import Category, Attribute, Condition, Case, Stop
+from .datastructures import Category, Attribute, Condition, Case, Stop, MCRDRMode
 from .utils import tree_to_graph
 
 
@@ -343,13 +343,16 @@ class MultiClassRDR(RippleDownRules):
     This is done by going through all rules and checking if they fire or not, and adding stopping rules if needed,
     when wrong conclusions are made to stop these rules from firing again for similar cases.
     """
-    def __init__(self, start_rules: Optional[List[Rule]] = None):
+    def __init__(self, start_rules: Optional[List[Rule]] = None,
+                 mode: MCRDRMode = MCRDRMode.StopOnly):
         """
         :param start_rules: The starting rules for the classifier, these are the rules that are at the top of the tree
         and are always checked, in contrast to the refinement and alternative rules which are only checked if the
         starting rules fire or not.
+        :param mode: The mode of the classifier, either StopOnly or StopPlusRule.
         """
         self.start_rules = start_rules
+        self.mode: MCRDRMode = mode
 
     @property
     def start_rule(self):
@@ -388,9 +391,11 @@ class MultiClassRDR(RippleDownRules):
                 conditions = ask_expert(x, target, evaluated_rule, diff_attributes)
                 self.all_expert_answers.append(conditions)
                 evaluated_rule.add_refinement(x, conditions, Stop())
-                stop_rule_conditions = conditions
+                if self.mode == MCRDRMode.StopPlusRule:
+                    stop_rule_conditions = conditions
 
-            elif evaluated_rule.fired and evaluated_rule.conclusion != Stop():  # Rule fired and target is correct or there is no target to compare
+            elif evaluated_rule.fired and evaluated_rule.conclusion != Stop():
+                # Rule fired and target is correct or there is no target to compare
                 stop_rule_conditions = None
                 evaluated_rules.append(evaluated_rule)
                 conclusions.append(evaluated_rule.conclusion)
@@ -398,7 +403,7 @@ class MultiClassRDR(RippleDownRules):
             if (target and rule_idx >= len(self.start_rules) - 1
                     and target not in conclusions):
                 # Nothing fired and there is a target that should have fired
-                if stop_rule_conditions:
+                if stop_rule_conditions and self.mode == MCRDRMode.StopPlusRule:
                     conditions = stop_rule_conditions
                     stop_rule_conditions = None
                 else:

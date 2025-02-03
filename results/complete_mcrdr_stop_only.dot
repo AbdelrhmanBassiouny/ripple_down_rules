@@ -1,0 +1,194 @@
+digraph tree {
+    "milk == 1.0
+=> mammal";
+    "aquatic == 1.0
+=> fish";
+    "feathers == 1.0
+=> bird";
+    "backbone == 0.0^
+breathes == 0.0^
+legs == 0.0
+=> molusc";
+    "backbone == 0.0^
+breathes == 0.0^
+fins == 0.0^
+milk == 0.0^
+feathers == 0.0
+=> molusc";
+    "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0^
+milk == 0.0^
+feathers == 0.0^
+aquatic == 0.0^
+fins == 0.0
+=> insect";
+    "aquatic == 1.0^
+breathes == 1.0^
+feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+fins == 0.0
+=> amphibian";
+    "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0
+=> reptile";
+    "feathers == 0.0^
+milk == 0.0^
+fins == 0.0^
+backbone == 0.0^
+breathes == 1.0
+=> molusc";
+    "eggs == 1.0^
+tail == 0.0
+=> null";
+    "milk == 0.0^
+feathers == 0.0^
+backbone == 0.0^
+fins == 0.0
+=> molusc";
+    "aquatic == 1.0^
+fins == 1.0^
+breathes == 0.0
+=> null";
+    "legs == 0.0
+=> null";
+    "backbone == 0.0^
+fins == 0.0
+=> null";
+    "milk == 1.0
+=> null";
+    "feathers == 1.0
+=> null";
+    "breathes == 1.0^
+fins == 0.0
+=> null";
+    "fins == 0.0^
+tail == 1.0
+=> null";
+    "milk == 1.0
+=> mammal" -> "aquatic == 1.0
+=> fish" [style="bold", label=" next"];
+    "aquatic == 1.0
+=> fish" -> "feathers == 1.0
+=> bird" [style="bold", label=" next"];
+    "aquatic == 1.0
+=> fish" -> "backbone == 0.0^
+fins == 0.0
+=> null" [style="bold", label=" except if"];
+    "feathers == 1.0
+=> bird" -> "backbone == 0.0^
+breathes == 0.0^
+legs == 0.0
+=> molusc" [style="bold", label=" next"];
+    "backbone == 0.0^
+breathes == 0.0^
+legs == 0.0
+=> molusc" -> "backbone == 0.0^
+breathes == 0.0^
+fins == 0.0^
+milk == 0.0^
+feathers == 0.0
+=> molusc" [style="bold", label=" next"];
+    "backbone == 0.0^
+breathes == 0.0^
+fins == 0.0^
+milk == 0.0^
+feathers == 0.0
+=> molusc" -> "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0^
+milk == 0.0^
+feathers == 0.0^
+aquatic == 0.0^
+fins == 0.0
+=> insect" [style="bold", label=" next"];
+    "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0^
+milk == 0.0^
+feathers == 0.0^
+aquatic == 0.0^
+fins == 0.0
+=> insect" -> "aquatic == 1.0^
+breathes == 1.0^
+feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+fins == 0.0
+=> amphibian" [style="bold", label=" next"];
+    "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0^
+milk == 0.0^
+feathers == 0.0^
+aquatic == 0.0^
+fins == 0.0
+=> insect" -> "legs == 0.0
+=> null" [style="bold", label=" except if"];
+    "aquatic == 1.0^
+breathes == 1.0^
+feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+fins == 0.0
+=> amphibian" -> "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0
+=> reptile" [style="bold", label=" next"];
+    "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0
+=> reptile" -> "feathers == 0.0^
+milk == 0.0^
+fins == 0.0^
+backbone == 0.0^
+breathes == 1.0
+=> molusc" [style="bold", label=" next"];
+    "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0
+=> reptile" -> "aquatic == 1.0^
+fins == 1.0^
+breathes == 0.0
+=> null" [style="bold", label=" except if"];
+    "feathers == 0.0^
+milk == 0.0^
+fins == 0.0^
+backbone == 0.0^
+breathes == 1.0
+=> molusc" -> "eggs == 1.0^
+tail == 0.0
+=> null" [style="bold", label=" except if"];
+    "feathers == 0.0^
+milk == 0.0^
+fins == 0.0^
+backbone == 0.0^
+breathes == 1.0
+=> molusc" -> "milk == 0.0^
+feathers == 0.0^
+backbone == 0.0^
+fins == 0.0
+=> molusc" [style="bold", label=" next"];
+    "backbone == 0.0^
+fins == 0.0
+=> null" -> "milk == 1.0
+=> null" [style="bold", label=" else if"];
+    "milk == 1.0
+=> null" -> "feathers == 1.0
+=> null" [style="bold", label=" else if"];
+    "feathers == 1.0
+=> null" -> "breathes == 1.0^
+fins == 0.0
+=> null" [style="bold", label=" else if"];
+    "breathes == 1.0^
+fins == 0.0
+=> null" -> "fins == 0.0^
+tail == 1.0
+=> null" [style="bold", label=" else if"];
+}
