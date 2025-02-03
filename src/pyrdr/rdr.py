@@ -418,8 +418,9 @@ class MultiClassRDR(RippleDownRules):
                 # Nothing fired and there is a target that should have fired
                 self.add_rule_for_case(x, target, expert)
                 rule_idx = 0  # Have to check all rules again to make sure only this new rule fires
-            else:
-                rule_idx += 1
+                continue
+
+            rule_idx += 1
 
             if (add_extra_conclusions and not extra_conclusions
                     and target and target in self.conclusions
@@ -520,7 +521,7 @@ class GeneralRDR(RippleDownRules):
     continues until no more rules can be fired. In addition, previous conclusions can be used as conditions or input to
     the next classification/cycle.
     Another possible mode is to have rules that are considered final, when fired, inference will not be restarted,
-     and only a refinement can be made to the final rule, those can also be used in another SCRD of their own that
+     and only a refinement can be made to the final rule, those can also be used in another SCRDR of their own that
      gets called when the final rule fires.
     """
     def classify(self, x: Case, target: Optional[Category] = None,
