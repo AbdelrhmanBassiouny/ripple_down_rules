@@ -1,11 +1,14 @@
-from unittest import TestCase
+import json
+import os
+import pickle
+from unittest import TestCase, skip
 
 import pandas as pd
-from typing_extensions import List
+from typing_extensions import List, Optional
 from ucimlrepo import fetch_ucirepo, dotdict
 
 from pyrdr.datastructures import Case, Category, str_to_operator_fn, Condition, MCRDRMode
-from pyrdr.experts import Expert
+from pyrdr.experts import Expert, Human
 from pyrdr.helpers import create_cases_from_dataframe
 from pyrdr.rdr import SingleClassRDR, MultiClassRDR
 
@@ -58,33 +61,120 @@ class TestRDR(TestCase):
                              for c, r in zip(self.all_cases, all_rows)]))
 
     def test_classify_scrdr(self):
+        use_loaded_answers = True
+        filename = "scrdr_expert_answers_classify"
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+
         scrdr = SingleClassRDR()
-        cat = scrdr.classify(self.all_cases[0], Category(self.targets[0]))
+        cat = scrdr.classify(self.all_cases[0], Category(self.targets[0]), expert=expert)
         self.assertEqual(cat.name, self.targets[0])
 
+        if not use_loaded_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, filename)
+            expert.save_answers(file)
+
     def test_fit_scrdr(self):
+        use_loaded_answers = True
+        draw_tree = False
+        filename = "scrdr_expert_answers_fit"
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+
         scrdr = SingleClassRDR()
-        scrdr.fit(self.all_cases, [Category(t) for t in self.targets], n_iter=20)
+        scrdr.fit(self.all_cases, [Category(t) for t in self.targets], expert=expert,
+                  draw_tree=draw_tree)
         scrdr.render_tree(use_dot_exporter=True, filename="scrdr")
+
         cat = scrdr.classify(self.all_cases[50])
         self.assertEqual(cat.name, self.targets[50])
 
+        if not use_loaded_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, filename)
+            expert.save_answers(file)
+
     def test_classify_mcrdr(self):
+        use_loaded_answers = True
+        filename = "mcrdr_expert_answers_classify"
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+
         mcrdr = MultiClassRDR()
-        cats = mcrdr.classify(self.all_cases[0], Category(self.targets[0]))
+        cats = mcrdr.classify(self.all_cases[0], Category(self.targets[0]), expert=expert)
+
         self.assertEqual(cats[0].name, self.targets[0])
 
-    def test_fit_mcrdr(self):
-        expert = MCRDRTester()
+        if not use_loaded_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, filename)
+            expert.save_answers(file)
+
+    def test_fit_mcrdr_stop_only(self):
+        draw_tree = False
+        expert = RDRTester()
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
-                  expert=expert)
+                  expert=expert, draw_tree=draw_tree)
         mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr")
         cats = mcrdr.classify(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
 
+    def test_fit_mcrdr_stop_plus_rule(self):
+        draw_tree = False
+        expert = RDRTester(MCRDRMode.StopPlusRule)
+        mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
+        mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
+                  expert=expert, draw_tree=draw_tree)
+        mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr")
+        cats = mcrdr.classify(self.all_cases[50])
+        self.assertEqual(cats[0].name, self.targets[50])
 
-class MCRDRTester(Expert):
+    def test_classify_mcrdr_with_extra_conclusions(self):
+        use_loaded_answers = True
+        file_name = "mcrdr_extra_expert_answers_classify"
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        if use_loaded_answers:
+            expert.load_answers(file_name)
+
+        mcrdr = MultiClassRDR()
+        cats = mcrdr.classify(self.all_cases[0], Category(self.targets[0]),
+                              add_extra_conclusions=True, expert=expert)
+
+        self.assertEqual(cats[0].name, self.targets[0])
+        self.assertTrue(Category("lives only on land") in cats)
+
+        if not use_loaded_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, file_name)
+            expert.save_answers(file)
+
+    def test_fit_mcrdr_with_extra_conclusions(self):
+        draw_tree = False
+        use_loaded_answers = True
+        expert = RDRTester()
+        mcrdr = MultiClassRDR()
+        mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
+                  add_extra_conclusions=False, expert=expert, draw_tree=draw_tree)
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        file_name = "mcrdr_extra_expert_answers_fit"
+        if use_loaded_answers:
+            expert.load_answers(file_name)
+        mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
+                  add_extra_conclusions=True, expert=expert, n_iter=10, draw_tree=draw_tree)
+        cats = mcrdr.classify(self.all_cases[50])
+        self.assertEqual(cats[0].name, self.targets[50])
+        self.assertTrue(Category("lives only on land") in cats)
+        mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr_extra")
+        if not use_loaded_answers:
+            expert.save_answers(file_name)
+
+
+class RDRTester(Expert):
 
     def __init__(self, mode: MCRDRMode = MCRDRMode.StopOnly):
         self.mode = mode
@@ -159,3 +249,9 @@ class MCRDRTester(Expert):
             {name: Condition(n, float(value), operator) for name, (n, value, operator) in a.items()}
             for a in all_expert_conditions]
         return all_expert_conditions
+
+    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Category,
+                                     target: Optional[Category] = None,
+                                     current_conclusions: Optional[List[Category]] = None) -> bool:
+        pass
+

@@ -8,10 +8,10 @@ from anytree import RenderTree, NodeMixin
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
 from orderedset import OrderedSet
-from typing_extensions import List, Optional, Self, Dict, Callable
+from typing_extensions import List, Optional, Self, Dict
 
-from .experts import Expert, Human
 from .datastructures import Category, Attribute, Condition, Case, Stop, MCRDRMode
+from .experts import Expert, Human
 from .utils import tree_to_graph
 
 
@@ -37,7 +37,8 @@ class Rule(NodeMixin):
     The index of the rule in the all rules list.
     """
 
-    def __init__(self, conditions: Dict[str, Condition], conclusion: Category,
+    def __init__(self, conditions: Dict[str, Condition],
+                 conclusion: Optional[Category] = None,
                  edge_weight: Optional[str] = None,
                  parent: Optional[Rule] = None,
                  corner_case: Optional[Case] = None):
@@ -170,7 +171,8 @@ class Rule(NodeMixin):
         Get the string representation of the rule, which is the conditions and the conclusion.
         """
         conditions = f"^{sep}".join([str(c) for c in list(self.conditions.values())])
-        conditions += f"{sep}=> {self.conclusion.name}"
+        if self.conclusion:
+            conditions += f"{sep}=> {self.conclusion.name}"
         return conditions
 
     def __repr__(self):
@@ -189,14 +191,14 @@ class RippleDownRules(ABC):
     """
     The figure to draw the tree on.
     """
-    all_expert_answers: Optional[List[Dict[str, Condition]]] = None
+    expert_accepted_conclusions: Optional[List[Category]] = None
     """
-    All expert answers given by the expert function.
+    The conclusions that the expert has accepted, such that they are not asked again.
     """
 
     @abstractmethod
     def classify(self, x: Case, target: Optional[Category] = None,
-                 expert: Optional[Expert] = None) -> Category:
+                 expert: Optional[Expert] = None, **kwargs) -> Category:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
@@ -210,7 +212,9 @@ class RippleDownRules(ABC):
 
     def fit(self, x_batch: List[Case], y_batch: List[Category],
             expert: Optional[Expert] = None,
-            n_iter: int = None):
+            n_iter: int = None,
+            draw_tree: bool = False,
+            **kwargs_for_classify):
         """
         Fit the classifier to a batch of cases and categories.
 
@@ -218,32 +222,33 @@ class RippleDownRules(ABC):
         :param y_batch: The batch of categories to fit the classifier to.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param n_iter: The number of iterations to fit the classifier for.
+        :param draw_tree: Whether to draw the tree while fitting the classifier.
         """
-        plt.ion()
-        # Start tree updating in a separate thread
-        self.fig = plt.figure()
-        self.all_expert_answers = []
+        if draw_tree:
+            plt.ion()
+            self.fig = plt.figure()
         all_pred = 0
         i = 0
         while (all_pred != len(y_batch) and n_iter and i < n_iter) \
                 or (not n_iter and all_pred != len(y_batch)):
             all_pred = 0
             for x, y in zip(x_batch, y_batch):
-                pred_cat = self.classify(x, y, expert=expert)
+                pred_cat = self.classify(x, y, expert=expert, **kwargs_for_classify)
                 pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
-                match = len(pred_cat) == 1 and pred_cat[0] == y
+                match = y in pred_cat
                 if not match:
                     print(f"Predicted: {pred_cat[0]} but expected: {y}")
                 all_pred += int(match)
-                self.draw_tree()
+                if draw_tree:
+                    self.draw_tree()
                 i += 1
                 if n_iter and i >= n_iter:
                     break
             print(f"Accuracy: {all_pred}/{len(y_batch)}")
-            print("all expert answers:", self.all_expert_answers)
-        plt.ioff()
         print(f"Finished training in {i} iterations")
-        plt.show()
+        if draw_tree:
+            plt.ioff()
+            plt.show()
 
     @staticmethod
     def edge_attr_setter(parent, child):
@@ -309,7 +314,7 @@ class SingleClassRDR(RippleDownRules):
         self.fig: Optional[plt.Figure] = None
 
     def classify(self, x: Case, target: Optional[Category] = None,
-                 expert: Optional[Expert] = None) -> Category:
+                 expert: Optional[Expert] = None, **kwargs) -> Category:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
@@ -342,6 +347,19 @@ class MultiClassRDR(RippleDownRules):
     This is done by going through all rules and checking if they fire or not, and adding stopping rules if needed,
     when wrong conclusions are made to stop these rules from firing again for similar cases.
     """
+    evaluated_rules: Optional[List[Rule]] = None
+    """
+    The evaluated rules in the classifier for one case.
+    """
+    conclusions: Optional[List[Category]] = None
+    """
+    The conclusions that the case belongs to.
+    """
+    stop_rule_conditions: Optional[Dict[str, Condition]] = None
+    """
+    The conditions of the stopping rule if needed.
+    """
+
     def __init__(self, start_rules: Optional[List[Rule]] = None,
                  mode: MCRDRMode = MCRDRMode.StopOnly):
         """
@@ -373,53 +391,71 @@ class MultiClassRDR(RippleDownRules):
         :return: The conclusions that the case belongs to.
         """
         expert = expert if expert else Human()
-        self.all_expert_answers = [] if not self.all_expert_answers else self.all_expert_answers
         if not self.start_rules:
             conditions = expert.ask_for_conditions(x, target)
-            self.all_expert_answers.append(conditions)
-            self.start_rules = [Rule(conditions, target, corner_case=Case(x.id_, list(x.attributes.values())))]
+            self.start_rules = [Rule(conditions, target, corner_case=Case(x.id_, x.attributes_list))]
 
         rule_idx = 0
-        evaluated_rules = []
-        conclusions = []
-        stop_rule_conditions = None
+        self.evaluated_rules = []
+        self.conclusions = []
+        self.expert_accepted_conclusions = []
+        self.stop_rule_conditions = None
+        extra_conclusions = []
         while rule_idx < len(self.start_rules):
             evaluated_rule = self.start_rules[rule_idx](x)
 
-            if target and evaluated_rule.fired and evaluated_rule.conclusion not in [target, Stop()]:
-                conditions = expert.ask_for_conditions(x, target, evaluated_rule)
-                self.all_expert_answers.append(conditions)
-                evaluated_rule.add_refinement(x, conditions, Stop())
-                if self.mode == MCRDRMode.StopPlusRule:
-                    stop_rule_conditions = conditions
+            if (target and evaluated_rule.fired
+                    and evaluated_rule.conclusion not in [target, Stop(), *extra_conclusions]):
+                conclusions = list(OrderedSet(self.conclusions))
+                if evaluated_rule.conclusion not in self.expert_accepted_conclusions:
+                    if (add_extra_conclusions and expert.ask_if_conclusion_is_correct(x, evaluated_rule.conclusion,
+                                                                                     target=target,
+                                                                                     current_conclusions=conclusions)):
+                        self.add_conclusion(evaluated_rule)
+                        self.expert_accepted_conclusions.append(evaluated_rule.conclusion)
+                    else:
+                        conditions = expert.ask_for_conditions(x, target, evaluated_rule)
+                        evaluated_rule.add_refinement(x, conditions, Stop())
+                        if self.mode == MCRDRMode.StopPlusRule:
+                            self.stop_rule_conditions = conditions
 
             elif evaluated_rule.fired and evaluated_rule.conclusion != Stop():
                 # Rule fired and target is correct or there is no target to compare
-                stop_rule_conditions = None
-                evaluated_rules.append(evaluated_rule)
-                conclusions.append(evaluated_rule.conclusion)
+                self.add_conclusion(evaluated_rule)
 
             if (target and rule_idx >= len(self.start_rules) - 1
-                    and target not in conclusions):
+                    and target not in self.conclusions):
                 # Nothing fired and there is a target that should have fired
-                if stop_rule_conditions and self.mode == MCRDRMode.StopPlusRule:
-                    conditions = stop_rule_conditions
-                    stop_rule_conditions = None
+                if self.stop_rule_conditions and self.mode == MCRDRMode.StopPlusRule:
+                    conditions = self.stop_rule_conditions
+                    self.stop_rule_conditions = None
                 else:
                     conditions = expert.ask_for_conditions(x, target)
-                    self.all_expert_answers.append(conditions)
                 self.add_top_rule(conditions, target, x)
                 rule_idx = 0  # Have to check all rules again to make sure only this new rule fires
             else:
                 rule_idx += 1
 
-            if add_extra_conclusions and target and target in conclusions and rule_idx >= len(self.start_rules) - 1:
+            if (add_extra_conclusions and not extra_conclusions
+                    and target and target in self.conclusions
+                    and rule_idx == len(self.start_rules)):
                 # Add extra conclusions if needed
-                extra_conclusions = expert.ask_for_extra_conclusions(x, list(OrderedSet(conclusions)))
-                for conclusion, conditions in extra_conclusions.items():
-                    self.add_top_rule(conditions, conclusion, x)
+                conclusions = list(OrderedSet(self.conclusions))
+                print("current conclusions:", conclusions)
+                extra_conclusions_dict = expert.ask_for_extra_conclusions(x, conclusions)
+                if extra_conclusions_dict:
+                    for conclusion, conditions in extra_conclusions_dict.items():
+                        self.add_top_rule(conditions, conclusion, x)
+                        extra_conclusions.append(conclusion)
 
-        return list(OrderedSet(conclusions))
+        return list(OrderedSet(self.conclusions))
+
+    def add_conclusion(self, evaluated_rule: Rule):
+        """
+        Add the conclusion of the evaluated rule to the list of conclusions.
+        """
+        self.evaluated_rules.append(evaluated_rule)
+        self.conclusions.append(evaluated_rule.conclusion)
 
     def add_top_rule(self, conditions: Dict[str, Condition], conclusion: Category, corner_case: Case):
         """

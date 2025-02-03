@@ -1,3 +1,4 @@
+from abc import abstractmethod, ABC
 from enum import Enum, auto
 
 from typing_extensions import Any, Callable, Tuple, Optional, List
@@ -25,10 +26,18 @@ class Category:
         self.name = name
 
     def __eq__(self, other):
+        if not isinstance(other, Category):
+            return False
         return self.name == other.name
 
     def __hash__(self):
         return hash(self.name)
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class Stop(Category):
@@ -48,13 +57,16 @@ class Attribute:
         return hash((self.name, self.value))
 
 
-class Operator:
-    def __init__(self, name: str, func: Callable):
-        self.name = name
-        self.func = func
+class Operator(ABC):
 
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+    @abstractmethod
     def __call__(self, x: Any, y: Any) -> bool:
-        return self.func(x, y)
+        pass
 
     def __str__(self):
         return self.name
@@ -64,29 +76,50 @@ class Operator:
 
 
 class Equal(Operator):
-    def __init__(self):
-        super().__init__("==", lambda x, y: x == y)
+
+    def __call__(self, x: Any, y: Any) -> bool:
+        return x == y
+
+    @property
+    def name(self) -> str:
+        return "=="
 
 
 class Greater(Operator):
-    def __init__(self):
-        super().__init__(">", lambda x, y: x > y)
+    def __call__(self, x: Any, y: Any) -> bool:
+        return x > y
+
+    @property
+    def name(self) -> str:
+        return ">"
 
 
 class GreaterEqual(Operator):
-    def __init__(self):
-        super().__init__(">=", lambda x, y: x >= y)
+    def __call__(self, x: Any, y: Any) -> bool:
+        return x >= y
+
+    @property
+    def name(self) -> str:
+        return ">="
 
 
 class Less(Operator):
-    def __init__(self):
-        super().__init__("<", lambda x, y: x < y)
+    def __call__(self, x: Any, y: Any) -> bool:
+        return x < y
+
+    @property
+    def name(self) -> str:
+        return "<"
 
 
 class LessEqual(Operator):
 
-    def __init__(self):
-        super().__init__("<=", lambda x, y: x <= y)
+    def __call__(self, x: Any, y: Any) -> bool:
+        return x <= y
+
+    @property
+    def name(self) -> str:
+        return "<="
 
 
 def str_to_operator_fn(rule_str: str) -> Tuple[Optional[str], Optional[str], Optional[Callable]]:
@@ -140,6 +173,10 @@ class Case:
     def attribute_values(self):
         return [a.value for a in self.attributes.values()]
 
+    @property
+    def attributes_list(self):
+        return list(self.attributes.values())
+
     def __eq__(self, other):
         return self.attributes == other.attributes
 
@@ -153,7 +190,8 @@ class Case:
     def print_values(self, all_names: Optional[List[str]] = None,
                      target: Optional[Category] = None,
                      is_corner_case: bool = False,
-                     ljust_sz: int = 15):
+                     ljust_sz: int = 15,
+                     conclusions: Optional[List[Category]] = None):
         all_names = list(self.attributes.keys()) if not all_names else all_names
         if is_corner_case:
             case_row = self.ljust(f"corner case: ", sz=ljust_sz)
@@ -164,8 +202,8 @@ class Case:
                              for name in all_names])
         if target:
             case_row += f"{self.ljust(target.name, sz=ljust_sz)}"
-        if self.conclusions:
-            case_row += ",".join([f"{self.ljust(c.name, sz=ljust_sz)}" for c in self.conclusions])
+        if conclusions:
+            case_row += ",".join([f"{self.ljust(c.name, sz=ljust_sz)}" for c in conclusions])
         print(case_row)
 
     def __str__(self):
@@ -174,9 +212,14 @@ class Case:
         ljust = max(ljust, max([len(str(a.value)) for a in self.attributes.values()])) + 2
         row1 = f"Case {self.id_} with attributes: \n"
         row2 = [f"{name.ljust(ljust)}" for name in names]
-        row2 = "".join(row2) + "\n"
+        row2 = "".join(row2)
+        if self.conclusions:
+            row2 += "Conclusions".ljust(ljust)
+        row2 += "\n"
         row3 = [f"{str(self.attributes[name].value).ljust(ljust)}" for name in names]
         row3 = "".join(row3)
+        if self.conclusions:
+            row3 += ",".join([c.name for c in self.conclusions])
         return row1 + row2 + row3 + "\n"
 
     def __repr__(self):
