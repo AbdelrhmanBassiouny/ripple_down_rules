@@ -61,6 +61,7 @@ class TestRDR(TestCase):
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
+        save_answers = False
         filename = "scrdr_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
@@ -70,13 +71,14 @@ class TestRDR(TestCase):
         cat = scrdr.classify(self.all_cases[0], Category(self.targets[0]), expert=expert)
         self.assertEqual(cat.name, self.targets[0])
 
-        if not use_loaded_answers:
+        if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 
     def test_fit_scrdr(self):
         use_loaded_answers = True
+        save_answers = False
         draw_tree = False
         filename = "scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
@@ -91,13 +93,14 @@ class TestRDR(TestCase):
         cat = scrdr.classify(self.all_cases[50])
         self.assertEqual(cat.name, self.targets[50])
 
-        if not use_loaded_answers:
+        if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 
     def test_classify_mcrdr(self):
         use_loaded_answers = True
+        save_answers = False
         filename = "mcrdr_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
@@ -108,7 +111,7 @@ class TestRDR(TestCase):
 
         self.assertEqual(cats[0].name, self.targets[0])
 
-        if not use_loaded_answers:
+        if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
@@ -135,6 +138,7 @@ class TestRDR(TestCase):
 
     def test_classify_mcrdr_with_extra_conclusions(self):
         use_loaded_answers = True
+        save_answers = False
         file_name = "mcrdr_extra_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
@@ -147,7 +151,7 @@ class TestRDR(TestCase):
         self.assertEqual(cats[0].name, self.targets[0])
         self.assertTrue(Category("lives only on land") in cats)
 
-        if not use_loaded_answers:
+        if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, file_name)
             expert.save_answers(file)
@@ -155,6 +159,7 @@ class TestRDR(TestCase):
     def test_fit_mcrdr_with_extra_conclusions(self):
         draw_tree = False
         use_loaded_answers = True
+        save_answers = False
         expert = MCRDRTester()
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
@@ -169,7 +174,7 @@ class TestRDR(TestCase):
         self.assertEqual(cats[0].name, self.targets[50])
         self.assertTrue(Category("lives only on land") in cats)
         mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr_extra")
-        if not use_loaded_answers:
+        if save_answers:
             expert.save_answers(file_name)
 
 
