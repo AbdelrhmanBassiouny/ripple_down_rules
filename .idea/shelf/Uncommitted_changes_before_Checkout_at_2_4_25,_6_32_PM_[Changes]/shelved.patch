@@ -1,0 +1,203 @@
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project version=\"4\">\n  <component name=\"AutoImportSettings\">\n    <option name=\"autoReloadType\" value=\"SELECTIVE\" />\n  </component>\n  <component name=\"ChangeListManager\">\n    <list default=\"true\" id=\"d2f036b6-02b2-42cb-99f5-ad1ea77b9d5a\" name=\"Changes\" comment=\"\">\n      <changelist_data name=\"A_Bassiouny\" email=\"abdelrhman_bassuny@hotmail.com\" date=\"1738438521000\" />\n      <change afterPath=\"$PROJECT_DIR$/.gitignore\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/LICENSE\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/requirements-dev.txt\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/requirements.txt\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_mcrdr_extra.dot\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_mcrdr_extra.png\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_mcrdr_stop_only.dot\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_mcrdr_stop_only.png\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_mcrdr_stop_plus_rule.dot\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_mcrdr_stop_plus_rule.png\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_scrdr.dot\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_scrdr.png\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_scrdr_2.dot\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_scrdr_2.png\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_scrdr_3.dot\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/complete_scrdr_3.png\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/partial_mcrdr_extra.dot\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/results/partial_mcrdr_extra.png\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/src/__init__.py\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/src/pyrdr/__init__.py\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/src/pyrdr/datastructures.py\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/src/pyrdr/experts.py\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/src/pyrdr/failures.py\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/src/pyrdr/helpers.py\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/src/pyrdr/rdr.py\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/src/pyrdr/utils.py\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/test/mcrdr_expert_answers_classify.json\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/test/mcrdr_extra_expert_answers_classify.json\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/test/mcrdr_extra_expert_answers_fit.json\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/test/mcrdr_stop_only_answers_fit.json\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/test/mcrdr_stop_plus_rule_answers_fit.json\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/test/scrdr_expert_answers_classify.json\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/test/scrdr_expert_answers_fit.json\" afterDir=\"false\" />\n      <change afterPath=\"$PROJECT_DIR$/test/test_rdr.py\" afterDir=\"false\" />\n    </list>\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\n  </component>\n  <component name=\"FileTemplateManagerImpl\">\n    <option name=\"RECENT_TEMPLATES\">\n      <list>\n        <option value=\"Python Script\" />\n      </list>\n    </option>\n  </component>\n  <component name=\"Git.Settings\">\n    <option name=\"RECENT_BRANCH_BY_REPOSITORY\">\n      <map>\n        <entry key=\"$PROJECT_DIR$\" value=\"temp_branch\" />\n      </map>\n    </option>\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\n    <option name=\"RESET_MODE\" value=\"HARD\" />\n  </component>\n  <component name=\"MarkdownSettingsMigration\">\n    <option name=\"stateVersion\" value=\"1\" />\n  </component>\n  <component name=\"ProjectColorInfo\">{\n  &quot;associatedIndex&quot;: 5\n}</component>\n  <component name=\"ProjectId\" id=\"2saIUNn6UfpjY0Paj61bNBzr6Xo\" />\n  <component name=\"ProjectViewState\">\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\n    <option name=\"showLibraryContents\" value=\"true\" />\n  </component>\n  <component name=\"PropertiesComponent\">{\n  &quot;keyToString&quot;: {\n    &quot;Python.test_example.executor&quot;: &quot;Run&quot;,\n    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,\n    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,\n    &quot;git-widget-placeholder&quot;: &quot;ripple__down__rules&quot;,\n    &quot;last_opened_file_path&quot;: &quot;/home/bassioun/Documents/repos/ripple_down_rules&quot;,\n    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,\n    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,\n    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,\n    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,\n    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,\n    &quot;settings.editor.selected.configurable&quot;: &quot;PyScientificConfigurable&quot;,\n    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;\n  }\n}</component>\n  <component name=\"RunManager\">\n    <configuration name=\"test_example\" type=\"PythonConfigurationType\" factoryName=\"Python\" temporary=\"true\" nameIsGenerated=\"true\">\n      <module name=\"ripple_down_rules\" />\n      <option name=\"ENV_FILES\" value=\"\" />\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\n      <option name=\"PARENT_ENVS\" value=\"true\" />\n      <envs>\n        <env name=\"PYTHONUNBUFFERED\" value=\"1\" />\n      </envs>\n      <option name=\"SDK_HOME\" value=\"\" />\n      <option name=\"WORKING_DIRECTORY\" value=\"$PROJECT_DIR$/test\" />\n      <option name=\"IS_MODULE_SDK\" value=\"true\" />\n      <option name=\"ADD_CONTENT_ROOTS\" value=\"true\" />\n      <option name=\"ADD_SOURCE_ROOTS\" value=\"true\" />\n      <EXTENSION ID=\"PythonCoverageRunConfigurationExtension\" runner=\"coverage.py\" />\n      <option name=\"SCRIPT_NAME\" value=\"$PROJECT_DIR$/test/test_example.py\" />\n      <option name=\"PARAMETERS\" value=\"\" />\n      <option name=\"SHOW_COMMAND_LINE\" value=\"false\" />\n      <option name=\"EMULATE_TERMINAL\" value=\"false\" />\n      <option name=\"MODULE_MODE\" value=\"false\" />\n      <option name=\"REDIRECT_INPUT\" value=\"false\" />\n      <option name=\"INPUT_FILE\" value=\"\" />\n      <method v=\"2\" />\n    </configuration>\n    <recent_temporary>\n      <list>\n        <item itemvalue=\"Python.test_example\" />\n      </list>\n    </recent_temporary>\n  </component>\n  <component name=\"SharedIndexes\">\n    <attachedChunks>\n      <set>\n        <option value=\"bundled-python-sdk-50da183f06c8-2887949eec09-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-233.13135.95\" />\n      </set>\n    </attachedChunks>\n  </component>\n  <component name=\"SpellCheckerSettings\" RuntimeDictionaries=\"0\" Folders=\"0\" CustomDictionaries=\"0\" DefaultDictionary=\"application-level\" UseSingleDictionary=\"true\" transferred=\"true\" />\n  <component name=\"TaskManager\">\n    <task active=\"true\" id=\"Default\" summary=\"Default task\">\n      <changelist id=\"d2f036b6-02b2-42cb-99f5-ad1ea77b9d5a\" name=\"Changes\" comment=\"\" />\n      <created>1738687274047</created>\n      <option name=\"number\" value=\"Default\" />\n      <option name=\"presentableId\" value=\"Default\" />\n      <updated>1738687274047</updated>\n      <workItem from=\"1738687275097\" duration=\"2126000\" />\n      <workItem from=\"1738689408666\" duration=\"515000\" />\n    </task>\n    <servers />\n  </component>\n  <component name=\"TypeScriptGeneratedFilesManager\">\n    <option name=\"version\" value=\"3\" />\n  </component>\n  <component name=\"Vcs.Log.Tabs.Properties\">\n    <option name=\"TAB_STATES\">\n      <map>\n        <entry key=\"MAIN\">\n          <value>\n            <State>\n              <option name=\"FILTERS\">\n                <map>\n                  <entry key=\"branch\">\n                    <value>\n                      <list>\n                        <option value=\"origin/ripple_down_rules\" />\n                      </list>\n                    </value>\n                  </entry>\n                </map>\n              </option>\n            </State>\n          </value>\n        </entry>\n      </map>\n    </option>\n  </component>\n  <component name=\"com.intellij.coverage.CoverageDataManagerImpl\">\n    <SUITE FILE_PATH=\"coverage/ripple_down_rules$test_example.coverage\" NAME=\"test_example Coverage Results\" MODIFIED=\"1738688894371\" SOURCE_PROVIDER=\"com.intellij.coverage.DefaultCoverageFileProvider\" RUNNER=\"coverage.py\" COVERAGE_BY_TEST_ENABLED=\"true\" COVERAGE_TRACING_ENABLED=\"false\" WORKING_DIRECTORY=\"$PROJECT_DIR$/test\" />\n  </component>\n</project>
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	
++++ b/.idea/workspace.xml	
+@@ -5,41 +5,7 @@
+   </component>
+   <component name="ChangeListManager">
+     <list default="true" id="d2f036b6-02b2-42cb-99f5-ad1ea77b9d5a" name="Changes" comment="">
+-      <changelist_data name="A_Bassiouny" email="abdelrhman_bassuny@hotmail.com" date="1738438521000" />
+-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/LICENSE" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/requirements-dev.txt" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_mcrdr_extra.dot" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_mcrdr_extra.png" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_mcrdr_stop_only.dot" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_mcrdr_stop_only.png" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_mcrdr_stop_plus_rule.dot" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_mcrdr_stop_plus_rule.png" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_scrdr.dot" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_scrdr.png" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_scrdr_2.dot" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_scrdr_2.png" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_scrdr_3.dot" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/complete_scrdr_3.png" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/partial_mcrdr_extra.dot" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/results/partial_mcrdr_extra.png" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/src/__init__.py" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/src/pyrdr/__init__.py" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/src/pyrdr/datastructures.py" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/src/pyrdr/experts.py" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/src/pyrdr/failures.py" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/src/pyrdr/helpers.py" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/src/pyrdr/rdr.py" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/src/pyrdr/utils.py" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/test/mcrdr_expert_answers_classify.json" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/test/mcrdr_extra_expert_answers_classify.json" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/test/mcrdr_extra_expert_answers_fit.json" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/test/mcrdr_stop_only_answers_fit.json" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/test/mcrdr_stop_plus_rule_answers_fit.json" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/test/scrdr_expert_answers_classify.json" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/test/scrdr_expert_answers_fit.json" afterDir="false" />
+-      <change afterPath="$PROJECT_DIR$/test/test_rdr.py" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/test/test_rdr.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/test_rdr.py" afterDir="false" />
+     </list>
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+@@ -54,6 +20,11 @@
+     </option>
+   </component>
+   <component name="Git.Settings">
++    <option name="PREVIOUS_COMMIT_AUTHORS">
++      <list>
++        <option value="A_Bassiouny &lt;abdelrhman_bassuny@hotmail.com&gt;" />
++      </list>
++    </option>
+     <option name="RECENT_BRANCH_BY_REPOSITORY">
+       <map>
+         <entry key="$PROJECT_DIR$" value="temp_branch" />
+@@ -73,22 +44,22 @@
+     <option name="hideEmptyMiddlePackages" value="true" />
+     <option name="showLibraryContents" value="true" />
+   </component>
+-  <component name="PropertiesComponent">{
+-  &quot;keyToString&quot;: {
+-    &quot;Python.test_example.executor&quot;: &quot;Run&quot;,
+-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+-    &quot;git-widget-placeholder&quot;: &quot;ripple__down__rules&quot;,
+-    &quot;last_opened_file_path&quot;: &quot;/home/bassioun/Documents/repos/ripple_down_rules&quot;,
+-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+-    &quot;settings.editor.selected.configurable&quot;: &quot;PyScientificConfigurable&quot;,
+-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
++  <component name="PropertiesComponent"><![CDATA[{
++  "keyToString": {
++    "Python.test_example.executor": "Run",
++    "RunOnceActivity.OpenProjectViewOnStart": "true",
++    "RunOnceActivity.ShowReadmeOnStart": "true",
++    "git-widget-placeholder": "Cherry-picking in temp__branch",
++    "last_opened_file_path": "/home/bassioun/Documents/repos/ripple_down_rules",
++    "node.js.detected.package.eslint": "true",
++    "node.js.detected.package.tslint": "true",
++    "node.js.selected.package.eslint": "(autodetect)",
++    "node.js.selected.package.tslint": "(autodetect)",
++    "nodejs_package_manager_path": "npm",
++    "settings.editor.selected.configurable": "PyScientificConfigurable",
++    "vue.rearranger.settings.migration": "true"
+   }
+-}</component>
++}]]></component>
+   <component name="RunManager">
+     <configuration name="test_example" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+       <module name="ripple_down_rules" />
+@@ -135,8 +106,73 @@
+       <option name="presentableId" value="Default" />
+       <updated>1738687274047</updated>
+       <workItem from="1738687275097" duration="2126000" />
+-      <workItem from="1738689408666" duration="515000" />
++      <workItem from="1738689408666" duration="895000" />
+     </task>
++    <task id="LOCAL-00001" summary="[RDR] (WIP) first implementation.">
++      <option name="closed" value="true" />
++      <created>1738690124439</created>
++      <option name="number" value="00001" />
++      <option name="presentableId" value="LOCAL-00001" />
++      <option name="project" value="LOCAL" />
++      <updated>1738690124439</updated>
++    </task>
++    <task id="LOCAL-00002" summary="[RDR] first implementation seems to converge.">
++      <option name="closed" value="true" />
++      <created>1738690130538</created>
++      <option name="number" value="00002" />
++      <option name="presentableId" value="LOCAL-00002" />
++      <option name="project" value="LOCAL" />
++      <updated>1738690130538</updated>
++    </task>
++    <task id="LOCAL-00003" summary="[RDR] render tree implemented.">
++      <option name="closed" value="true" />
++      <created>1738690133821</created>
++      <option name="number" value="00003" />
++      <option name="presentableId" value="LOCAL-00003" />
++      <option name="project" value="LOCAL" />
++      <updated>1738690133821</updated>
++    </task>
++    <task id="LOCAL-00004" summary="[RDR] restructured plus some refinements.">
++      <option name="closed" value="true" />
++      <created>1738690137056</created>
++      <option name="number" value="00004" />
++      <option name="presentableId" value="LOCAL-00004" />
++      <option name="project" value="LOCAL" />
++      <updated>1738690137056</updated>
++    </task>
++    <task id="LOCAL-00005" summary="[RDR] restructure.">
++      <option name="closed" value="true" />
++      <created>1738690145083</created>
++      <option name="number" value="00005" />
++      <option name="presentableId" value="LOCAL-00005" />
++      <option name="project" value="LOCAL" />
++      <updated>1738690145083</updated>
++    </task>
++    <task id="LOCAL-00006" summary="[RDR] MultiClassRDR corrected and tested.">
++      <option name="closed" value="true" />
++      <created>1738690150544</created>
++      <option name="number" value="00006" />
++      <option name="presentableId" value="LOCAL-00006" />
++      <option name="project" value="LOCAL" />
++      <updated>1738690150544</updated>
++    </task>
++    <task id="LOCAL-00007" summary="[RDR] stop only mcrdr.">
++      <option name="closed" value="true" />
++      <created>1738690156583</created>
++      <option name="number" value="00007" />
++      <option name="presentableId" value="LOCAL-00007" />
++      <option name="project" value="LOCAL" />
++      <updated>1738690156583</updated>
++    </task>
++    <task id="LOCAL-00008" summary="[RDR] created expert class.">
++      <option name="closed" value="true" />
++      <created>1738690160856</created>
++      <option name="number" value="00008" />
++      <option name="presentableId" value="LOCAL-00008" />
++      <option name="project" value="LOCAL" />
++      <updated>1738690160856</updated>
++    </task>
++    <option name="localTasksCounter" value="9" />
+     <servers />
+   </component>
+   <component name="TypeScriptGeneratedFilesManager">
+@@ -153,7 +189,7 @@
+                   <entry key="branch">
+                     <value>
+                       <list>
+-                        <option value="origin/ripple_down_rules" />
++                        <option value="ripple_down_rules" />
+                       </list>
+                     </value>
+                   </entry>
+@@ -164,6 +200,17 @@
+         </entry>
+       </map>
+     </option>
++  </component>
++  <component name="VcsManagerConfiguration">
++    <MESSAGE value="[RDR] (WIP) first implementation." />
++    <MESSAGE value="[RDR] first implementation seems to converge." />
++    <MESSAGE value="[RDR] render tree implemented." />
++    <MESSAGE value="[RDR] restructured plus some refinements." />
++    <MESSAGE value="[RDR] restructure." />
++    <MESSAGE value="[RDR] MultiClassRDR corrected and tested." />
++    <MESSAGE value="[RDR] stop only mcrdr." />
++    <MESSAGE value="[RDR] created expert class." />
++    <option name="LAST_COMMIT_MESSAGE" value="[RDR] created expert class." />
+   </component>
+   <component name="com.intellij.coverage.CoverageDataManagerImpl">
+     <SUITE FILE_PATH="coverage/ripple_down_rules$test_example.coverage" NAME="test_example Coverage Results" MODIFIED="1738688894371" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
