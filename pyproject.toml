@@ -1,0 +1,23 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ripple_down_rules"
+version = "0.0.1"
+description = "Implements the various versions of Ripple Down Rules (RDR) for knowledge representation and reasoning."
+readme = "README.md"
+authors = [{ name = "Abdelrhman Bassiouny", email = "abassiou@uni-bremen.de" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+keywords = ["robotics", "knowledge", "reasoning", "representation"]
+dependencies = ["neem_pycram_interface==1.0.167",
+]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/AbdelrhmanBassiouny/ripple_down_rules"

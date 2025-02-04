@@ -1,0 +1,42 @@
+# Ripple Down Rules (RDR)
+
+A python implementation of the various ripple down rules versions, including Single Classification (SCRDR),
+Multi Classification (MCRDR), and Generalised Ripple Down Rules (GRDR).
+
+SCRDR, MCRDR, and GRDR are rule-based classifiers that are built incrementally, and can be used to classify
+data cases. The rules are refined as new data cases are classified.
+
+SCRDR, MCRDR, and GRDR implementation were inspired from the book:
+["Ripple Down Rules: An Alternative to Machine Learning"](https://doi.org/10.1201/9781003126157) by Paul Compton, Byeong Ho Kang.
+
+## Installation
+
+```bash
+sudo apt-get install graphviz graphviz-dev
+pip install ripple_down_rules
+```
+
+## Example Usage
+
+Fit the SCRDR to the data, then classify one of the data cases to check if its correct,
+and render the tree to a file:
+
+```Python
+from ripple_down_rules.rdr import SingleClassRDR, Category
+from ripple_down_rules.datasets import load_zoo_dataset
+
+all_cases, targets = load_zoo_dataset()
+
+scrdr = SingleClassRDR()
+
+# Fit the SCRDR to the data
+scrdr.fit(all_cases, [Category(t) for t in targets],
+          draw_tree=True, n_iter=10)
+
+# Render the tree to a file
+scrdr.render_tree(use_dot_exporter=True, filename="scrdr")
+
+cat = scrdr.classify(all_cases[50])
+assert cat.name == targets[50]
+print(cat.name)
+```
