@@ -43,7 +43,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        cat = scrdr.classify(self.all_cases[0], Category(self.targets[0]), expert=expert)
+        cat = scrdr.fit_case(self.all_cases[0], Category(self.targets[0]), expert=expert)
         self.assertEqual(cat.name, self.targets[0])
 
         if save_answers:
@@ -54,7 +54,7 @@ class TestRDR(TestCase):
     def test_fit_scrdr(self):
         use_loaded_answers = True
         save_answers = False
-        draw_tree = False
+        draw_tree = True
         filename = "scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
@@ -82,7 +82,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         mcrdr = MultiClassRDR()
-        cats = mcrdr.classify(self.all_cases[0], Category(self.targets[0]), expert=expert)
+        cats = mcrdr.fit_case(self.all_cases[0], Category(self.targets[0]), expert=expert)
 
         self.assertEqual(cats[0].name, self.targets[0])
 
@@ -98,7 +98,7 @@ class TestRDR(TestCase):
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
                   expert=expert, draw_tree=draw_tree)
         mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr")
-        cats = mcrdr.classify(self.all_cases[50])
+        cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
 
     def test_fit_mcrdr_stop_plus_rule(self):
@@ -108,7 +108,7 @@ class TestRDR(TestCase):
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
                   expert=expert, draw_tree=draw_tree)
         mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr")
-        cats = mcrdr.classify(self.all_cases[50])
+        cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
 
     def test_classify_mcrdr_with_extra_conclusions(self):
@@ -120,7 +120,7 @@ class TestRDR(TestCase):
             expert.load_answers(file_name)
 
         mcrdr = MultiClassRDR()
-        cats = mcrdr.classify(self.all_cases[0], Category(self.targets[0]),
+        cats = mcrdr.fit_case(self.all_cases[0], Category(self.targets[0]),
                               add_extra_conclusions=True, expert=expert)
 
         self.assertEqual(cats[0].name, self.targets[0])
@@ -145,7 +145,7 @@ class TestRDR(TestCase):
             expert.load_answers(file_name)
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
                   add_extra_conclusions=True, expert=expert, n_iter=10, draw_tree=draw_tree)
-        cats = mcrdr.classify(self.all_cases[50])
+        cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
         self.assertTrue(Category("lives only on land") in cats)
         mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr_extra")

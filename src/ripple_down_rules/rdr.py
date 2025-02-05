@@ -8,15 +8,15 @@ from anytree import RenderTree, NodeMixin
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
 from orderedset import OrderedSet
-from typing_extensions import List, Optional, Self, Dict
+from typing_extensions import List, Optional, Self, Dict, Type
 
-from .datastructures import Category, Attribute, Condition, Case, Stop, MCRDRMode
+from .datastructures import Category, Attribute, Condition, Case, Stop, MCRDRMode, RDREdge
 from .experts import Expert, Human
 from .utils import tree_to_graph
 
 
-class Rule(NodeMixin):
-    fired: bool = False
+class Rule(NodeMixin, ABC):
+    fired: Optional[bool] = None
     """
     Whether the rule has fired or not.
     """
@@ -36,10 +36,13 @@ class Rule(NodeMixin):
     """
     The index of the rule in the all rules list.
     """
+    conclusion: Optional[Category] = None
+    """
+    The conclusion of the rule when the conditions are met.
+    """
 
-    def __init__(self, conditions: Dict[str, Condition],
+    def __init__(self, conditions: Optional[Dict[str, Condition]] = None,
                  conclusion: Optional[Category] = None,
-                 edge_weight: Optional[str] = None,
                  parent: Optional[Rule] = None,
                  corner_case: Optional[Case] = None):
         """
@@ -47,16 +50,15 @@ class Rule(NodeMixin):
 
         :param conditions: The conditions of the rule.
         :param conclusion: The conclusion of the rule when the conditions are met.
-        :param edge_weight: The weight of the edge to the parent rule if it exists.
         :param parent: The parent rule of this rule.
         :param corner_case: The corner case that this rule is based on/created from.
         """
         super(Rule, self).__init__()
-        self.conditions = conditions
+        self.conditions = conditions if conditions else {}
         self.corner_case = corner_case
         self.conclusion = conclusion
         self.parent = parent
-        self.weight = edge_weight if parent is not None else None
+        self.weight: Optional[str] = None
         self._name = self.__str__()
         self.update_all_rules()
 
@@ -93,64 +95,28 @@ class Rule(NodeMixin):
         :param x: The case to evaluate the rule on.
         :return: The rule that fired or the last evaluated rule if no rule fired.
         """
+        if not self.conditions:
+            raise ValueError("Rule has no conditions")
+        self.fired = True
         for att_name, condition in self.conditions.items():
             if att_name not in x.attributes or not condition(x.attributes[att_name].value):
                 self.fired = False
-                return self.alternative(x) if self.alternative else self
-        self.fired = True
-        refined_rule = self.refinement(x) if self.refinement else None
-        return refined_rule if refined_rule and refined_rule.fired else self
+                break
+        return self.evaluate_next_rule(x)
 
-    def add_alternative(self, x: Case, conditions: Dict[str, Condition], conclusion: Category):
+    @abstractmethod
+    def evaluate_next_rule(self, x: Case):
         """
-        Add an alternative rule to this rule (called when this rule doesn't fire).
-
-        :param x: The case to add the alternative rule for.
-        :param conditions: The conditions of the alternative rule.
-        :param conclusion: The conclusion of the alternative rule.
+        Evaluate the next rule after this rule is evaluated.
         """
-        if self.alternative:
-            self.alternative.add_alternative(x, conditions, conclusion)
-        else:
-            self.alternative = self.add_connected_rule(conditions, conclusion, x, edge_weight="else if")
-
-    def add_refinement(self, x: Case, conditions: Dict[str, Condition], conclusion: Category):
-        """
-        Add a refinement rule to this rule (called when this rule fires).
-
-        :param x: The case to add the refinement rule for.
-        :param conditions: The conditions of the refinement rule.
-        :param conclusion: The conclusion of the refinement rule.
-        """
-        if self.refinement:
-            self.refinement.add_alternative(x, conditions, conclusion)
-        else:
-            self.refinement = self.add_connected_rule(conditions, conclusion, x, edge_weight="except if")
-
-    def add_connected_rule(self, conditions: Dict[str, Condition], conclusion: Category,
-                           corner_case: Case,
-                           edge_weight: Optional[str] = None) -> Rule:
-        """
-        Add a connected rule to this rule, connected in the sense that it has this rule as parent.
-
-        :param conditions: The conditions of the connected rule.
-        :param conclusion: The conclusion of the connected rule.
-        :param corner_case: The corner case of the connected rule.
-        :param edge_weight: The weight of the edge to the parent rule.
-        :return: The connected rule.
-        """
-        return Rule(conditions, conclusion, corner_case=Case(corner_case.id_, list(corner_case.attributes.values())),
-                    parent=self, edge_weight=edge_weight)
+        pass
 
     def get_different_attributes(self, x: Case) -> Dict[str, Attribute]:
         """
-        Get the differentiating attributes between the corner case and the case.
-
         :param x: The case to compare with the corner case.
-        :return: The differentiating attributes between the corner case and the case as a dictionary.
+        :return: The differentiating attributes between the case and the corner case as a dictionary.
         """
-        return {a.name: a for a in self.corner_case.attributes.values()
-                if a not in x.attributes.values()}
+        return x - self.corner_case
 
     @property
     def name(self):
@@ -179,13 +145,128 @@ class Rule(NodeMixin):
         return self.__str__()
 
 
+class HasRefinementEdge:
+    """
+    Adds an edge which connects the parent rule to child rule by an (except if) which is
+     traversed when the parent rule fires.
+    """
+
+    @property
+    def weight(self) -> str:
+        return "except if"
+
+
+class HasAlternativeEdge:
+    """
+    Adds an edge which connects the parent rule to child rule by an (else if) which is
+        traversed when the parent rule doesn't fire.
+    """
+
+    @property
+    def weight(self) -> str:
+        return "else if"
+
+
+class HasNextEdge:
+    """
+    Adds an edge which connects the parent rule to child rule by a (next) which is alawys
+        traversed after parent rule is evaluated whether the parent rule fires or doesn't fire.
+    """
+
+    @property
+    def weight(self) -> str:
+        return "next"
+
+
+class StopRule(Rule, HasRefinementEdge, ABC):
+    """
+    A stopping rule that is used to stop the parent conclusion from being made, thus giving no conclusion instead,
+    which is useful to prevent a conclusion in certain condition if it is wrong when these conditions are met.
+    """
+    conclusion: Category = Stop()
+    """
+    The conclusion of the stopping rule, which is a Stop category.
+    """
+
+    def __init__(self, conditions: Dict[str, Condition], corner_case: Optional[Case] = None,
+                 parent: Optional[Rule] = None):
+        super(StopRule, self).__init__(conditions, self.conclusion, corner_case=corner_case, parent=parent)
+
+
+class SingleClassRule(Rule):
+    """
+    A rule in the SingleClassRDR classifier, it can have a refinement or an alternative rule or both.
+    """
+    _refinement: Optional[SingleClassRule] = None
+    """
+    The refinement rule of the rule, which is evaluated when the rule fires.
+    """
+    _alternative: Optional[SingleClassRule] = None
+    """
+    The alternative rule of the rule, which is evaluated when the rule doesn't fire.
+    """
+    furthest_alternative: Optional[List[SingleClassRule]] = None
+    """
+    The furthest alternative rule of the rule, which is the last alternative rule in the chain of alternative rules.
+    """
+
+    @property
+    def refinement(self) -> Optional[SingleClassRule]:
+        return self._refinement
+
+    @refinement.setter
+    def refinement(self, new_rule: SingleClassRule):
+        """
+        Set the refinement rule of the rule. It is important that no rules should be retracted or changed,
+        only new rules should be added.
+        """
+        if self._refinement:
+            self._refinement.alternative = new_rule
+        else:
+            new_rule.parent = self
+            new_rule.weight = RDREdge.Refinement.value
+            self._refinement = new_rule
+
+    @property
+    def alternative(self) -> Optional[SingleClassRule]:
+        return self._alternative
+
+    @alternative.setter
+    def alternative(self, new_rule: SingleClassRule):
+        """
+        Set the alternative rule of the rule. It is important that no rules should be retracted or changed,
+        only new rules should be added.
+        """
+        if self.furthest_alternative:
+            self.furthest_alternative[-1].alternative = new_rule
+        else:
+            new_rule.parent = self
+            new_rule.weight = RDREdge.Alternative.value
+            self._alternative = new_rule
+        self.furthest_alternative = [new_rule]
+
+    def evaluate_next_rule(self, x: Case) -> SingleClassRule:
+        if self.fired:
+            returned_rule = self.refinement(x) if self.refinement else self
+            return returned_rule if returned_rule.fired else self
+        else:
+            returned_rule = self.alternative(x) if self.alternative else self
+            return returned_rule if returned_rule.fired else self.parent
+
+    def fit_rule(self, x: Case, target: Category, conditions: Optional[Dict[str, Condition]] = None):
+        if not conditions:
+            conditions = Condition.from_two_cases(self.corner_case, x)
+        new_rule = SingleClassRule(conditions, target,
+                                   corner_case=x, parent=self)
+        if self.fired:
+            self.refinement = new_rule
+        else:
+            self.alternative = new_rule
+
+
 class RippleDownRules(ABC):
     """
     The abstract base class for the ripple down rules classifiers.
-    """
-    start_rule: Optional[Rule] = None
-    """
-    The starting rule for the classifier tree.
     """
     fig: Optional[plt.Figure] = None
     """
@@ -196,12 +277,32 @@ class RippleDownRules(ABC):
     The conclusions that the expert has accepted, such that they are not asked again.
     """
 
+    def __init__(self, start_rule: Optional[Rule] = None):
+        """
+        :param start_rule: The starting rule for the classifier.
+        """
+        self.start_rule = start_rule
+        self.fig: Optional[plt.Figure] = None
+
+    def __call__(self, x: Case) -> Category:
+        return self.classify(x)
+
     @abstractmethod
-    def classify(self, x: Case, target: Optional[Category] = None,
+    def classify(self, x: Case) -> Optional[Category]:
+        """
+        Classify a case.
+
+        :param x: The case to classify.
+        :return: The category that the case belongs to.
+        """
+        pass
+
+    @abstractmethod
+    def fit_case(self, x: Case, target: Category,
                  expert: Optional[Expert] = None, **kwargs) -> Category:
         """
-        Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
-        comparing the case with the target category if provided.
+        Fit the RDR on a case, and ask the expert for refinements or alternatives if the classification is incorrect by
+        comparing the case with the target category.
 
         :param x: The case to classify.
         :param target: The target category to compare the case with.
@@ -233,7 +334,7 @@ class RippleDownRules(ABC):
                 or (not n_iter and all_pred != len(y_batch)):
             all_pred = 0
             for x, y in zip(x_batch, y_batch):
-                pred_cat = self.classify(x, y, expert=expert, **kwargs_for_classify)
+                pred_cat = self.fit_case(x, y, expert=expert, **kwargs_for_classify)
                 pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
                 match = y in pred_cat
                 if not match:
@@ -255,9 +356,9 @@ class RippleDownRules(ABC):
         """
         Set the edge attributes for the dot exporter.
         """
-        if child is None or child.weight is None:
-            return ""
-        return f'style="bold", label=" {child.weight}"'
+        if child and hasattr(child, "weight") and child.weight:
+            return f'style="bold", weight=" {child.weight}"'
+        return ""
 
     def render_tree(self, use_dot_exporter: bool = False,
                     filename: str = "scrdr"):
@@ -304,16 +405,7 @@ class RippleDownRules(ABC):
 
 class SingleClassRDR(RippleDownRules):
 
-    def __init__(self, start_rule: Optional[Rule] = None):
-        """
-        A single class ripple down rule classifier.
-
-        :param start_rule: The starting rule for the classifier.
-        """
-        self.start_rule = start_rule
-        self.fig: Optional[plt.Figure] = None
-
-    def classify(self, x: Case, target: Optional[Category] = None,
+    def fit_case(self, x: Case, target: Category,
                  expert: Optional[Expert] = None, **kwargs) -> Category:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
@@ -327,18 +419,29 @@ class SingleClassRDR(RippleDownRules):
         expert = expert if expert else Human()
         if not self.start_rule:
             conditions = expert.ask_for_conditions(x, target)
-            self.start_rule = Rule(conditions, target, corner_case=Case(x.id_, list(x.attributes.values())))
+            self.start_rule = SingleClassRule(conditions, target, corner_case=Case(x.id_, x.attributes_list))
 
-        pred = self.start_rule(x)
+        pred = self.evaluate(x)
 
-        if target and pred.conclusion != target:
+        if pred.conclusion != target:
             conditions = expert.ask_for_conditions(x, target, pred)
-            if pred.fired:
-                pred.add_refinement(x, conditions, target)
-            else:
-                pred.add_alternative(x, conditions, target)
+            pred.fit_rule(x, target, conditions=conditions)
 
-        return pred.conclusion
+        return self.classify(x)
+
+    def classify(self, x: Case) -> Optional[Category]:
+        """
+        Classify a case by recursively evaluating the rules until a rule fires or the last rule is reached.
+        """
+        pred = self.evaluate(x)
+        return pred.conclusion if pred.fired else None
+
+    def evaluate(self, x: Case) -> SingleClassRule:
+        """
+        Evaluate the starting rule on a case.
+        """
+        matched_rule = self.start_rule(x)
+        return matched_rule if matched_rule else self.start_rule
 
 
 class MultiClassRDR(RippleDownRules):
@@ -360,6 +463,14 @@ class MultiClassRDR(RippleDownRules):
     The conditions of the stopping rule if needed.
     """
 
+    def classify(self, x: Case) -> List[Category]:
+        self.evaluated_rules = []
+        for rule in self.start_rules:
+            evaluated_rule = rule(x)
+            self.evaluated_rules.append(evaluated_rule)
+        self.conclusions = [evaluated_rule.conclusion for evaluated_rule in self.evaluated_rules]
+        return self.conclusions
+
     def __init__(self, start_rules: Optional[List[Rule]] = None,
                  mode: MCRDRMode = MCRDRMode.StopOnly):
         """
@@ -368,6 +479,7 @@ class MultiClassRDR(RippleDownRules):
         starting rules fire or not.
         :param mode: The mode of the classifier, either StopOnly or StopPlusRule.
         """
+        super(MultiClassRDR, self).__init__()
         self.start_rules = start_rules
         self.mode: MCRDRMode = mode
 
@@ -378,7 +490,7 @@ class MultiClassRDR(RippleDownRules):
         """
         return self.start_rules[0] if self.start_rules else None
 
-    def classify(self, x: Case, target: Optional[Category] = None,
+    def fit_case(self, x: Case, target: Optional[Category] = None,
                  expert: Optional[Expert] = None, add_extra_conclusions: bool = False) -> List[Category]:
         """
         Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
@@ -530,8 +642,19 @@ class GeneralRDR(RippleDownRules):
      and only a refinement can be made to the final rule, those can also be used in another SCRDR of their own that
      gets called when the final rule fires.
     """
-    def classify(self, x: Case, target: Optional[Category] = None,
+
+    def __init__(self, category_scrdr_map: Optional[Dict[Type[Category], SingleClassRDR]] = None):
+        """
+        :param category_scrdr_map: A map of categories to single class ripple down rules classifiers,
+        where each category is a parent category that has a set of mutually exclusive child categories,
+        e.g. {Species: SCRDR1, Habitat: SCRDR2}, where Species and Habitat are parent categories and SCRDR1 and SCRDR2
+        are single class ripple down rules classifiers. Species can have child categories like Mammal, Bird, Fish, etc.
+         which are mutually exclusive, and Habitat can have child categories like Land, Water, Air, etc, which are also
+            mutually exclusive.
+        """
+        self.start_rules_dict = category_scrdr_map
+
+    def fit_case(self, x: Case, target: Optional[Category] = None,
                  expert: Optional[Expert] = None,
                  **kwargs) -> Category:
         pass
-

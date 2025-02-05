@@ -12,6 +12,6 @@ scrdr.fit(all_cases, [Category(t) for t in targets],
 # Render the tree to a file
 scrdr.render_tree(use_dot_exporter=True, filename="scrdr")
 
-cat = scrdr.classify(all_cases[50])
+cat = scrdr.fit_case(all_cases[50])
 assert cat.name == targets[50]
 print(cat.name)

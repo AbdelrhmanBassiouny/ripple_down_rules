@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from abc import abstractmethod, ABC
 from enum import Enum, auto
 
-from typing_extensions import Any, Callable, Tuple, Optional, List
+from typing_extensions import Any, Callable, Tuple, Optional, List, Dict
 
 from .failures import InvalidOperator
 
@@ -18,6 +20,21 @@ class MCRDRMode(Enum):
     """
     StopPlusRule mode, stop wrong conclusion from being made and adds a new rule with same conditions as stopping rule
      to make the correct conclusion.
+    """
+
+
+class RDREdge(Enum):
+    Refinement = "except if"
+    """
+    Refinement edge, the edge that represents the refinement of an incorrectly fired rule.
+    """
+    Alternative = "else if"
+    """
+    Alternative edge, the edge that represents the alternative to the rule that has not fired.
+    """
+    Next = "next"
+    """
+    Next edge, the edge that represents the next rule to be evaluated.
     """
 
 
@@ -73,6 +90,12 @@ class Attribute:
 
     def __hash__(self):
         return hash((self.name, self.value))
+
+    def __str__(self):
+        return f"{self.name}: {self.value}"
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class Operator(ABC):
@@ -201,6 +224,28 @@ class Condition:
         self.value = value
         self.operator = operator
 
+    @classmethod
+    def from_two_cases(cls, old_case: Case, new_case: Case) -> Dict[str, Condition]:
+        attributes_dict = new_case - old_case
+        return cls.from_attributes(attributes_dict.values())
+
+    @classmethod
+    def from_str(cls, rule_str: str) -> Condition:
+        arg1, arg2, operator = str_to_operator_fn(rule_str)
+        return cls(arg1, arg2, operator)
+
+    @classmethod
+    def from_case(cls, case: Case, operator: Operator = Equal()) -> Dict[str, Condition]:
+        return cls.from_attributes(case.attributes_list, operator)
+
+    @classmethod
+    def from_attributes(cls, attributes: List[Attribute], operator: Operator = Equal()) -> Dict[str, Condition]:
+        return {a.name: cls.from_attribute(a, operator) for a in attributes}
+
+    @classmethod
+    def from_attribute(cls, attribute: Attribute, operator: Operator = Equal()) -> Condition:
+        return cls(attribute.name, attribute.value, operator)
+
     def __call__(self, x: Any) -> bool:
         return self.operator(x, self.value)
 
@@ -242,6 +287,10 @@ class Case:
 
     def __getitem__(self, attribute_name):
         return self.attributes.get(attribute_name, None)
+
+    def __sub__(self, other):
+        return {k: self.attributes[k] for k in self.attributes
+                if self.attributes[k] != other.attributes[k]}
 
     @staticmethod
     def ljust(s, sz=15):
