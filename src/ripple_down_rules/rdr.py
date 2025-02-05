@@ -400,35 +400,41 @@ class MultiClassRDR(RippleDownRules):
         self.conclusions = []
         self.expert_accepted_conclusions = []
         self.stop_rule_conditions = None
-        extra_conclusions = []
+        user_conclusions = []
         while rule_idx < len(self.start_rules):
             evaluated_rule = self.start_rules[rule_idx](x)
 
-            if (target and evaluated_rule.fired
-                    and evaluated_rule.conclusion not in [target, Stop(), *extra_conclusions]):
-                # Rule fired and conclusion is different from target
-                self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule, add_extra_conclusions)
+            if evaluated_rule.fired and evaluated_rule.conclusion != Stop():
+                if target and evaluated_rule.conclusion not in [target, *user_conclusions]:
+                    # Rule fired and conclusion is different from target
+                    self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule, add_extra_conclusions)
 
-            elif evaluated_rule.fired and evaluated_rule.conclusion != Stop():
-                # Rule fired and target is correct or there is no target to compare
-                self.add_conclusion(evaluated_rule)
+                else:
+                    # Rule fired and target is correct or there is no target to compare
+                    self.add_conclusion(evaluated_rule)
 
-            if (target and rule_idx >= len(self.start_rules) - 1
-                    and target not in self.conclusions):
-                # Nothing fired and there is a target that should have fired
-                self.add_rule_for_case(x, target, expert)
-                rule_idx = 0  # Have to check all rules again to make sure only this new rule fires
-                continue
+            if target and self.is_last_rule(rule_idx):
+                if target not in self.conclusions:
+                    # Nothing fired and there is a target that should have been in the conclusions
+                    self.add_rule_for_case(x, target, expert)
+                    rule_idx = 0  # Have to check all rules again to make sure only this new rule fires
+                    continue
+                elif add_extra_conclusions and not user_conclusions:
+                    # No more conclusions can be made, ask the expert for extra conclusions if needed.
+                    user_conclusions.extend(self.ask_expert_for_extra_conclusions(expert, x))
 
             rule_idx += 1
 
-            if (add_extra_conclusions and not extra_conclusions
-                    and target and target in self.conclusions
-                    and rule_idx == len(self.start_rules)):
-                # Add extra conclusions if needed
-                extra_conclusions.extend(self.ask_expert_for_extra_conclusions(expert, x))
-
         return list(OrderedSet(self.conclusions))
+
+    def is_last_rule(self, rule_idx: int) -> bool:
+        """
+        Check if the rule index is the last rule in the classifier.
+
+        :param rule_idx: The index of the rule to check.
+        :return: Whether the rule index is the last rule in the classifier.
+        """
+        return rule_idx == len(self.start_rules) - 1
 
     def stop_wrong_conclusion_else_add_it(self, x: Case, target: Category, expert: Expert, evaluated_rule: Rule,
                                           add_extra_conclusions: bool):
@@ -528,3 +534,4 @@ class GeneralRDR(RippleDownRules):
                  expert: Optional[Expert] = None,
                  **kwargs) -> Category:
         pass
+
