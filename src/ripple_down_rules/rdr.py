@@ -4,11 +4,11 @@ from abc import ABC, abstractmethod
 
 from matplotlib import pyplot as plt
 from orderedset import OrderedSet
-from typing_extensions import List, Optional, Dict, Type
+from typing_extensions import List, Optional, Dict, Type, Union
 
 from .datastructures import Category, Condition, Case, Stop, MCRDRMode
 from .experts import Expert, Human
-from .rules import Rule, SingleClassRule
+from .rules import Rule, SingleClassRule, TopRule, MultiClassStopRule
 from .utils import draw_tree
 
 
@@ -176,16 +176,9 @@ class MultiClassRDR(RippleDownRules):
         starting rules fire or not.
         :param mode: The mode of the classifier, either StopOnly or StopPlusRule.
         """
-        self.start_rules = [Rule()] if not start_rules else start_rules
-        super(MultiClassRDR, self).__init__(start_rules[0])
+        self.start_rules = [TopRule()] if not start_rules else start_rules
+        super(MultiClassRDR, self).__init__(self.start_rules[0])
         self.mode: MCRDRMode = mode
-
-    @property
-    def start_rule(self):
-        """
-        Get the starting rule of the classifier.
-        """
-        return self.start_rules[0] if self.start_rules else None
 
     def fit_case(self, x: Case, target: Optional[Category] = None,
                  expert: Optional[Expert] = None, add_extra_conclusions: bool = False) -> List[Category]:
@@ -200,40 +193,42 @@ class MultiClassRDR(RippleDownRules):
         :return: The conclusions that the case belongs to.
         """
         expert = expert if expert else Human()
-        if not self.start_rules:
+        if not self.start_rule.conditions:
             conditions = expert.ask_for_conditions(x, target)
-            self.start_rules = [Rule(conditions, target, corner_case=Case(x.id_, x.attributes_list))]
+            self.start_rule.conditions = conditions
+            self.start_rule.conclusion = target
+            self.start_rule.corner_case = Case(x.id_, x.attributes_list)
 
-        rule_idx = 0
         self.evaluated_rules = []
         self.conclusions = []
         self.expert_accepted_conclusions = []
         self.stop_rule_conditions = None
         user_conclusions = []
-        while rule_idx < len(self.start_rules):
-            evaluated_rule = self.start_rules[rule_idx](x)
+        evaluated_rule = self.start_rule
+        while evaluated_rule:
+            next_rule = evaluated_rule(x)
 
             if evaluated_rule.fired and evaluated_rule.conclusion != Stop():
                 if target and evaluated_rule.conclusion not in [target, *user_conclusions]:
                     # Rule fired and conclusion is different from target
                     self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule, add_extra_conclusions)
-
                 else:
                     # Rule fired and target is correct or there is no target to compare
                     self.add_conclusion(evaluated_rule)
 
-            if target and self.is_last_rule(rule_idx):
+            if target and not next_rule:
                 if target not in self.conclusions:
                     # Nothing fired and there is a target that should have been in the conclusions
                     self.add_rule_for_case(x, target, expert)
-                    rule_idx = 0  # Have to check all rules again to make sure only this new rule fires
+                    evaluated_rule = self.start_rule  # Have to check all rules again to make sure only this new rule fires
                     continue
                 elif add_extra_conclusions and not user_conclusions:
                     # No more conclusions can be made, ask the expert for extra conclusions if needed.
                     user_conclusions.extend(self.ask_expert_for_extra_conclusions(expert, x))
-
-            rule_idx += 1
-
+                    if user_conclusions:
+                        evaluated_rule = self.start_rule.furthest_next_rule[0]
+                        continue
+            evaluated_rule = next_rule
         return list(OrderedSet(self.conclusions))
 
     def is_last_rule(self, rule_idx: int) -> bool:
@@ -245,7 +240,8 @@ class MultiClassRDR(RippleDownRules):
         """
         return rule_idx == len(self.start_rules) - 1
 
-    def stop_wrong_conclusion_else_add_it(self, x: Case, target: Category, expert: Expert, evaluated_rule: Rule,
+    def stop_wrong_conclusion_else_add_it(self, x: Case, target: Category, expert: Expert,
+                                          evaluated_rule: TopRule,
                                           add_extra_conclusions: bool):
         """
         Stop a wrong conclusion by adding a stopping rule.
@@ -254,7 +250,7 @@ class MultiClassRDR(RippleDownRules):
             return
         elif not self.conclusion_is_correct(x, target, expert, evaluated_rule, add_extra_conclusions):
             conditions = expert.ask_for_conditions(x, target, evaluated_rule)
-            evaluated_rule.add_refinement(x, conditions, Stop())
+            evaluated_rule.fit_rule(x, target, conditions=conditions)
             if self.mode == MCRDRMode.StopPlusRule:
                 self.stop_rule_conditions = conditions
 
@@ -324,8 +320,7 @@ class MultiClassRDR(RippleDownRules):
         :param conclusion: The conclusion of the rule.
         :param corner_case: The corner case of the rule.
         """
-        self.start_rules.append(self.start_rules[-1].add_connected_rule(conditions, conclusion, corner_case,
-                                                                        edge_weight="next"))
+        self.start_rule.next_rule = TopRule(conditions, conclusion, corner_case=corner_case)
 
 
 class GeneralRDR(RippleDownRules):

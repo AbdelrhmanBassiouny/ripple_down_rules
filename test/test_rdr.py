@@ -97,7 +97,7 @@ class TestRDR(TestCase):
         expert = MCRDRTester()
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
-                  expert=expert, draw_tree=draw_tree)
+                  expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr")
         cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
@@ -107,7 +107,7 @@ class TestRDR(TestCase):
         expert = MCRDRTester(MCRDRMode.StopPlusRule)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
-                  expert=expert, draw_tree=draw_tree)
+                  expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr")
         cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
@@ -123,6 +123,7 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR()
         cats = mcrdr.fit_case(self.all_cases[0], Category(self.targets[0]),
                               add_extra_conclusions=True, expert=expert)
+        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_extra_classify")
 
         self.assertEqual(cats[0].name, self.targets[0])
         self.assertTrue(Category("lives only on land") in cats)
@@ -139,13 +140,13 @@ class TestRDR(TestCase):
         expert = MCRDRTester()
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
-                  add_extra_conclusions=False, expert=expert, draw_tree=draw_tree)
+                  add_extra_conclusions=False, expert=expert, animate_tree=draw_tree)
         expert = Human(use_loaded_answers=use_loaded_answers)
         file_name = "mcrdr_extra_expert_answers_fit"
         if use_loaded_answers:
             expert.load_answers(file_name)
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
-                  add_extra_conclusions=True, expert=expert, n_iter=10, draw_tree=draw_tree)
+                  add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
         cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
         self.assertTrue(Category("lives only on land") in cats)

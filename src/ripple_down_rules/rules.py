@@ -238,7 +238,7 @@ class MultiClassStopRule(MultiClassRule, StopRule):
     A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
     the conclusion of the rule is a Stop category meant to stop the parent conclusion from being made.
     """
-    _top_rule: Optional[TopRule] = None
+    top_rule: Optional[TopRule] = None
     """
     The top rule of the rule, which is the nearest ancestor that fired and this rule is a refinement of.
     """
@@ -246,18 +246,56 @@ class MultiClassStopRule(MultiClassRule, StopRule):
     """
     The alternative rule of the rule, which is evaluated when the rule doesn't fire.
     """
+    furthest_alternative: Optional[List[MultiClassStopRule]] = None
+    """
+    The furthest alternative rule of the rule, which is the last alternative rule in the chain of alternative rules.
+    """
+    # _conclusion: Category = Stop()
+    """
+    The conclusion of the stopping rule, which is a Stop category.
+    """
+
+    # @property
+    # def conclusion(self) -> Category:
+    #     if self.fired or not self.top_rule:
+    #         return self._conclusion
+    #     else:
+    #         return self.top_rule.conclusion
+    #
+    # @conclusion.setter
+    # def conclusion(self, value: Category):
+    #     self._conclusion = value
 
     def evaluate_next_rule(self, x: Case) -> MultiClassRule:
         if self.fired:
-            return self._top_rule.next_rule
-        elif self._alternative:
-            return self._alternative
+            self.top_rule.fired = False
+            return self.top_rule.next_rule
+        elif self.alternative:
+            return self.alternative(x)
         else:
-            self.all_conclusions.append(self._top_rule.conclusion)
-            return self._top_rule
+            self.all_conclusions.append(self.top_rule.conclusion)
+            return self.top_rule.next_rule
+
+    @property
+    def alternative(self) -> Optional[MultiClassStopRule]:
+        return self._alternative
+
+    @alternative.setter
+    def alternative(self, new_rule: MultiClassStopRule):
+        """
+        Set the alternative rule of the rule. It is important that no rules should be retracted or changed,
+        only new rules should be added.
+        """
+        if self.furthest_alternative:
+            self.furthest_alternative[-1].alternative = new_rule
+        else:
+            new_rule.parent = self
+            new_rule.weight = RDREdge.Alternative.value
+            self._alternative = new_rule
+        self.furthest_alternative = [new_rule]
 
 
-class TopRule(MultiClassRule, Rule):
+class TopRule(Rule, MultiClassRule):
     """
     A rule in the MultiClassRDR classifier, it can have a refinement and a next rule.
     """
@@ -274,27 +312,37 @@ class TopRule(MultiClassRule, Rule):
     The furthest next rule of the rule, which is the last next rule in the chain of next rules.
     """
 
+    def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, TopRule]]:
+        if self.fired:
+            if self.refinement:
+                return self.refinement(x)
+            else:
+                self.all_conclusions.append(self.conclusion)
+        if self.next_rule:
+            return self.next_rule
+
     def fit_rule(self, x: Case, target: Category, conditions: Optional[Dict[str, Condition]] = None):
         if not conditions:
             conditions = Condition.from_two_cases(self.corner_case, x)
 
-        if self.fired:
+        if self.fired and target != self.conclusion:
             new_rule = MultiClassStopRule(conditions, corner_case=x, parent=self)
             self.refinement = new_rule
-        else:
+        elif not self.fired:
             new_rule = TopRule(conditions, target, corner_case=x, parent=self)
             self.next_rule = new_rule
 
     @property
-    def refinement(self) -> Optional[MultiClassRule]:
+    def refinement(self) -> Optional[MultiClassStopRule]:
         return self._refinement
 
     @refinement.setter
-    def refinement(self, new_rule: MultiClassRule):
+    def refinement(self, new_rule: MultiClassStopRule):
         """
         Set the refinement rule of the rule. It is important that no rules should be retracted or changed,
         only new rules should be added.
         """
+        new_rule.top_rule = self
         if self.refinement:
             self.refinement.alternative = new_rule
         else:
@@ -303,29 +351,11 @@ class TopRule(MultiClassRule, Rule):
             self._refinement = new_rule
 
     @property
-    def alternative(self) -> Optional[MultiClassRule]:
-        return self._alternative
-
-    @alternative.setter
-    def alternative(self, new_rule: MultiClassRule):
-        """
-        Set the alternative rule of the rule. It is important that no rules should be retracted or changed,
-        only new rules should be added.
-        """
-        if self.furthest_alternative:
-            self.furthest_alternative[-1].alternative = new_rule
-        else:
-            new_rule.parent = self
-            new_rule.weight = RDREdge.Alternative.value
-            self._alternative = new_rule
-        self.furthest_alternative = [new_rule]
-
-    @property
-    def next_rule(self) -> Optional[MultiClassRule]:
+    def next_rule(self) -> Optional[TopRule]:
         return self._next_rule
 
     @next_rule.setter
-    def next_rule(self, new_rule: MultiClassRule):
+    def next_rule(self, new_rule: TopRule):
         """
         Set the next rule of the rule. It is important that no rules should be retracted or changed,
         only new rules should be added.
