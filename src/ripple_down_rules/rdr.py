@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 
-import networkx as nx
-from anytree import RenderTree
-from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
 from orderedset import OrderedSet
 from typing_extensions import List, Optional, Dict, Type
@@ -13,7 +9,7 @@ from typing_extensions import List, Optional, Dict, Type
 from .datastructures import Category, Condition, Case, Stop, MCRDRMode
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule
-from .utils import tree_to_graph
+from .utils import draw_tree
 
 
 class RippleDownRules(ABC):
@@ -66,7 +62,7 @@ class RippleDownRules(ABC):
     def fit(self, x_batch: List[Case], y_batch: List[Category],
             expert: Optional[Expert] = None,
             n_iter: int = None,
-            draw_tree: bool = False,
+            animate_tree: bool = False,
             **kwargs_for_classify):
         """
         Fit the classifier to a batch of cases and categories.
@@ -75,9 +71,9 @@ class RippleDownRules(ABC):
         :param y_batch: The batch of categories to fit the classifier to.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param n_iter: The number of iterations to fit the classifier for.
-        :param draw_tree: Whether to draw the tree while fitting the classifier.
+        :param animate_tree: Whether to draw the tree while fitting the classifier.
         """
-        if draw_tree:
+        if animate_tree:
             plt.ion()
             self.fig = plt.figure()
         all_pred = 0
@@ -92,67 +88,16 @@ class RippleDownRules(ABC):
                 if not match:
                     print(f"Predicted: {pred_cat[0]} but expected: {y}")
                 all_pred += int(match)
-                if draw_tree:
-                    self.draw_tree()
+                if animate_tree:
+                    draw_tree(self.start_rule, self.fig)
                 i += 1
                 if n_iter and i >= n_iter:
                     break
             print(f"Accuracy: {all_pred}/{len(y_batch)}")
         print(f"Finished training in {i} iterations")
-        if draw_tree:
+        if animate_tree:
             plt.ioff()
             plt.show()
-
-    @staticmethod
-    def edge_attr_setter(parent, child):
-        """
-        Set the edge attributes for the dot exporter.
-        """
-        if child and hasattr(child, "weight") and child.weight:
-            return f'style="bold", weight=" {child.weight}"'
-        return ""
-
-    def render_tree(self, use_dot_exporter: bool = False,
-                    filename: str = "scrdr"):
-        """
-        Render the tree using the console and optionally export it to a dot file.
-
-        :param use_dot_exporter: Whether to export the tree to a dot file.
-        :param filename: The name of the file to export the tree to.
-        """
-        if not self.start_rule:
-            logging.warning("No rules to render")
-            return
-        for pre, _, node in RenderTree(self.start_rule):
-            print(f"{pre}{node.weight or ''} {node.__str__(sep='')}")
-        if use_dot_exporter:
-            de = DotExporter(self.start_rule,
-                             edgeattrfunc=self.edge_attr_setter
-                             )
-            de.to_dotfile(f"{filename}{'.dot'}")
-            de.to_picture(f"{filename}{'.png'}")
-
-    def draw_tree(self):
-        """
-        Draw the tree using matplotlib and networkx.
-        """
-        if self.start_rule is None:
-            return
-        self.fig.clf()
-        graph = tree_to_graph(self.start_rule)
-        fig_sz_x = 13
-        fig_sz_y = 10
-        self.fig.set_size_inches(fig_sz_x, fig_sz_y)
-        pos = nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot")
-        # scale down pos
-        max_pos_x = max([v[0] for v in pos.values()])
-        max_pos_y = max([v[1] for v in pos.values()])
-        pos = {k: (v[0] * fig_sz_x / max_pos_x, v[1] * fig_sz_y / max_pos_y) for k, v in pos.items()}
-        nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=1000,
-                ax=self.fig.gca(), node_shape="o", font_size=8)
-        nx.draw_networkx_edge_labels(graph, pos, edge_labels=nx.get_edge_attributes(graph, 'weight'),
-                                     ax=self.fig.gca(), rotate=False, clip_on=False)
-        plt.pause(0.1)
 
 
 class SingleClassRDR(RippleDownRules):

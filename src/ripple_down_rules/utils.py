@@ -1,5 +1,9 @@
+import logging
+
 import networkx as nx
-from anytree import Node
+from anytree import Node, RenderTree
+from anytree.exporter import DotExporter
+from matplotlib import pyplot as plt
 
 
 def tree_to_graph(root_node: Node) -> nx.DiGraph:
@@ -22,3 +26,56 @@ def tree_to_graph(root_node: Node) -> nx.DiGraph:
 
     add_edges(root_node)
     return graph
+
+
+def edge_attr_setter(parent, child):
+    """
+    Set the edge attributes for the dot exporter.
+    """
+    if child and hasattr(child, "weight") and child.weight:
+        return f'style="bold", weight=" {child.weight}"'
+    return ""
+
+
+def render_tree(root: Node, use_dot_exporter: bool = False,
+                filename: str = "scrdr"):
+    """
+    Render the tree using the console and optionally export it to a dot file.
+
+    :param use_dot_exporter: Whether to export the tree to a dot file.
+    :param filename: The name of the file to export the tree to.
+    """
+    if not root:
+        logging.warning("No rules to render")
+        return
+    for pre, _, node in RenderTree(root):
+        print(f"{pre}{node.weight or ''} {node.__str__(sep='')}")
+    if use_dot_exporter:
+        de = DotExporter(root,
+                         edgeattrfunc=edge_attr_setter
+                         )
+        de.to_dotfile(f"{filename}{'.dot'}")
+        de.to_picture(f"{filename}{'.png'}")
+
+
+def draw_tree(root: Node, fig: plt.Figure):
+    """
+    Draw the tree using matplotlib and networkx.
+    """
+    if root is None:
+        return
+    fig.clf()
+    graph = tree_to_graph(root)
+    fig_sz_x = 13
+    fig_sz_y = 10
+    fig.set_size_inches(fig_sz_x, fig_sz_y)
+    pos = nx.drawing.nx_agraph.graphviz_layout(graph, prog="dot")
+    # scale down pos
+    max_pos_x = max([v[0] for v in pos.values()])
+    max_pos_y = max([v[1] for v in pos.values()])
+    pos = {k: (v[0] * fig_sz_x / max_pos_x, v[1] * fig_sz_y / max_pos_y) for k, v in pos.items()}
+    nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=1000,
+            ax=fig.gca(), node_shape="o", font_size=8)
+    nx.draw_networkx_edge_labels(graph, pos, edge_labels=nx.get_edge_attributes(graph, 'weight'),
+                                 ax=fig.gca(), rotate=False, clip_on=False)
+    plt.pause(0.1)

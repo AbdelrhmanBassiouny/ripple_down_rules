@@ -8,6 +8,7 @@ from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import Case, Category, str_to_operator_fn, Condition, MCRDRMode
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR
+from ripple_down_rules.utils import render_tree
 
 
 class TestRDR(TestCase):
@@ -54,7 +55,7 @@ class TestRDR(TestCase):
     def test_fit_scrdr(self):
         use_loaded_answers = True
         save_answers = False
-        draw_tree = False
+        draw_tree = True
         filename = "scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
@@ -62,8 +63,8 @@ class TestRDR(TestCase):
 
         scrdr = SingleClassRDR()
         scrdr.fit(self.all_cases, [Category(t) for t in self.targets], expert=expert,
-                  draw_tree=draw_tree)
-        scrdr.render_tree(use_dot_exporter=True, filename="scrdr")
+                  animate_tree=draw_tree)
+        render_tree(scrdr.start_rule, use_dot_exporter=True, filename="scrdr")
 
         cat = scrdr.classify(self.all_cases[50])
         self.assertEqual(cat.name, self.targets[50])
@@ -97,7 +98,7 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
                   expert=expert, draw_tree=draw_tree)
-        mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr")
         cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
 
@@ -107,7 +108,7 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
         mcrdr.fit(self.all_cases, [Category(t) for t in self.targets],
                   expert=expert, draw_tree=draw_tree)
-        mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr")
         cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
 
@@ -148,7 +149,7 @@ class TestRDR(TestCase):
         cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0].name, self.targets[50])
         self.assertTrue(Category("lives only on land") in cats)
-        mcrdr.render_tree(use_dot_exporter=True, filename="mcrdr_extra")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_extra")
         if save_answers:
             expert.save_answers(file_name)
 
