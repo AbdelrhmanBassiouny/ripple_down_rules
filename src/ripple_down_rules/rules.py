@@ -138,40 +138,7 @@ class Rule(NodeMixin, ABC):
         return self.__str__()
 
 
-class HasRefinementEdge:
-    """
-    Adds an edge which connects the parent rule to child rule by an (except if) which is
-     traversed when the parent rule fires.
-    """
-
-    @property
-    def weight(self) -> str:
-        return "except if"
-
-
-class HasAlternativeEdge:
-    """
-    Adds an edge which connects the parent rule to child rule by an (else if) which is
-        traversed when the parent rule doesn't fire.
-    """
-
-    @property
-    def weight(self) -> str:
-        return "else if"
-
-
-class HasNextEdge:
-    """
-    Adds an edge which connects the parent rule to child rule by a (next) which is alawys
-        traversed after parent rule is evaluated whether the parent rule fires or doesn't fire.
-    """
-
-    @property
-    def weight(self) -> str:
-        return "next"
-
-
-class StopRule(Rule, HasRefinementEdge, ABC):
+class StopRule(Rule, ABC):
     """
     A stopping rule that is used to stop the parent conclusion from being made, thus giving no conclusion instead,
     which is useful to prevent a conclusion in certain condition if it is wrong when these conditions are met.
@@ -183,7 +150,9 @@ class StopRule(Rule, HasRefinementEdge, ABC):
 
     def __init__(self, conditions: Dict[str, Condition], corner_case: Optional[Case] = None,
                  parent: Optional[Rule] = None):
-        super(StopRule, self).__init__(conditions, self.conclusion, corner_case=corner_case, parent=parent)
+        super(StopRule, self).__init__(conditions, self.conclusion,
+                                       corner_case=corner_case, parent=parent)
+        self.weight = RDREdge.Refinement.value
 
 
 class SingleClassRule(Rule):
@@ -255,3 +224,84 @@ class SingleClassRule(Rule):
             self.refinement = new_rule
         else:
             self.alternative = new_rule
+
+
+class MultiClassRule(Rule):
+    """
+    A rule in the MultiClassRDR classifier, it can have a refinement or an alternative rule or both.
+    """
+    _refinement: Optional[MultiClassRule] = None
+    """
+    The refinement rule of the rule, which is evaluated when the rule fires.
+    """
+    _alternative: Optional[MultiClassRule] = None
+    """
+    The alternative rule of the rule, which is evaluated when the rule doesn't fire.
+    """
+    furthest_alternative: Optional[List[MultiClassRule]] = None
+    """
+    The furthest alternative rule of the rule, which is the last alternative rule in the chain of alternative rules.
+    """
+    _next_rule: Optional[MultiClassRule] = None
+    """
+    The next rule of the rule, which is always evaluated after this rule.
+    """
+    furthest_next_rule: Optional[List[MultiClassRule]] = None
+    """
+    The furthest next rule of the rule, which is the last next rule in the chain of next rules.
+    """
+
+    @property
+    def refinement(self) -> Optional[MultiClassRule]:
+        return self._refinement
+
+    @refinement.setter
+    def refinement(self, new_rule: MultiClassRule):
+        """
+        Set the refinement rule of the rule. It is important that no rules should be retracted or changed,
+        only new rules should be added.
+        """
+        if self._refinement:
+            self._refinement._alternative = new_rule
+        else:
+            new_rule.parent = self
+            new_rule.weight = RDREdge.Refinement.value
+            self._refinement = new_rule
+
+    @property
+    def alternative(self) -> Optional[MultiClassRule]:
+        return self._alternative
+
+    @alternative.setter
+    def alternative(self, new_rule: MultiClassRule):
+        """
+        Set the alternative rule of the rule. It is important that no rules should be retracted or changed,
+        only new rules should be added.
+        """
+        if self.furthest_alternative:
+            self.furthest_alternative[-1].alternative = new_rule
+        else:
+            new_rule.parent = self
+            new_rule.weight = RDREdge.Alternative.value
+            self._alternative = new_rule
+        self.furthest_alternative = [new_rule]
+
+    @property
+    def next_rule(self) -> Optional[MultiClassRule]:
+        return self._next_rule
+
+    @next_rule.setter
+    def next_rule(self, new_rule: MultiClassRule):
+        """
+        Set the next rule of the rule. It is important that no rules should be retracted or changed,
+        only new rules should be added.
+        """
+        if self.furthest_next_rule:
+            self.furthest_next_rule[-1].next_rule = new_rule
+        else:
+            new_rule.parent = self
+            new_rule.weight = RDREdge.Next.value
+            self._next_rule = new_rule
+        self.furthest_next_rule = [new_rule]
+
+

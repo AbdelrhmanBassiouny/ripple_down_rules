@@ -252,14 +252,14 @@ class MultiClassRDR(RippleDownRules):
         """
         if evaluated_rule.conclusion in self.expert_accepted_conclusions:
             return
-        elif not self.is_conclusion_is_correct(x, target, expert, evaluated_rule, add_extra_conclusions):
+        elif not self.conclusion_is_correct(x, target, expert, evaluated_rule, add_extra_conclusions):
             conditions = expert.ask_for_conditions(x, target, evaluated_rule)
             evaluated_rule.add_refinement(x, conditions, Stop())
             if self.mode == MCRDRMode.StopPlusRule:
                 self.stop_rule_conditions = conditions
 
-    def is_conclusion_is_correct(self, x: Case, target: Category, expert: Expert, evaluated_rule: Rule,
-                                 add_extra_conclusions: bool) -> bool:
+    def conclusion_is_correct(self, x: Case, target: Category, expert: Expert, evaluated_rule: Rule,
+                              add_extra_conclusions: bool) -> bool:
         """
         Ask the expert if the conclusion is correct, and add it to the conclusions if it is.
 
