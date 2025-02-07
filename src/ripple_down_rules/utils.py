@@ -33,7 +33,7 @@ def edge_attr_setter(parent, child):
     Set the edge attributes for the dot exporter.
     """
     if child and hasattr(child, "weight") and child.weight:
-        return f'style="bold", weight=" {child.weight}"'
+        return f'style="bold", label=" {child.weight}"'
     return ""
 
 

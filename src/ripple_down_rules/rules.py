@@ -21,15 +21,12 @@ class Rule(NodeMixin, ABC):
     """
     The index of the rule in the all rules list.
     """
-    weight: Optional[str] = None
-    """
-    The weight of the edge between the rule and its parent rule.
-    """
 
     def __init__(self, conditions: Optional[Dict[str, Condition]] = None,
                  conclusion: Optional[Category] = None,
                  parent: Optional[Rule] = None,
-                 corner_case: Optional[Case] = None):
+                 corner_case: Optional[Case] = None,
+                 weight: Optional[str] = None):
         """
         A rule in the ripple down rules classifier.
 
@@ -39,11 +36,11 @@ class Rule(NodeMixin, ABC):
         :param corner_case: The corner case that this rule is based on/created from.
         """
         super(Rule, self).__init__()
-        self.conclusion = conclusion
+        self._conclusion = conclusion
         self.corner_case = corner_case
         self.parent = parent
-        self.conditions = conditions if conditions else {}
-        self._name = self.__str__()
+        self.weight: Optional[str] = weight
+        self._conditions = conditions if conditions else {}
         self.update_all_rules()
 
     @property
@@ -53,7 +50,16 @@ class Rule(NodeMixin, ABC):
     @conditions.setter
     def conditions(self, value: Dict[str, Condition]):
         self._conditions = value
-        self._name = self.__str__()
+        self.update_all_rules()
+
+    @property
+    def conclusion(self) -> Category:
+        return self._conclusion
+
+    @conclusion.setter
+    def conclusion(self, value: Category):
+        self._conclusion = value
+        self.update_all_rules()
 
     def update_all_rules(self):
         """
@@ -62,7 +68,6 @@ class Rule(NodeMixin, ABC):
         if self.name in self.all_rules:
             self.all_rules[self.name].append(self)
             self.rule_idx = len(self.all_rules[self.name]) - 1
-            self.name += f"_{self.rule_idx}"
         else:
             self.all_rules[self.name] = [self]
 
@@ -116,14 +121,7 @@ class Rule(NodeMixin, ABC):
         """
         Get the name of the rule, which is the conditions and the conclusion.
         """
-        return self._name
-
-    @name.setter
-    def name(self, value):
-        """
-        Set the name of the rule.
-        """
-        self._name = value
+        return self.__str__()
 
     def __str__(self, sep="\n"):
         """
@@ -132,20 +130,14 @@ class Rule(NodeMixin, ABC):
         conditions = f"^{sep}".join([str(c) for c in list(self.conditions.values())])
         if self.conclusion:
             conditions += f"{sep}=> {self.conclusion.name}"
+        conditions += f"_{self.rule_idx}" if self.rule_idx > 1 else ""
         return conditions
 
     def __repr__(self):
         return self.__str__()
 
 
-class HasEdgeWeight:
-    weight: Optional[str] = None
-    """
-    The weight of the edge between the rule and its parent rule.
-    """
-
-
-class StopRule(Rule, HasEdgeWeight, ABC):
+class StopRule(Rule, ABC):
     """
     A stopping rule that is used to stop the parent conclusion from being made, thus giving no conclusion instead,
     which is useful to prevent a conclusion in certain condition if it is wrong when these conditions are met.
@@ -154,7 +146,6 @@ class StopRule(Rule, HasEdgeWeight, ABC):
     """
     The conclusion of the stopping rule, which is a Stop category.
     """
-    weight: str = RDREdge.Refinement.value
 
     def __init__(self, conditions: Dict[str, Condition], corner_case: Optional[Case] = None,
                  parent: Optional[Rule] = None):
@@ -162,7 +153,7 @@ class StopRule(Rule, HasEdgeWeight, ABC):
                                        corner_case=corner_case, parent=parent)
 
 
-class HasAlternativeRule(HasEdgeWeight):
+class HasAlternativeRule:
     """
     A mixin class for rules that have an alternative rule.
     """
@@ -173,10 +164,6 @@ class HasAlternativeRule(HasEdgeWeight):
     furthest_alternative: Optional[List[Rule]] = None
     """
     The furthest alternative rule of the rule, which is the last alternative rule in the chain of alternative rules.
-    """
-    weight = RDREdge.Alternative.value
-    """
-    The weight of the edge between the rule and its alternative rule.
     """
 
     @property
@@ -193,19 +180,15 @@ class HasAlternativeRule(HasEdgeWeight):
             self.furthest_alternative[-1].alternative = new_rule
         else:
             new_rule.parent = self
-            new_rule.weight = self.weight
+            new_rule.weight = RDREdge.Alternative.value if not new_rule.weight else new_rule.weight
             self._alternative = new_rule
         self.furthest_alternative = [new_rule]
 
 
-class HasRefinementRule(HasEdgeWeight):
+class HasRefinementRule:
     _refinement: Optional[HasAlternativeRule] = None
     """
     The refinement rule of the rule, which is evaluated when the rule fires.
-    """
-    weight = RDREdge.Refinement.value
-    """
-    The weight of the edge between the rule and its refinement rule.
     """
 
     @property
@@ -223,7 +206,7 @@ class HasRefinementRule(HasEdgeWeight):
             self.refinement.alternative = new_rule
         else:
             new_rule.parent = self
-            new_rule.weight = self.weight
+            new_rule.weight = RDREdge.Refinement.value
             self._refinement = new_rule
 
 
@@ -257,17 +240,7 @@ class HasConclusions:
     """
 
 
-class HasNextRule(HasAlternativeRule):
-    """
-    A mixin class for rules that have a next rule.
-    """
-    weight = RDREdge.Next.value
-    """
-    The weight of the edge between the rule and its next rule.
-    """
-
-
-class MultiClassStopRule(StopRule, HasConclusions, HasAlternativeRule):
+class MultiClassStopRule(Rule, HasConclusions, HasAlternativeRule):
     """
     A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
     the conclusion of the rule is a Stop category meant to stop the parent conclusion from being made.
@@ -276,6 +249,9 @@ class MultiClassStopRule(StopRule, HasConclusions, HasAlternativeRule):
     """
     The top rule of the rule, which is the nearest ancestor that fired and this rule is a refinement of.
     """
+    def __init__(self, *args, **kwargs):
+        super(MultiClassStopRule, self).__init__(*args, **kwargs)
+        self.conclusion = Stop()
 
     def evaluate_next_rule(self, x: Case) -> HasConclusions:
         if self.fired:
@@ -288,10 +264,14 @@ class MultiClassStopRule(StopRule, HasConclusions, HasAlternativeRule):
             return self.top_rule.alternative
 
 
-class TopRule(Rule, HasConclusions, HasRefinementRule, HasNextRule):
+class TopRule(Rule, HasConclusions, HasRefinementRule, HasAlternativeRule):
     """
     A rule in the MultiClassRDR classifier, it can have a refinement and a next rule.
     """
+
+    def __init__(self, *args, **kwargs):
+        super(TopRule, self).__init__(*args, **kwargs)
+        self.weight = RDREdge.Next.value
 
     def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, TopRule]]:
         if self.fired:
