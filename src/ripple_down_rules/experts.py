@@ -192,12 +192,19 @@ class Human(Expert):
                 rule = rule.strip()
                 try:
                     name, value, operator = str_to_operator_fn(rule)
-                    if name and value and operator:
-                        if name not in all_names:
-                            messages.append(f"Attribute {name} not found in the attributes list please enter it again")
-                            done = False
-                            continue
-                        rule_conditions[name] = Condition(name, float(value), operator)
+                    if not name:
+                        messages.append(f"Name cannot be empty")
+                    elif name not in all_names:
+                        messages.append(f"Attribute {name} not found in the attributes")
+                    if not value:
+                        messages.append(f"Value seems to be wrong or missing")
+                    if not operator:
+                        messages.append(f"Operator seems to be wrong or missing")
+                    if messages:
+                        messages.append(f"Please rewrite this condition: \"{rule}\"")
+                        done = False
+                        continue
+                    rule_conditions[name] = Condition(name, float(value), operator)
                 except InvalidOperator as e:
                     messages.append(str(e) + " please enter it again")
                     done = False

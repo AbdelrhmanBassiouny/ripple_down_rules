@@ -177,7 +177,7 @@ class MultiClassRDR(RippleDownRules):
         :param start_rules: The starting rules for the classifier, these are the rules that are at the top of the tree
         and are always checked, in contrast to the refinement and alternative rules which are only checked if the
         starting rules fire or not.
-        :param mode: The mode of the classifier, either StopOnly or StopPlusRule.
+        :param mode: The mode of the classifier, either StopOnly or StopPlusRule, or StopPlusRuleCombined.
         """
         self.start_rules = [MultiClassTopRule()] if not start_rules else start_rules
         super(MultiClassRDR, self).__init__(self.start_rules[0])
@@ -267,6 +267,9 @@ class MultiClassRDR(RippleDownRules):
             evaluated_rule.fit_rule(x, target, conditions=conditions)
             if self.mode == MCRDRMode.StopPlusRule:
                 self.stop_rule_conditions = conditions
+            if self.mode == MCRDRMode.StopPlusRuleCombined:
+                new_top_rule_conditions = {**evaluated_rule.conditions, **conditions}
+                self.add_top_rule(new_top_rule_conditions, target, x)
 
     def conclusion_is_correct(self, x: Case, target: Category, expert: Expert, evaluated_rule: Rule,
                               add_extra_conclusions: bool) -> bool:

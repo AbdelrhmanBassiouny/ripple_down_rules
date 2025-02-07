@@ -21,6 +21,11 @@ class MCRDRMode(Enum):
     StopPlusRule mode, stop wrong conclusion from being made and adds a new rule with same conditions as stopping rule
      to make the correct conclusion.
     """
+    StopPlusRuleCombined = auto()
+    """
+    StopPlusRuleCombined mode, stop wrong conclusion from being made and adds a new rule with combined conditions of
+    stopping rule and the rule that should have fired.
+    """
 
 
 class RDREdge(Enum):

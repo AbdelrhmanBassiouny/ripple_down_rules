@@ -4,6 +4,7 @@ import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
+from typing_extensions import Callable
 
 
 def tree_to_graph(root_node: Node) -> nx.DiGraph:
@@ -14,18 +15,40 @@ def tree_to_graph(root_node: Node) -> nx.DiGraph:
     :return: A networkx graph.
     """
     graph = nx.DiGraph()
+    unique_node_names = get_unique_node_names_func(root_node)
 
     def add_edges(node):
-        if node not in graph.nodes:
-            graph.add_node(node.name)
+        if unique_node_names(node) not in graph.nodes:
+            graph.add_node(unique_node_names(node))
         for child in node.children:
-            if node not in graph.nodes:
-                graph.add_node(child.name)
-            graph.add_edge(node.name, child.name, weight=child.weight)
+            if unique_node_names(child) not in graph.nodes:
+                graph.add_node(unique_node_names(child))
+            graph.add_edge(unique_node_names(node), unique_node_names(child), weight=child.weight)
             add_edges(child)
 
     add_edges(root_node)
     return graph
+
+
+def get_unique_node_names_func(root_node) -> Callable[[Node], str]:
+    nodes = [root_node]
+
+    def get_all_nodes(node):
+        for c in node.children:
+            nodes.append(c)
+            get_all_nodes(c)
+
+    get_all_nodes(root_node)
+
+    def nodenamefunc(node: Node):
+        """
+        Set the node name for the dot exporter.
+        """
+        similar_nodes = [n for n in nodes if n.name == node.name]
+        node_idx = similar_nodes.index(node)
+        return node.name if node_idx == 0 else f"{node.name}_{node_idx}"
+
+    return nodenamefunc
 
 
 def edge_attr_setter(parent, child):
@@ -52,26 +75,11 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     for pre, _, node in RenderTree(root):
         print(f"{pre}{node.weight or ''} {node.__str__(sep='')}")
     if use_dot_exporter:
-        nodes = [root]
-
-        def get_all_nodes(node):
-            for c in node.children:
-                nodes.append(c)
-                get_all_nodes(c)
-
-        get_all_nodes(root)
-
-        def nodenamefunc(node: Node):
-            """
-            Set the node name for the dot exporter.
-            """
-            similar_nodes = [n for n in nodes if n.name == node.name]
-            node_idx = similar_nodes.index(node)
-            return node.name if node_idx == 0 else f"{node.name}_{node_idx}"
+        unique_node_names = get_unique_node_names_func(root)
 
 
         de = DotExporter(root,
-                         nodenamefunc=nodenamefunc,
+                         nodenamefunc=unique_node_names,
                          edgeattrfunc=edge_attr_setter
                          )
         de.to_dotfile(f"{filename}{'.dot'}")

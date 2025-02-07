@@ -98,9 +98,10 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, self.targets,
                   expert=expert, animate_tree=draw_tree)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_stop_only")
         cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0], self.targets[50])
+        self.assertTrue(len(cats) == 1)
 
     def test_fit_mcrdr_stop_plus_rule(self):
         draw_tree = False
@@ -108,9 +109,30 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
         mcrdr.fit(self.all_cases, self.targets,
                   expert=expert, animate_tree=draw_tree)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_stop_plus_rule")
         cats = mcrdr.fit_case(self.all_cases[50])
         self.assertEqual(cats[0], self.targets[50])
+        self.assertTrue(len(cats) == 1)
+
+    def test_fit_mcrdr_stop_plus_rule_combined(self):
+        use_loaded_answers = True
+        save_answers = False
+        draw_tree = False
+        filename = "mcrdr_stop_plus_rule_combined_expert_answers_fit"
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+        mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRuleCombined)
+        mcrdr.fit(self.all_cases, self.targets,
+                  expert=expert, animate_tree=draw_tree)
+        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_stop_plus_rule_combined")
+        cats = mcrdr.fit_case(self.all_cases[50])
+        self.assertEqual(cats[0], self.targets[50])
+        self.assertTrue(len(cats) == 1)
+        if save_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, filename)
+            expert.save_answers(file)
 
     def test_classify_mcrdr_with_extra_conclusions(self):
         use_loaded_answers = True
