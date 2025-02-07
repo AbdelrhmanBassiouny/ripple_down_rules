@@ -226,7 +226,7 @@ class MultiClassRDR(RippleDownRules):
                     # No more conclusions can be made, ask the expert for extra conclusions if needed.
                     user_conclusions.extend(self.ask_expert_for_extra_conclusions(expert, x))
                     if user_conclusions:
-                        evaluated_rule = self.start_rule.furthest_next_rule[0]
+                        evaluated_rule = self.start_rule.furthest_alternative[-1]
                         continue
             evaluated_rule = next_rule
         return list(OrderedSet(self.conclusions))
@@ -320,7 +320,7 @@ class MultiClassRDR(RippleDownRules):
         :param conclusion: The conclusion of the rule.
         :param corner_case: The corner case of the rule.
         """
-        self.start_rule.next_rule = TopRule(conditions, conclusion, corner_case=corner_case)
+        self.start_rule.alternative = TopRule(conditions, conclusion, corner_case=corner_case)
 
 
 class GeneralRDR(RippleDownRules):
