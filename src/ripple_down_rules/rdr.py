@@ -223,16 +223,27 @@ class MultiClassRDR(RippleDownRules):
                 if target not in self.conclusions:
                     # Nothing fired and there is a target that should have been in the conclusions
                     self.add_rule_for_case(x, target, expert)
-                    evaluated_rule = self.start_rule  # Have to check all rules again to make sure only this new rule fires
+                    # Have to check all rules again to make sure only this new rule fires
+                    evaluated_rule = self.start_rule
                     continue
                 elif add_extra_conclusions and not user_conclusions:
                     # No more conclusions can be made, ask the expert for extra conclusions if needed.
                     user_conclusions.extend(self.ask_expert_for_extra_conclusions(expert, x))
                     if user_conclusions:
-                        evaluated_rule = self.start_rule.furthest_alternative[-1]
+                        evaluated_rule = self.last_top_rule
                         continue
             evaluated_rule = next_rule
         return list(OrderedSet(self.conclusions))
+
+    @property
+    def last_top_rule(self) -> Optional[MultiClassTopRule]:
+        """
+        Get the last top rule in the tree.
+        """
+        if not self.start_rule.furthest_alternative:
+            return self.start_rule
+        else:
+            return self.start_rule.furthest_alternative[-1]
 
     def is_last_rule(self, rule_idx: int) -> bool:
         """
