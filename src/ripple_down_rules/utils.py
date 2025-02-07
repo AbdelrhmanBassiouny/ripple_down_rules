@@ -42,6 +42,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     """
     Render the tree using the console and optionally export it to a dot file.
 
+    :param root: The root node of the tree.
     :param use_dot_exporter: Whether to export the tree to a dot file.
     :param filename: The name of the file to export the tree to.
     """
@@ -51,7 +52,26 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     for pre, _, node in RenderTree(root):
         print(f"{pre}{node.weight or ''} {node.__str__(sep='')}")
     if use_dot_exporter:
+        nodes = [root]
+
+        def get_all_nodes(node):
+            for c in node.children:
+                nodes.append(c)
+                get_all_nodes(c)
+
+        get_all_nodes(root)
+
+        def nodenamefunc(node: Node):
+            """
+            Set the node name for the dot exporter.
+            """
+            similar_nodes = [n for n in nodes if n.name == node.name]
+            node_idx = similar_nodes.index(node)
+            return node.name if node_idx == 0 else f"{node.name}_{node_idx}"
+
+
         de = DotExporter(root,
+                         nodenamefunc=nodenamefunc,
                          edgeattrfunc=edge_attr_setter
                          )
         de.to_dotfile(f"{filename}{'.dot'}")

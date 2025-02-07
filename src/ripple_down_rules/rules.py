@@ -13,14 +13,6 @@ class Rule(NodeMixin, ABC):
     """
     Whether the rule has fired or not.
     """
-    all_rules: Dict[str, Rule] = {}
-    """
-    All rules in the classifier.
-    """
-    rule_idx: int = 0
-    """
-    The index of the rule in the all rules list.
-    """
 
     def __init__(self, conditions: Optional[Dict[str, Condition]] = None,
                  conclusion: Optional[Category] = None,
@@ -36,40 +28,11 @@ class Rule(NodeMixin, ABC):
         :param corner_case: The corner case that this rule is based on/created from.
         """
         super(Rule, self).__init__()
-        self._conclusion = conclusion
+        self.conclusion = conclusion
         self.corner_case = corner_case
         self.parent = parent
         self.weight: Optional[str] = weight
-        self._conditions = conditions if conditions else {}
-        self.update_all_rules()
-
-    @property
-    def conditions(self) -> Dict[str, Condition]:
-        return self._conditions
-
-    @conditions.setter
-    def conditions(self, value: Dict[str, Condition]):
-        self._conditions = value
-        self.update_all_rules()
-
-    @property
-    def conclusion(self) -> Category:
-        return self._conclusion
-
-    @conclusion.setter
-    def conclusion(self, value: Category):
-        self._conclusion = value
-        self.update_all_rules()
-
-    def update_all_rules(self):
-        """
-        Update the all rules dictionary with this rule. And make the rule name unique if it already exists.
-        """
-        if self.name in self.all_rules:
-            self.all_rules[self.name].append(self)
-            self.rule_idx = len(self.all_rules[self.name]) - 1
-        else:
-            self.all_rules[self.name] = [self]
+        self.conditions = conditions if conditions else {}
 
     def _post_detach(self, parent):
         """
@@ -130,27 +93,10 @@ class Rule(NodeMixin, ABC):
         conditions = f"^{sep}".join([str(c) for c in list(self.conditions.values())])
         if self.conclusion:
             conditions += f"{sep}=> {self.conclusion.name}"
-        conditions += f"_{self.rule_idx}" if self.rule_idx > 1 else ""
         return conditions
 
     def __repr__(self):
         return self.__str__()
-
-
-class StopRule(Rule, ABC):
-    """
-    A stopping rule that is used to stop the parent conclusion from being made, thus giving no conclusion instead,
-    which is useful to prevent a conclusion in certain condition if it is wrong when these conditions are met.
-    """
-    conclusion: Category = Stop()
-    """
-    The conclusion of the stopping rule, which is a Stop category.
-    """
-
-    def __init__(self, conditions: Dict[str, Condition], corner_case: Optional[Case] = None,
-                 parent: Optional[Rule] = None):
-        super(StopRule, self).__init__(conditions, self.conclusion,
-                                       corner_case=corner_case, parent=parent)
 
 
 class HasAlternativeRule:
@@ -233,19 +179,12 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
             self.alternative = new_rule
 
 
-class HasConclusions:
-    all_conclusions: List[Category] = []
-    """
-    All conclusions in the classifier, this gets updated when a new conclusion is added by a fired rule.
-    """
-
-
-class MultiClassStopRule(Rule, HasConclusions, HasAlternativeRule):
+class MultiClassStopRule(Rule, HasAlternativeRule):
     """
     A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
     the conclusion of the rule is a Stop category meant to stop the parent conclusion from being made.
     """
-    top_rule: Optional[TopRule] = None
+    top_rule: Optional[MultiClassTopRule] = None
     """
     The top rule of the rule, which is the nearest ancestor that fired and this rule is a refinement of.
     """
@@ -253,33 +192,29 @@ class MultiClassStopRule(Rule, HasConclusions, HasAlternativeRule):
         super(MultiClassStopRule, self).__init__(*args, **kwargs)
         self.conclusion = Stop()
 
-    def evaluate_next_rule(self, x: Case) -> HasConclusions:
+    def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, MultiClassTopRule]]:
         if self.fired:
             self.top_rule.fired = False
             return self.top_rule.alternative
         elif self.alternative:
             return self.alternative(x)
         else:
-            self.all_conclusions.append(self.top_rule.conclusion)
             return self.top_rule.alternative
 
 
-class TopRule(Rule, HasConclusions, HasRefinementRule, HasAlternativeRule):
+class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
     """
     A rule in the MultiClassRDR classifier, it can have a refinement and a next rule.
     """
 
     def __init__(self, *args, **kwargs):
-        super(TopRule, self).__init__(*args, **kwargs)
+        super(MultiClassTopRule, self).__init__(*args, **kwargs)
         self.weight = RDREdge.Next.value
 
-    def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, TopRule]]:
-        if self.fired:
-            if self.refinement:
-                return self.refinement(x)
-            else:
-                self.all_conclusions.append(self.conclusion)
-        if self.alternative:
+    def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, MultiClassTopRule]]:
+        if self.fired and self.refinement:
+            return self.refinement(x)
+        elif self.alternative:  # Here alternative refers to next rule in MultiClassRDR
             return self.alternative
 
     def fit_rule(self, x: Case, target: Category, conditions: Optional[Dict[str, Condition]] = None):
@@ -289,4 +224,4 @@ class TopRule(Rule, HasConclusions, HasRefinementRule, HasAlternativeRule):
         if self.fired and target != self.conclusion:
             self.refinement = MultiClassStopRule(conditions, corner_case=x, parent=self)
         elif not self.fired:
-            self.alternative = TopRule(conditions, target, corner_case=x, parent=self)
+            self.alternative = MultiClassTopRule(conditions, target, corner_case=x, parent=self)

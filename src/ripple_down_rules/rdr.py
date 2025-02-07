@@ -8,7 +8,7 @@ from typing_extensions import List, Optional, Dict, Type, Union
 
 from .datastructures import Category, Condition, Case, Stop, MCRDRMode
 from .experts import Expert, Human
-from .rules import Rule, SingleClassRule, TopRule, MultiClassStopRule
+from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .utils import draw_tree
 
 
@@ -162,9 +162,12 @@ class MultiClassRDR(RippleDownRules):
 
     def classify(self, x: Case) -> List[Category]:
         self.evaluated_rules = []
-        for rule in self.start_rules:
-            evaluated_rule = rule(x)
-            self.evaluated_rules.append(evaluated_rule)
+        evaluated_rule = self.start_rule
+        while evaluated_rule:
+            next_rule = evaluated_rule(x)
+            if evaluated_rule.fired:
+                self.evaluated_rules.append(evaluated_rule)
+            evaluated_rule = next_rule
         self.conclusions = [evaluated_rule.conclusion for evaluated_rule in self.evaluated_rules]
         return self.conclusions
 
@@ -176,7 +179,7 @@ class MultiClassRDR(RippleDownRules):
         starting rules fire or not.
         :param mode: The mode of the classifier, either StopOnly or StopPlusRule.
         """
-        self.start_rules = [TopRule()] if not start_rules else start_rules
+        self.start_rules = [MultiClassTopRule()] if not start_rules else start_rules
         super(MultiClassRDR, self).__init__(self.start_rules[0])
         self.mode: MCRDRMode = mode
 
@@ -241,7 +244,7 @@ class MultiClassRDR(RippleDownRules):
         return rule_idx == len(self.start_rules) - 1
 
     def stop_wrong_conclusion_else_add_it(self, x: Case, target: Category, expert: Expert,
-                                          evaluated_rule: TopRule,
+                                          evaluated_rule: MultiClassTopRule,
                                           add_extra_conclusions: bool):
         """
         Stop a wrong conclusion by adding a stopping rule.
@@ -320,7 +323,7 @@ class MultiClassRDR(RippleDownRules):
         :param conclusion: The conclusion of the rule.
         :param corner_case: The corner case of the rule.
         """
-        self.start_rule.alternative = TopRule(conditions, conclusion, corner_case=corner_case)
+        self.start_rule.alternative = MultiClassTopRule(conditions, conclusion, corner_case=corner_case)
 
 
 class GeneralRDR(RippleDownRules):
