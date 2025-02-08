@@ -89,7 +89,8 @@ class RippleDownRules(ABC):
                 pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
                 y = y if isinstance(y, list) else [y]
                 recall = [yi in pred_cat for yi in y]
-                precision = [pred in y for pred in pred_cat]
+                y_type = [type(yi) for yi in y]
+                precision = [(pred in y) or (type(pred) not in y_type) for pred in pred_cat]
                 match = all(recall) and all(precision)
                 all_recall.extend(recall)
                 all_precision.extend(precision)
@@ -240,7 +241,6 @@ class MultiClassRDR(RippleDownRules):
                             continue
                 evaluated_rule = next_rule
         return list(OrderedSet(self.conclusions))
-
 
     def update_start_rule(self, x: Case, target: Category, expert: Expert):
         """
