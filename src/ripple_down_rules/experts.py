@@ -5,7 +5,7 @@ import pickle
 from abc import ABC, abstractmethod
 
 from orderedset import OrderedSet
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type
 
 from .datastructures import Attribute, str_to_operator_fn, Condition, Case, Category
 from .failures import InvalidOperator
@@ -113,7 +113,7 @@ class Human(Expert):
         all_names, max_len = self.get_all_names_and_max_len(all_attributes)
 
         if not self.use_loaded_answers:
-            self.print_all_names(all_names, max_len)
+            self.print_all_names(all_names, max_len, category_types=[type(target)])
 
             if last_evaluated_rule and last_evaluated_rule.fired:
                 last_evaluated_rule.corner_case.print_values(all_names, is_corner_case=True,
@@ -127,7 +127,7 @@ class Human(Expert):
             -> Dict[Category, Dict[str, Condition]]:
         all_names, max_len = self.get_all_names_and_max_len(x.attributes_list)
         if not self.use_loaded_answers:
-            self.print_all_names(all_names, max_len)
+            self.print_all_names(all_names, max_len, list(map(type, current_conclusions)))
             x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
         extra_conclusions = {}
         while True:
@@ -155,7 +155,7 @@ class Human(Expert):
         :param current_conclusions: The current conclusions for the case.
         """
         if not self.use_loaded_answers:
-            print(f"Is the conclusion {conclusion.name} correct for the case (y/n):")
+            print(f"Is the conclusion {conclusion.value} correct for the case (y/n):")
             x.conclusions = current_conclusions
             print(x)
         while True:
@@ -204,7 +204,13 @@ class Human(Expert):
                         messages.append(f"Please rewrite this condition: \"{rule}\"")
                         done = False
                         continue
-                    rule_conditions[name] = Condition(name, float(value), operator)
+                    # map value to string if it contains characters or quotes, else map to float
+                    if value[0] == value[-1] and value[0] in ["'", '"'] \
+                            or any(char.isalpha() for char in value):
+                        value = str(value)
+                    else:
+                        value = float(value)
+                    rule_conditions[name] = Condition(name, value, operator)
                 except InvalidOperator as e:
                     messages.append(str(e) + " please enter it again")
                     done = False
@@ -227,16 +233,19 @@ class Human(Expert):
         return all_names, max_len
 
     @staticmethod
-    def print_all_names(all_names: List[str], max_len: int):
+    def print_all_names(all_names: List[str], max_len: int,
+                        category_types: Optional[List[Type[Category]]] = None):
         """
         Print all attribute names.
 
         :param all_names: list of names
         :param max_len: maximum length
         """
+        category_types = category_types or [Category]
+        category_names = [category_type.__name__.lower() for category_type in category_types]
         def ljust(s):
             return str(s).ljust(max_len)
         names_row = ljust(f"names: ")
         names_row += ljust("id")
-        names_row += "".join([f"{ljust(name)}" for name in all_names + ["type"]])
+        names_row += "".join([f"{ljust(name)}" for name in all_names + category_names])
         print(names_row)

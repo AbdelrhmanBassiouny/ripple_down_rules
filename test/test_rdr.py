@@ -7,7 +7,7 @@ from typing_extensions import List, Optional
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import Case, Category, str_to_operator_fn, Condition, MCRDRMode
 from ripple_down_rules.experts import Expert, Human
-from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR
+from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree
 
 
@@ -173,6 +173,26 @@ class TestRDR(TestCase):
         render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_extra")
         if save_answers:
             expert.save_answers(file_name)
+
+    def test_classify_grdr(self):
+        use_loaded_answers = True
+        save_answers = False
+        filename = "grdr_expert_answers_classify"
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+
+        grdr = GeneralRDR()
+        class Hapitat(Category):
+            pass
+        targets = [self.targets[0], Hapitat("land")]
+        cats = grdr.fit_case(self.all_cases[0], targets, expert=expert)
+        self.assertEqual(cats, targets)
+
+        if save_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, filename)
+            expert.save_answers(file)
 
 
 class MCRDRTester(Expert):

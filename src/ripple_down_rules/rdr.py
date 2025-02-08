@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from copy import copy
 
 from matplotlib import pyplot as plt
 from orderedset import OrderedSet
@@ -361,9 +362,37 @@ class GeneralRDR(RippleDownRules):
          which are mutually exclusive, and Habitat can have child categories like Land, Water, Air, etc, which are also
             mutually exclusive.
         """
-        self.start_rules_dict = category_scrdr_map
+        self.start_rules_dict: Dict[Type[Category], SingleClassRDR] = category_scrdr_map if category_scrdr_map else {}
 
-    def fit_case(self, x: Case, target: Optional[Category] = None,
+    def classify(self, x: Case) -> Optional[List[Category]]:
+        """
+        Classify a case by going through all SCRDRs and adding the categories that are classified.
+        """
+        conclusions = []
+        x_cp = copy(x)
+        for cat_type, scrdr in self.start_rules_dict.items():
+            if cat_type in x_cp:
+                continue
+            pred_cat = scrdr.classify(x_cp)
+            if pred_cat:
+                x_cp.add_attribute_from_category(pred_cat)
+                conclusions.append(pred_cat)
+        return conclusions
+
+    def fit_case(self, x: Case, targets: List[Category],
                  expert: Optional[Expert] = None,
-                 **kwargs) -> Category:
-        pass
+                 **kwargs) -> List[Category]:
+        conclusions = self.classify(x)
+        x_cp = copy(x)
+        x_cp.add_attributes_from_categories(conclusions)
+        for t in targets:
+            conclusion: Optional[Category] = None
+            if type(t) not in self.start_rules_dict:
+                new_scrdr = SingleClassRDR()
+                self.start_rules_dict[type(t)] = new_scrdr
+                conclusion = new_scrdr.fit_case(x_cp, t, expert, **kwargs)
+            elif t not in conclusions:
+                conclusion = self.start_rules_dict[type(t)].fit_case(x_cp, t, expert, **kwargs)
+            if conclusion:
+                x_cp.add_attribute_from_category(conclusion)
+        return self.classify(x)

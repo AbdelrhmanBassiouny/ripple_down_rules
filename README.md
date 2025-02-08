@@ -22,21 +22,21 @@ Fit the SCRDR to the data, then classify one of the data cases to check if its c
 and render the tree to a file:
 
 ```Python
-from ripple_down_rules.rdr import SingleClassRDR, Category
+from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.datasets import load_zoo_dataset
+from ripple_down_rules.utils import render_tree
 
 all_cases, targets = load_zoo_dataset()
 
 scrdr = SingleClassRDR()
 
 # Fit the SCRDR to the data
-scrdr.fit(all_cases, [Category(t) for t in targets],
-          draw_tree=True, n_iter=10)
+scrdr.fit(all_cases, targets,
+          animate_tree=True, n_iter=10)
 
 # Render the tree to a file
-scrdr.render_tree(use_dot_exporter=True, filename="scrdr")
+render_tree(scrdr.start_rule, use_dot_exporter=True, filename="scrdr")
 
-cat = scrdr.fit_case(all_cases[50])
-assert cat.name == targets[50]
-print(cat.name)
+cat = scrdr.fit_case(all_cases[50], targets[50])
+assert cat == targets[50]
 ```

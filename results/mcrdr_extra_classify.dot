@@ -1,0 +1,11 @@
+digraph tree {
+    "milk == 1.0
+=> mammal";
+    "aquatic == 0.0^
+airborne == 0.0
+=> lives only on land";
+    "milk == 1.0
+=> mammal" -> "aquatic == 0.0^
+airborne == 0.0
+=> lives only on land" [style="bold", label=" next"];
+}

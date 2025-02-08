@@ -92,7 +92,7 @@ class Rule(NodeMixin, ABC):
         """
         conditions = f"^{sep}".join([str(c) for c in list(self.conditions.values())])
         if self.conclusion:
-            conditions += f"{sep}=> {self.conclusion.name}"
+            conditions += f"{sep}=> {self.conclusion}"
         return conditions
 
     def __repr__(self):

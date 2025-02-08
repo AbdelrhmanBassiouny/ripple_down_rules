@@ -52,19 +52,19 @@ class Category:
     to infer if a species flies or not, the concept of flying becomes a category while the species becomes an attribute.
     """
 
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self, value: Any):
+        self.value = value
 
     def __eq__(self, other):
         if not isinstance(other, Category):
             return False
-        return self.name == other.name
+        return type(self) == type(other) and self.value == other.value
 
     def __hash__(self):
-        return hash(self.name)
+        return hash(self.value)
 
     def __str__(self):
-        return self.name
+        return f"{type(self).__name__}({self.value})"
 
     def __repr__(self):
         return self.__str__()
@@ -87,7 +87,7 @@ class Attribute:
     """
 
     def __init__(self, name: str, value: Any):
-        self.name = name
+        self.name = name.lower()
         self.value = value
 
     def __eq__(self, other):
@@ -279,6 +279,18 @@ class Case:
         self.id_ = id_
         self.conclusions: Optional[List[Category]] = conclusions
 
+    def add_attributes_from_categories(self, categories: List[Category]):
+        for category in categories:
+            self.add_attribute_from_category(category)
+
+    def add_attribute_from_category(self, category: Category):
+        self.add_attribute(Attribute(type(category).__name__, category.value))
+
+    def add_attribute(self, attribute: Attribute):
+        if attribute.name in self.attributes:
+            raise ValueError(f"Attribute {attribute.name} already exists in the case.")
+        self.attributes[attribute.name] = attribute
+
     @property
     def attribute_values(self):
         return [a.value for a in self.attributes.values()]
@@ -296,6 +308,16 @@ class Case:
     def __sub__(self, other):
         return {k: self.attributes[k] for k in self.attributes
                 if self.attributes[k] != other.attributes[k]}
+
+    def __contains__(self, item):
+        if isinstance(item, str):
+            return item.lower() in self.attributes
+        elif isinstance(item, Category):
+            return type(item).__name__.lower() in self.attributes
+        elif issubclass(item, Category):
+            return item.__name__.lower() in self.attributes
+        elif isinstance(item, Attribute):
+            return item.name.lower() in self.attributes and self.attributes[item.name.lower()] == item
 
     @staticmethod
     def ljust(s, sz=15):
@@ -315,9 +337,9 @@ class Case:
         case_row += "".join([f"{self.ljust(self[name].value, sz=ljust_sz)}"
                              for name in all_names])
         if target:
-            case_row += f"{self.ljust(target.name, sz=ljust_sz)}"
+            case_row += f"{self.ljust(target.value, sz=ljust_sz)}"
         if conclusions:
-            case_row += ",".join([f"{self.ljust(c.name, sz=ljust_sz)}" for c in conclusions])
+            case_row += ",".join([f"{self.ljust(c.value, sz=ljust_sz)}" for c in conclusions])
         print(case_row)
 
     def __str__(self):
@@ -333,8 +355,12 @@ class Case:
         row3 = [f"{str(self.attributes[name].value).ljust(ljust)}" for name in names]
         row3 = "".join(row3)
         if self.conclusions:
-            row3 += ",".join([c.name for c in self.conclusions])
+            row3 += ",".join([c.value for c in self.conclusions])
         return row1 + row2 + row3 + "\n"
 
     def __repr__(self):
         return self.__str__()
+
+    def __copy__(self):
+        conclusions_cp = self.conclusions.copy() if self.conclusions else None
+        return Case(self.id_, self.attributes_list.copy(), conclusions_cp)
