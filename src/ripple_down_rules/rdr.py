@@ -366,17 +366,26 @@ class GeneralRDR(RippleDownRules):
 
     def classify(self, x: Case) -> Optional[List[Category]]:
         """
-        Classify a case by going through all SCRDRs and adding the categories that are classified.
+        Classify a case by going through all SCRDRs and adding the categories that are classified, and then restarting
+        the classification until no more categories can be added.
+
+        :param x: The case to classify.
+        :return: The categories that the case belongs to.
         """
         conclusions = []
         x_cp = copy(x)
-        for cat_type, scrdr in self.start_rules_dict.items():
-            if cat_type in x_cp:
-                continue
-            pred_cat = scrdr.classify(x_cp)
-            if pred_cat:
-                x_cp.add_attribute_from_category(pred_cat)
-                conclusions.append(pred_cat)
+        while True:
+            added_attributes = False
+            for cat_type, scrdr in self.start_rules_dict.items():
+                if cat_type in x_cp:
+                    continue
+                pred_cat = scrdr.classify(x_cp)
+                if pred_cat:
+                    added_attributes = True
+                    x_cp.add_attribute_from_category(pred_cat)
+                    conclusions.append(pred_cat)
+            if not added_attributes:
+                break
         return conclusions
 
     def fit_case(self, x: Case, targets: List[Category],

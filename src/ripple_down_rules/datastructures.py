@@ -90,6 +90,10 @@ class Attribute:
         self.name = name.lower()
         self.value = value
 
+    @classmethod
+    def from_category(cls, category: Category) -> Attribute:
+        return cls(type(category).__name__, category.value)
+
     def __eq__(self, other):
         return self.name == other.name and self.value == other.value
 
@@ -284,7 +288,7 @@ class Case:
             self.add_attribute_from_category(category)
 
     def add_attribute_from_category(self, category: Category):
-        self.add_attribute(Attribute(type(category).__name__, category.value))
+        self.add_attribute(Attribute.from_category(category))
 
     def add_attribute(self, attribute: Attribute):
         if attribute.name in self.attributes:
