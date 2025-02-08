@@ -1,7 +1,7 @@
 from typing_extensions import Tuple, List
 from ucimlrepo import fetch_ucirepo
 
-from ripple_down_rules.datastructures import Case, Category
+from ripple_down_rules.datastructures import Case, Category, Species
 from ripple_down_rules.helpers import create_cases_from_dataframe
 
 
@@ -22,9 +22,6 @@ def load_zoo_dataset() -> Tuple[List[Case], List[Category]]:
     all_cases = create_cases_from_dataframe(X, ids)
     # print category names
     category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
-
-    class Species(Category):
-        ...
 
     category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
     targets = [Species(category_id_to_name[i]) for i in y.values.flatten()]

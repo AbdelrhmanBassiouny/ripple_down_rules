@@ -5,7 +5,7 @@ import pickle
 from abc import ABC, abstractmethod
 
 from orderedset import OrderedSet
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union
 
 from .datastructures import Attribute, str_to_operator_fn, Condition, Case, Category
 from .failures import InvalidOperator
@@ -31,14 +31,14 @@ class Expert(ABC):
     """
 
     @abstractmethod
-    def ask_for_conditions(self, x: Case, target: Category, last_evaluated_rule: Optional[Rule] = None)\
+    def ask_for_conditions(self, x: Case, targets: List[Category], last_evaluated_rule: Optional[Rule] = None)\
             -> Dict[str, Condition]:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
         that doesn't have a corner case to compare to.
 
         :param x: The case to classify.
-        :param target: The target category to compare the case with.
+        :param targets: The target categories to compare the case with.
         :param last_evaluated_rule: The last evaluated rule.
         :return: The differentiating features as new rule conditions.
         """
@@ -59,14 +59,14 @@ class Expert(ABC):
 
     @abstractmethod
     def ask_if_conclusion_is_correct(self, x: Case, conclusion: Category,
-                                     target: Optional[Category] = None,
+                                     targets: Optional[List[Category]] = None,
                                      current_conclusions: Optional[List[Category]] = None) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
         :param x: The case to classify.
         :param conclusion: The conclusion to check.
-        :param target: The target category to compare the case with.
+        :param target: The target categories to compare the case with.
         :param current_conclusions: The current conclusions for the case.
         """
         pass
@@ -98,8 +98,11 @@ class Human(Expert):
         with open(path + '.json', "r") as f:
             self.all_expert_answers = json.load(f)
 
-    def ask_for_conditions(self, x: Case, target: Category, last_evaluated_rule: Optional[Rule] = None)\
+    def ask_for_conditions(self, x: Case,
+                           targets: Union[Category, List[Category]],
+                           last_evaluated_rule: Optional[Rule] = None)\
             -> Dict[str, Condition]:
+        targets = targets if isinstance(targets, list) else [targets]
         if last_evaluated_rule and not self.use_loaded_answers:
             action = "Refinement" if last_evaluated_rule.fired else "Alternative"
             print(f"{action} needed for rule:\n")
@@ -113,12 +116,12 @@ class Human(Expert):
         all_names, max_len = self.get_all_names_and_max_len(all_attributes)
 
         if not self.use_loaded_answers:
-            self.print_all_names(all_names, max_len, category_types=[type(target)])
+            self.print_all_names(all_names, max_len, target_types=list(map(type, targets)))
 
             if last_evaluated_rule and last_evaluated_rule.fired:
                 last_evaluated_rule.corner_case.print_values(all_names, is_corner_case=True,
                                                              ljust_sz=max_len)
-            x.print_values(all_names, target, ljust_sz=max_len)
+            x.print_values(all_names, targets=targets, ljust_sz=max_len)
 
         # take user input
         return self._get_conditions(all_names, conditions_for="differentiating features")
@@ -127,7 +130,7 @@ class Human(Expert):
             -> Dict[Category, Dict[str, Condition]]:
         all_names, max_len = self.get_all_names_and_max_len(x.attributes_list)
         if not self.use_loaded_answers:
-            self.print_all_names(all_names, max_len, list(map(type, current_conclusions)))
+            self.print_all_names(all_names, max_len, conclusion_types=list(map(type, current_conclusions)))
             x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
         extra_conclusions = {}
         while True:
@@ -144,19 +147,22 @@ class Human(Expert):
         return extra_conclusions
 
     def ask_if_conclusion_is_correct(self, x: Case, conclusion: Category,
-                                     target: Optional[Category] = None,
+                                     targets: Optional[List[Category]] = None,
                                      current_conclusions: Optional[List[Category]] = None) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
         :param x: The case to classify.
         :param conclusion: The conclusion to check.
-        :param target: The target category to compare the case with.
+        :param targets: The target categories to compare the case with.
         :param current_conclusions: The current conclusions for the case.
         """
+        targets = targets or []
+        targets = targets if isinstance(targets, list) else [targets]
         if not self.use_loaded_answers:
             print(f"Is the conclusion {conclusion.value} correct for the case (y/n):")
             x.conclusions = current_conclusions
+            x.targets = targets
             print(x)
         while True:
             if self.use_loaded_answers:
@@ -234,18 +240,28 @@ class Human(Expert):
 
     @staticmethod
     def print_all_names(all_names: List[str], max_len: int,
-                        category_types: Optional[List[Type[Category]]] = None):
+                        target_types: Optional[List[Type[Category]]] = None,
+                        conclusion_types: Optional[List[Type[Category]]] = None):
         """
         Print all attribute names.
 
-        :param all_names: list of names
-        :param max_len: maximum length
+        :param all_names: list of names.
+        :param max_len: maximum length.
+        :param target_types: list of target types.
+        :param conclusion_types: list of category types.
         """
-        category_types = category_types or [Category]
-        category_names = [category_type.__name__.lower() for category_type in category_types]
+        category_names = []
+        if conclusion_types:
+            category_types = conclusion_types or [Category]
+            category_names = [category_type.__name__.lower() for category_type in category_types]
+
+        target_names = []
+        if target_types:
+            target_names = [f"target_{target_type.__name__.lower()}" for target_type in target_types]
+
         def ljust(s):
             return str(s).ljust(max_len)
         names_row = ljust(f"names: ")
         names_row += ljust("id")
-        names_row += "".join([f"{ljust(name)}" for name in all_names + category_names])
+        names_row += "".join([f"{ljust(name)}" for name in all_names + category_names + target_names])
         print(names_row)

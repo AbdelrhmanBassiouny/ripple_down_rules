@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import abstractmethod, ABC
 from enum import Enum, auto
 
-from typing_extensions import Any, Callable, Tuple, Optional, List, Dict
+from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type
 
 from .failures import InvalidOperator
 
@@ -51,6 +51,7 @@ class Category:
     in the case when one is trying to infer the species of an animal, the species is a category, but when one is trying
     to infer if a species flies or not, the concept of flying becomes a category while the species becomes an attribute.
     """
+    mutually_exclusive: bool = False
 
     def __init__(self, value: Any):
         self.value = value
@@ -58,7 +59,7 @@ class Category:
     def __eq__(self, other):
         if not isinstance(other, Category):
             return False
-        return type(self) == type(other) and self.value == other.value
+        return self.__class__ == other.__class__ and self.value == other.value
 
     def __hash__(self):
         return hash(self.value)
@@ -75,9 +76,24 @@ class Stop(Category):
     A stop category is a special category that represents the stopping of the classification to prevent a wrong
     conclusion from being made.
     """
+    mutually_exclusive = True
 
     def __init__(self):
         super().__init__("null")
+
+
+class Species(Category):
+    """
+    A species category is a category that represents the species of an animal.
+    """
+    mutually_exclusive: bool = True
+
+
+class Habitat(Category):
+    """
+    A habitat category is a category that represents the habitat of an animal.
+    """
+    ...
 
 
 class Attribute:
@@ -92,13 +108,26 @@ class Attribute:
 
     @classmethod
     def from_category(cls, category: Category) -> Attribute:
-        return cls(type(category).__name__, category.value)
+        if not category.mutually_exclusive:
+            value = {category.value} if not hasattr(category.value, "__iter__") else set(category.value)
+        else:
+            value = category.value
+        return cls(type(category).__name__, value)
 
-    def __eq__(self, other):
-        return self.name == other.name and self.value == other.value
+    def __eq__(self, other: Attribute):
+        if not isinstance(other, Attribute):
+            return False
+        if self.name != other.name:
+            return False
+        if isinstance(self.value, set) and not isinstance(other.value, set):
+            return other.value in self.value
+        elif isinstance(self.value, set) and isinstance(other.value, set):
+            return other.value.issubset(self.value)
+        else:
+            return self.value == other.value
 
     def __hash__(self):
-        return hash((self.name, self.value))
+        return hash(self.name)
 
     def __str__(self):
         return f"{self.name}: {self.value}"
@@ -126,6 +155,19 @@ class Operator(ABC):
 
     def __repr__(self):
         return self.__str__()
+
+
+class In(Operator):
+    """
+    The in operator that checks if the first value is in the second value.
+    """
+
+    def __call__(self, x: Any, y: Any) -> bool:
+        return x in y
+
+    @property
+    def name(self) -> str:
+        return " in "
 
 
 class Equal(Operator):
@@ -203,7 +245,7 @@ def str_to_operator_fn(rule_str: str) -> Tuple[Optional[str], Optional[str], Opt
     operator: Optional[Operator] = None
     arg1: Optional[str] = None
     arg2: Optional[str] = None
-    operators = [LessEqual(), GreaterEqual(), Equal(), Less(), Greater()]
+    operators = [LessEqual(), GreaterEqual(), Equal(), Less(), Greater(),In()]
     for op in operators:
         if op.__str__() in rule_str:
             operator = op
@@ -265,13 +307,46 @@ class Condition:
         return self.__str__()
 
 
+class Attributes(dict):
+    """
+    A collection of attributes that represents a set of constraints on a case.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.update(*args, **kwargs)
+
+    def update(self, *args, **kwargs):
+        for k, v in dict(*args, **kwargs).items():
+            self[k.lower()] = v
+
+    def __getitem__(self, item):
+        return super().__getitem__(item.lower())
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key.lower(), value)
+
+    def __contains__(self, item):
+        return super().__contains__(item.lower())
+
+    def __delitem__(self, key):
+        super().__delitem__(key.lower())
+
+    def __eq__(self, other):
+        if not isinstance(other, (Attributes, dict)):
+            return False
+        elif isinstance(other, dict):
+            return super().__eq__(Attributes(other))
+        return super().__eq__(other)
+
+
 class Case:
     """
     A case is a collection of attributes that represents an instance that can be classified into a category or
     multiple categories.
     """
     def __init__(self, id_: str, attributes: List[Attribute],
-                 conclusions: Optional[List[Category]] = None):
+                 conclusions: Optional[List[Category]] = None,
+                 targets: Optional[List[Category]] = None):
         """
         Create a case.
 
@@ -279,9 +354,22 @@ class Case:
         :param attributes: The attributes of the case.
         :param conclusions: The conclusions that has been made about the case.
         """
-        self.attributes = {a.name: a for a in attributes}
+        self.attributes = Attributes({a.name: a for a in attributes})
         self.id_ = id_
         self.conclusions: Optional[List[Category]] = conclusions
+        self.targets: Optional[List[Category]] = targets
+
+    def remove_attribute_equivalent_to_category(self, category: Category):
+        if category in self:
+            self.remove_attribute_equivalent_to_category_type(type(category))
+
+    def remove_attribute_equivalent_to_category_type(self, category_type: Type[Category]):
+        if category_type in self:
+            self.remove_attribute(category_type.__name__)
+
+    def remove_attribute(self, attribute_name: str):
+        if attribute_name in self:
+            del self.attributes[attribute_name.lower()]
 
     def add_attributes_from_categories(self, categories: List[Category]):
         for category in categories:
@@ -292,8 +380,12 @@ class Case:
 
     def add_attribute(self, attribute: Attribute):
         if attribute.name in self.attributes:
-            raise ValueError(f"Attribute {attribute.name} already exists in the case.")
-        self.attributes[attribute.name] = attribute
+            if isinstance(attribute.value, set):
+                self.attributes[attribute.name].value.update(attribute.value)
+            else:
+                raise ValueError(f"Attribute {attribute.name} already exists in the case.")
+        else:
+            self.attributes[attribute.name] = attribute
 
     @property
     def attribute_values(self):
@@ -307,7 +399,7 @@ class Case:
         return self.attributes == other.attributes
 
     def __getitem__(self, attribute_name):
-        return self.attributes.get(attribute_name, None)
+        return self.attributes.get(attribute_name.lower(), None)
 
     def __sub__(self, other):
         return {k: self.attributes[k] for k in self.attributes
@@ -315,35 +407,38 @@ class Case:
 
     def __contains__(self, item):
         if isinstance(item, str):
-            return item.lower() in self.attributes
+            return item in self.attributes
         elif isinstance(item, Category):
-            return type(item).__name__.lower() in self.attributes
-        elif issubclass(item, Category):
-            return item.__name__.lower() in self.attributes
+            return type(item).__name__ in self.attributes
+        elif isinstance(item, type) and issubclass(item, Category):
+            return item.__name__ in self.attributes
         elif isinstance(item, Attribute):
-            return item.name.lower() in self.attributes and self.attributes[item.name.lower()] == item
+            return item.name in self.attributes and self.attributes[item.name] == item
 
     @staticmethod
     def ljust(s, sz=15):
         return str(s).ljust(sz)
 
     def print_values(self, all_names: Optional[List[str]] = None,
-                     target: Optional[Category] = None,
+                     targets: Optional[List[Category]] = None,
                      is_corner_case: bool = False,
                      ljust_sz: int = 15,
                      conclusions: Optional[List[Category]] = None):
         all_names = list(self.attributes.keys()) if not all_names else all_names
+        targets = targets if targets else self.targets
+        if targets:
+            targets = targets if isinstance(targets, list) else [targets]
         if is_corner_case:
             case_row = self.ljust(f"corner case: ", sz=ljust_sz)
         else:
             case_row = self.ljust(f"case: ", sz=ljust_sz)
         case_row += self.ljust(self.id_, sz=ljust_sz)
-        case_row += "".join([f"{self.ljust(self[name].value, sz=ljust_sz)}"
+        case_row += "".join([f"{self.ljust(self[name].value if name in self.attributes else '', sz=ljust_sz)}"
                              for name in all_names])
-        if target:
-            case_row += f"{self.ljust(target.value, sz=ljust_sz)}"
+        if targets:
+            case_row += ",".join([self.ljust(t.value, sz=ljust_sz) for t in targets])
         if conclusions:
-            case_row += ",".join([f"{self.ljust(c.value, sz=ljust_sz)}" for c in conclusions])
+            case_row += ",".join([self.ljust(c.value, sz=ljust_sz) for c in conclusions])
         print(case_row)
 
     def __str__(self):
@@ -353,13 +448,16 @@ class Case:
         row1 = f"Case {self.id_} with attributes: \n"
         row2 = [f"{name.ljust(ljust)}" for name in names]
         row2 = "".join(row2)
+        if self.targets:
+            row2 += "Target".ljust(ljust)
         if self.conclusions:
             row2 += "Conclusions".ljust(ljust)
         row2 += "\n"
-        row3 = [f"{str(self.attributes[name].value).ljust(ljust)}" for name in names]
-        row3 = "".join(row3)
+        row3 = "".join([f"{str(self.attributes[name].value).ljust(ljust)}" for name in names])
+        if self.targets:
+            row3 += ",".join([str(t.value) for t in self.targets])
         if self.conclusions:
-            row3 += ",".join([c.value for c in self.conclusions])
+            row3 += ",".join([str(c.value) for c in self.conclusions])
         return row1 + row2 + row3 + "\n"
 
     def __repr__(self):
