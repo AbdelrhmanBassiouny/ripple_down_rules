@@ -194,7 +194,7 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def test_fit_grdr(self):
-        use_loaded_answers = True
+        use_loaded_answers = False
         save_answers = False
         draw_tree = False
         filename = "grdr_expert_answers_fit"
