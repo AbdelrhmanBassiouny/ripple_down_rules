@@ -76,7 +76,6 @@ class RippleDownRules(ABC):
         """
         if animate_tree:
             plt.ion()
-            self.fig = plt.figure()
         all_pred = 0
         i = 0
         while (all_pred != len(y_batch) and n_iter and i < n_iter) \
@@ -86,6 +85,11 @@ class RippleDownRules(ABC):
             all_precision = []
             for x, y in zip(x_batch, y_batch):
                 pred_cat = self.fit_case(x, y, expert=expert, **kwargs_for_classify)
+                if hasattr(self, "all_figs") and hasattr(self, "start_rules"):
+                    for i in range(len(self.all_figs)):
+                        self.all_figs[i] = plt.figure(f"Rule {i}: {type(self.start_rules[i].conclusion).__name__}")
+                else:
+                    self.fig = plt.figure(0)
                 pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
                 y = y if isinstance(y, list) else [y]
                 recall = [yi in pred_cat for yi in y]
@@ -98,7 +102,11 @@ class RippleDownRules(ABC):
                     print(f"Predicted: {pred_cat} but expected: {y}")
                 all_pred += int(match)
                 if animate_tree:
-                    draw_tree(self.start_rule, self.fig)
+                    if hasattr(self, "all_figs") and hasattr(self, "start_rules"):
+                        for start_rule, fig in zip(self.start_rules, self.all_figs):
+                            draw_tree(start_rule, fig)
+                    else:
+                        draw_tree(self.start_rule, self.fig)
                 i += 1
                 if n_iter and i >= n_iter:
                     break
@@ -384,6 +392,7 @@ class GeneralRDR(RippleDownRules):
         self.start_rules_dict: Dict[Type[Category], Union[SingleClassRDR, MultiClassRDR]] \
             = category_scrdr_map if category_scrdr_map else {}
         super(GeneralRDR, self).__init__()
+        self.all_figs: List[plt.Figure] = [sr.fig for sr in self.start_rules_dict.values()]
 
     @property
     def start_rule(self) -> Optional[Union[SingleClassRule, MultiClassTopRule]]:
@@ -393,6 +402,10 @@ class GeneralRDR(RippleDownRules):
     def start_rule(self, value: Union[SingleClassRDR, MultiClassRDR]):
         if value:
             self.start_rules_dict[type(value.start_rule.conclusion)] = value
+
+    @property
+    def start_rules(self) -> List[Union[SingleClassRule, MultiClassTopRule]]:
+        return [rdr.start_rule for rdr in self.start_rules_dict.values()]
 
     def classify(self, x: Case) -> Optional[List[Category]]:
         """
@@ -439,8 +452,9 @@ class GeneralRDR(RippleDownRules):
             new_conclusions: Optional[List[Category]] = None
             if type(t) not in self.start_rules_dict:
                 new_rdr = SingleClassRDR() if type(t).mutually_exclusive else MultiClassRDR()
-                self.start_rules_dict[type(t)] = new_rdr
                 new_conclusions = new_rdr.fit_case(x_cp, t, expert, **kwargs)
+                self.start_rules_dict[type(t)] = new_rdr
+                self.all_figs.append(None)
             elif t not in conclusions:
                 new_conclusions = self.start_rules_dict[type(t)].fit_case(x_cp, t, expert, **kwargs)
             if new_conclusions:

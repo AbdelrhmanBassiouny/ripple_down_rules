@@ -196,7 +196,7 @@ class TestRDR(TestCase):
     def test_fit_grdr(self):
         use_loaded_answers = True
         save_answers = False
-        draw_tree = False
+        draw_tree = True
         filename = "grdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
@@ -228,7 +228,8 @@ class TestRDR(TestCase):
         habitat_targets = [get_habitat(x, t) for x, t in zip(self.all_cases[:n], self.targets[:n])]
         grdr.fit(self.all_cases, habitat_targets, expert=expert,
                  animate_tree=draw_tree, n_iter=20)
-        render_tree(grdr.start_rule, use_dot_exporter=True, filename="grdr")
+        for rule in grdr.start_rules:
+            render_tree(rule, use_dot_exporter=True, filename=f"grdr_{type(rule.conclusion).__name__}")
 
         cats = grdr.classify(self.all_cases[50])
         self.assertEqual(cats, [self.targets[50], Habitat("land")])
