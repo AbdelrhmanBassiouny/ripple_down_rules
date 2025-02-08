@@ -85,11 +85,6 @@ class RippleDownRules(ABC):
             all_precision = []
             for x, y in zip(x_batch, y_batch):
                 pred_cat = self.fit_case(x, y, expert=expert, **kwargs_for_classify)
-                if hasattr(self, "all_figs") and hasattr(self, "start_rules"):
-                    for i in range(len(self.all_figs)):
-                        self.all_figs[i] = plt.figure(f"Rule {i}: {type(self.start_rules[i].conclusion).__name__}")
-                else:
-                    self.fig = plt.figure(0)
                 pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
                 y = y if isinstance(y, list) else [y]
                 recall = [yi in pred_cat for yi in y]
@@ -102,11 +97,7 @@ class RippleDownRules(ABC):
                     print(f"Predicted: {pred_cat} but expected: {y}")
                 all_pred += int(match)
                 if animate_tree:
-                    if hasattr(self, "all_figs") and hasattr(self, "start_rules"):
-                        for start_rule, fig in zip(self.start_rules, self.all_figs):
-                            draw_tree(start_rule, fig)
-                    else:
-                        draw_tree(self.start_rule, self.fig)
+                    self.update_figures()
                 i += 1
                 if n_iter and i >= n_iter:
                     break
@@ -117,6 +108,20 @@ class RippleDownRules(ABC):
         if animate_tree:
             plt.ioff()
             plt.show()
+
+    def update_figures(self):
+        """
+        Update the figures of the classifier.
+        """
+        if isinstance(self, GeneralRDR):
+            for i in range(len(self.all_figs)):
+                if not self.all_figs[i]:
+                    self.all_figs[i] = plt.figure(f"Rule {i}: {type(self.start_rules[i].conclusion).__name__}")
+                draw_tree(self.start_rules[i], self.all_figs[i])
+        else:
+            if not self.fig:
+                self.fig = plt.figure(0)
+            draw_tree(self.start_rule, self.fig)
 
 
 class SingleClassRDR(RippleDownRules):
