@@ -391,6 +391,11 @@ class GeneralRDR(RippleDownRules):
     def fit_case(self, x: Case, targets: List[Category],
                  expert: Optional[Expert] = None,
                  **kwargs) -> List[Category]:
+        """
+        Fit the GRDR on a case, if the target is a new type of category, a new SCRDR is created for it,
+        else the existing SCRDR of that type will be fitted on the case, and then classification is done and all
+        concluded categories are returned.
+        """
         conclusions = self.classify(x)
         x_cp = copy(x)
         x_cp.add_attributes_from_categories(conclusions)
