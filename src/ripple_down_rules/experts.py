@@ -128,23 +128,124 @@ class Human(Expert):
 
     def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Category]) \
             -> Dict[Category, Dict[str, Condition]]:
+        """
+        Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
+        that category.
+
+        :param x: The case to classify.
+        :param current_conclusions: The current conclusions for the case.
+        :return: The extra conclusions for the case.
+        """
         all_names, max_len = self.get_all_names_and_max_len(x.attributes_list)
-        if not self.use_loaded_answers:
-            self.print_all_names(all_names, max_len, conclusion_types=list(map(type, current_conclusions)))
-            x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
         extra_conclusions = {}
         while True:
+            category = self.ask_for_conclusion(x, current_conclusions)
+            if not category:
+                break
+            extra_conclusions[category] = self._get_conditions(all_names, conditions_for="extra conclusions")
+        return extra_conclusions
+
+    def ask_for_conclusion(self, x: Case, current_conclusions: Optional[List[Category]] = None) -> Optional[Category]:
+        """
+        Ask the expert to provide a conclusion for the case.
+
+        :param x: The case to classify.
+        :param current_conclusions: The current conclusions for the case if any.
+        """
+        conclusion_types = list(map(type, current_conclusions)) if current_conclusions else None
+        all_names, max_len = self.get_all_names_and_max_len(x.attributes_list)
+        if not self.use_loaded_answers:
+            self.print_all_names(all_names, max_len, conclusion_types=conclusion_types)
+            x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
+        while True:
             if not self.use_loaded_answers:
-                print("Please provide the extra conclusion as \"name:value\" or press enter to end:")
+                print("Please provide the conclusion as \"name:value\" or \"name\" or press enter to end:")
             if self.use_loaded_answers:
                 value = self.all_expert_answers.pop(0)
             else:
                 value = input()
                 self.all_expert_answers.append(value)
-            if not value:
-                break
-            extra_conclusions[Category(value)] = self._get_conditions(all_names, conditions_for="extra conclusions")
-        return extra_conclusions
+            if value:
+                try:
+                    return self.parse_conclusion(value)
+                except ValueError as e:
+                    print(e)
+            else:
+                return None
+
+    def parse_conclusion(self, value: str) -> Category:
+        """
+        Parse the conclusion from the user input. If the conclusion is not found in the known categories,
+        a new category is created with the name and value else a new instance of the category is created with the value.
+
+        :param value: The value to parse.
+        :return: The parsed category name and value.
+        :raises ValueError: If the category name contains non-alphabetic characters.
+        """
+        if ':' not in value:
+            cat_name = "".join([w.capitalize() for w in value.split()])
+            if not all(char.isalpha() for char in cat_name):
+                raise ValueError(f"Category name {cat_name} should only contain alphabets")
+            category = Category(cat_name)
+        else:
+            cat_name_value = value.split(":")
+            cat_name = cat_name_value[0].strip(' "')
+            if len(cat_name_value) == 2:
+                cat_value = self.parse_value(cat_name_value[1])
+                category = self.create_category_instance(cat_name, cat_value)
+            else:
+                raise ValueError(f"Input format \"{value}\" is not correct")
+        return category
+
+    def create_category_instance(self, cat_name: str, cat_value: str) -> Category:
+        """
+        Create a new category instance.
+
+        :param cat_name: The name of the category.
+        :param cat_value: The value of the category.
+        :return: A new instance of the category.
+        """
+        category_type = self.get_category_type(cat_name)
+        if not category_type:
+            category_type = self.create_new_category_type(cat_name)
+        return category_type(cat_value)
+
+    @staticmethod
+    def get_category_type(cat_name: str) -> Optional[Type[Category]]:
+        """
+        Get the category type from the known categories.
+
+        :param cat_name: The name of the category.
+        :return: The category type.
+        """
+        cat_name = cat_name.capitalize()
+        known_categories = [c.__name__ for c in Category.__subclasses__()]
+        category_type = None
+        if cat_name in known_categories:
+            category_type = Category.__subclasses__()[known_categories.index(cat_name)]
+        return category_type
+
+    def create_new_category_type(self, cat_name: str) -> Type[Category]:
+        """
+        Create a new category type.
+
+        :param cat_name: The name of the category.
+        :param cat_value: The value of the category.
+        :return: A new category type.
+        """
+        category_type = type(cat_name, (Category,), {})
+        if self.ask_if_category_is_mutually_exclusive(category_type):
+            category_type.mutually_exclusive = True
+        return category_type
+
+    def ask_if_category_is_mutually_exclusive(self, category: Type[Category]) -> bool:
+        """
+        Ask the expert if the new category can have multiple values.
+
+        :param category: The category to check.
+        """
+        question = f"Can a case have multiple values of the new category {category.__name__}? (y/n):"
+        return self.ask_yes_no_question(question)
 
     def ask_if_conclusion_is_correct(self, x: Case, conclusion: Category,
                                      targets: Optional[List[Category]] = None,
@@ -157,13 +258,25 @@ class Human(Expert):
         :param targets: The target categories to compare the case with.
         :param current_conclusions: The current conclusions for the case.
         """
-        targets = targets or []
-        targets = targets if isinstance(targets, list) else [targets]
+        question = ""
         if not self.use_loaded_answers:
-            print(f"Is the conclusion {conclusion.value} correct for the case (y/n):")
+            targets = targets or []
+            targets = targets if isinstance(targets, list) else [targets]
             x.conclusions = current_conclusions
             x.targets = targets
-            print(x)
+            question = f"Is the conclusion {conclusion.value} correct for the case (y/n):"\
+                       f"\n{str(x)}"
+        return self.ask_yes_no_question(question)
+
+    def ask_yes_no_question(self, question: str) -> bool:
+        """
+        Ask the expert a yes or no question.
+
+        :param question: The question to ask.
+        :return: The answer to the question.
+        """
+        if not self.use_loaded_answers:
+            print(question)
         while True:
             if self.use_loaded_answers:
                 answer = self.all_expert_answers.pop(0)
@@ -279,7 +392,9 @@ class Human(Expert):
 
         :param val: The value to check.
         """
-        return val[0] in "[({" and val[0] == val[-1]
+        return ((val[0] == "{" and val[-1] == "}")
+                or (val[0] == "[" and val[-1] == "]")
+                or (val[0] == "(" and val[-1] == ")"))
 
     @staticmethod
     def validate_input_and_get_error_msgs(all_names, rule)\

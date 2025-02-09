@@ -1,1 +1,7 @@
-["species==mammal,aquatic==0", "species==fish", "species==bird,legs>0", "airborne==1", "species==molusc,aquatic==0", "species==molusc,legs>0", "aquatic==1"]
+[
+  "species==mammal,aquatic==0",
+  "species==fish",
+  "species==bird,legs>0",
+  "species==molusc,aquatic==0",
+  "species==molusc,aquatic==1"
+]

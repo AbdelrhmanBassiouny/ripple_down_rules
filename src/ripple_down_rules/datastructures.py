@@ -59,10 +59,14 @@ class Category:
     def __eq__(self, other):
         if not isinstance(other, Category):
             return False
+        if isinstance(self.value, set) and not isinstance(other.value, set):
+            return other.value in self.value
+        elif not isinstance(self.value, set) and isinstance(other.value, set):
+            return self.value in other.value and len(other.value) == 1
         return self.__class__ == other.__class__ and self.value == other.value
 
     def __hash__(self):
-        return hash(self.value)
+        return hash(self.value) if not isinstance(self.value, set) else hash(frozenset(self.value))
 
     def __str__(self):
         return f"{type(self).__name__}({self.value})"
@@ -375,6 +379,9 @@ class Case:
             del self.attributes[attribute_name.lower()]
 
     def add_attributes_from_categories(self, categories: List[Category]):
+        if not categories:
+            return
+        categories = categories if isinstance(categories, list) else [categories]
         for category in categories:
             self.add_attribute_from_category(category)
 
@@ -384,7 +391,10 @@ class Case:
     def add_attribute(self, attribute: Attribute):
         if attribute.name in self.attributes:
             if isinstance(attribute.value, set):
-                self.attributes[attribute.name].value.update(attribute.value)
+                if isinstance(self.attributes[attribute.name].value, set):
+                    self.attributes[attribute.name].value.update(attribute.value)
+                else:
+                    self.attributes[attribute.name].value = {self.attributes[attribute.name].value}.union(attribute.value)
             else:
                 raise ValueError(f"Attribute {attribute.name} already exists in the case.")
         else:
@@ -412,7 +422,7 @@ class Case:
         if isinstance(item, str):
             return item in self.attributes
         elif isinstance(item, Category):
-            return type(item).__name__ in self.attributes
+            return Attribute.from_category(item) in self
         elif isinstance(item, type) and issubclass(item, Category):
             return item.__name__ in self.attributes
         elif isinstance(item, Attribute):

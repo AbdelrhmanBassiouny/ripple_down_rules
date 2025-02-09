@@ -1,0 +1,96 @@
+digraph tree {
+    "milk == 1.0
+=> Species(mammal)";
+    "aquatic == 1.0
+=> Species(fish)";
+    "feathers == 1.0
+=> Species(bird)";
+    "backbone == 0.0^
+breathes == 0.0
+=> Species(molusc)";
+    "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0
+=> Species(insect)";
+    "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0^
+fins == 0.0^
+airborne == 0.0
+=> Species(reptile)";
+    "feathers == 0.0^
+milk == 0.0^
+airborne == 0.0^
+backbone == 0.0^
+fins == 0.0
+=> Species(molusc)";
+    "legs == 0.0
+=> Species(molusc)";
+    "backbone == 0.0^
+fins == 0.0
+=> Species(molusc)";
+    "feathers == 1.0
+=> Species(bird)_1";
+    "fins == 0.0
+=> Species(amphibian)";
+    "tail == 1.0
+=> Species(reptile)";
+    "milk == 1.0
+=> Species(mammal)" -> "aquatic == 1.0
+=> Species(fish)" [style="bold", label=" else if"];
+    "aquatic == 1.0
+=> Species(fish)" -> "feathers == 1.0
+=> Species(bird)" [style="bold", label=" else if"];
+    "aquatic == 1.0
+=> Species(fish)" -> "backbone == 0.0^
+fins == 0.0
+=> Species(molusc)" [style="bold", label=" except if"];
+    "feathers == 1.0
+=> Species(bird)" -> "backbone == 0.0^
+breathes == 0.0
+=> Species(molusc)" [style="bold", label=" else if"];
+    "backbone == 0.0^
+breathes == 0.0
+=> Species(molusc)" -> "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0
+=> Species(insect)" [style="bold", label=" else if"];
+    "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0
+=> Species(insect)" -> "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0^
+fins == 0.0^
+airborne == 0.0
+=> Species(reptile)" [style="bold", label=" else if"];
+    "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0
+=> Species(insect)" -> "legs == 0.0
+=> Species(molusc)" [style="bold", label=" except if"];
+    "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0^
+fins == 0.0^
+airborne == 0.0
+=> Species(reptile)" -> "feathers == 0.0^
+milk == 0.0^
+airborne == 0.0^
+backbone == 0.0^
+fins == 0.0
+=> Species(molusc)" [style="bold", label=" else if"];
+    "backbone == 0.0^
+fins == 0.0
+=> Species(molusc)" -> "feathers == 1.0
+=> Species(bird)_1" [style="bold", label=" else if"];
+    "feathers == 1.0
+=> Species(bird)_1" -> "fins == 0.0
+=> Species(amphibian)" [style="bold", label=" else if"];
+    "fins == 0.0
+=> Species(amphibian)" -> "tail == 1.0
+=> Species(reptile)" [style="bold", label=" except if"];
+}

@@ -1,6 +1,6 @@
 import json
 import os
-from unittest import TestCase
+from unittest import TestCase, skip
 
 from typing_extensions import List, Optional
 
@@ -147,7 +147,7 @@ class TestRDR(TestCase):
                               add_extra_conclusions=True, expert=expert)
         render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_extra_classify")
 
-        self.assertEqual(cats, [self.targets[50], Category("lives only on land")])
+        self.assertEqual(cats, [self.targets[50], Category("LivesOnlyOnLand")])
 
         if save_answers:
             cwd = os.getcwd()
@@ -169,7 +169,7 @@ class TestRDR(TestCase):
         mcrdr.fit(self.all_cases, self.targets,
                   add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
         cats = mcrdr.classify(self.all_cases[50])
-        self.assertEqual(cats, [self.targets[50], Category("lives only on land")])
+        self.assertEqual(cats, [self.targets[50], Category("LivesOnlyOnLand")])
         render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_extra")
         if save_answers:
             expert.save_answers(file_name)
@@ -211,23 +211,50 @@ class TestRDR(TestCase):
             if t.value == "mammal" and x["aquatic"].value == 0:
                 all_habs.append(Habitat("land"))
             elif t.value == "bird":
-                all_habs.append(Habitat("land"))
+                all_habs.append(Habitat({"land"}))
                 if x["airborne"].value == 1:
-                    all_habs.append(Habitat("air"))
+                    all_habs[-1].value.update({"air"})
                 if x["aquatic"].value == 1:
-                    all_habs.append(Habitat("water"))
+                    all_habs[-1].value.update({"water"})
             elif t.value == "fish":
                 all_habs.append(Habitat("water"))
             elif t.value == "molusc":
-                all_habs.append(Habitat("land"))
+                all_habs.append(Habitat({"land"}))
                 if x["aquatic"].value == 1:
-                    all_habs.append(Habitat("water"))
+                    all_habs[-1].value.update({"water"})
             return all_habs + [t]
 
         n = 20
         habitat_targets = [get_habitat(x, t) for x, t in zip(self.all_cases[:n], self.targets[:n])]
         grdr.fit(self.all_cases, habitat_targets, expert=expert,
-                 animate_tree=draw_tree, n_iter=20)
+                 animate_tree=draw_tree, n_iter=n)
+        for rule in grdr.start_rules:
+            render_tree(rule, use_dot_exporter=True, filename=f"grdr_{type(rule.conclusion).__name__}")
+
+        cats = grdr.classify(self.all_cases[50])
+        self.assertEqual(cats, [self.targets[50], Habitat("land")])
+
+        if save_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, filename)
+            expert.save_answers(file)
+
+    # @skip("This test is not working")
+    def test_fit_grdr_with_extra_conclusions(self):
+        use_loaded_answers = True
+        save_answers = False
+        draw_tree = False
+        filename = "grdr_expert_answers_fit_extra"
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+
+        fit_scrdr = self.get_fit_scrdr(draw_tree=False)
+
+        grdr = GeneralRDR({type(fit_scrdr.start_rule.conclusion): fit_scrdr})
+
+        grdr.fit(self.all_cases[17:], expert=expert,
+                 animate_tree=draw_tree, n_iter=20, add_extra_conclusions=True)
         for rule in grdr.start_rules:
             render_tree(rule, use_dot_exporter=True, filename=f"grdr_{type(rule.conclusion).__name__}")
 

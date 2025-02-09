@@ -1,0 +1,60 @@
+digraph tree {
+    "species == mammal
+=> Habitat(land)";
+    "species == fish
+=> Habitat(water)";
+    "species == mammal^
+aquatic == 1.0
+=> Habitat(water)";
+    "airborne == 1.0^
+legs > 0.0
+=> Habitat({'air', 'land'})";
+    "aquatic == 1.0
+=> Stop(null)";
+    "species == bird^
+aquatic == 1.0^
+legs > 0.0
+=> Habitat({'air', 'water', 'land'})";
+    "airborne == 0.0^
+aquatic == 0.0
+=> Habitat(land)";
+    "species == amphibian
+=> Habitat({'water', 'land'})";
+    "aquatic == 1.0
+=> Stop(null)_1";
+    "species == mammal
+=> Habitat(land)" -> "species == fish
+=> Habitat(water)" [style="bold", label=" next"];
+    "species == mammal
+=> Habitat(land)" -> "aquatic == 1.0
+=> Stop(null)_1" [style="bold", label=" except if"];
+    "species == fish
+=> Habitat(water)" -> "species == mammal^
+aquatic == 1.0
+=> Habitat(water)" [style="bold", label=" next"];
+    "species == mammal^
+aquatic == 1.0
+=> Habitat(water)" -> "airborne == 1.0^
+legs > 0.0
+=> Habitat({'air', 'land'})" [style="bold", label=" next"];
+    "airborne == 1.0^
+legs > 0.0
+=> Habitat({'air', 'land'})" -> "aquatic == 1.0
+=> Stop(null)" [style="bold", label=" except if"];
+    "airborne == 1.0^
+legs > 0.0
+=> Habitat({'air', 'land'})" -> "species == bird^
+aquatic == 1.0^
+legs > 0.0
+=> Habitat({'air', 'water', 'land'})" [style="bold", label=" next"];
+    "species == bird^
+aquatic == 1.0^
+legs > 0.0
+=> Habitat({'air', 'water', 'land'})" -> "airborne == 0.0^
+aquatic == 0.0
+=> Habitat(land)" [style="bold", label=" next"];
+    "airborne == 0.0^
+aquatic == 0.0
+=> Habitat(land)" -> "species == amphibian
+=> Habitat({'water', 'land'})" [style="bold", label=" next"];
+}
