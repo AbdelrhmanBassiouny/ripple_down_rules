@@ -1,11 +1,11 @@
 digraph tree {
     "milk == 1.0
-=> mammal";
+=> Species(mammal)";
     "aquatic == 0.0^
 airborne == 0.0
-=> lives only on land";
+=> Category({'LivesOnlyOnLand'})";
     "milk == 1.0
-=> mammal" -> "aquatic == 0.0^
+=> Species(mammal)" -> "aquatic == 0.0^
 airborne == 0.0
-=> lives only on land" [style="bold", label=" next"];
+=> Category({'LivesOnlyOnLand'})" [style="bold", label=" next"];
 }

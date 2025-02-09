@@ -243,7 +243,8 @@ class MultiClassRDR(RippleDownRules):
                     if target and evaluated_rule.conclusion not in good_conclusions:
                         if evaluated_rule.conclusion not in x:
                             # Rule fired and conclusion is different from target
-                            self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule, add_extra_conclusions)
+                            self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule,
+                                                                   add_extra_conclusions)
                     else:
                         # Rule fired and target is correct or there is no target to compare
                         self.add_conclusion(evaluated_rule)
@@ -301,18 +302,31 @@ class MultiClassRDR(RippleDownRules):
         """
         Stop a wrong conclusion by adding a stopping rule.
         """
-        if (self.is_conclusion_conflicting_with_target(evaluated_rule.conclusion, target)
-                or not self.conclusion_is_correct(x, target, expert, evaluated_rule, add_extra_conclusions)):
-            conditions = expert.ask_for_conditions(x, target, evaluated_rule)
-            evaluated_rule.fit_rule(x, target, conditions=conditions)
-            if self.mode == MCRDRMode.StopPlusRule:
-                self.stop_rule_conditions = conditions
-            if self.mode == MCRDRMode.StopPlusRuleCombined:
-                new_top_rule_conditions = {**evaluated_rule.conditions, **conditions}
-                self.add_top_rule(new_top_rule_conditions, target, x)
+        if self.is_same_category_type(evaluated_rule.conclusion, target) \
+                and self.is_conflicting_with_target(evaluated_rule.conclusion, target):
+            self.stop_conclusion(x, target, expert, evaluated_rule)
+        elif not self.conclusion_is_correct(x, target, expert, evaluated_rule, add_extra_conclusions):
+            self.stop_conclusion(x, target, expert, evaluated_rule)
+
+    def stop_conclusion(self, x: Case, target: Category, expert: Expert, evaluated_rule: MultiClassTopRule):
+        """
+        Stop a conclusion by adding a stopping rule.
+
+        :param x: The case to classify.
+        :param target: The target category to compare the case with.
+        :param expert: The expert to ask for differentiating features as new rule conditions.
+        :param evaluated_rule: The evaluated rule to ask the expert about.
+        """
+        conditions = expert.ask_for_conditions(x, target, evaluated_rule)
+        evaluated_rule.fit_rule(x, target, conditions=conditions)
+        if self.mode == MCRDRMode.StopPlusRule:
+            self.stop_rule_conditions = conditions
+        if self.mode == MCRDRMode.StopPlusRuleCombined:
+            new_top_rule_conditions = {**evaluated_rule.conditions, **conditions}
+            self.add_top_rule(new_top_rule_conditions, target, x)
 
     @staticmethod
-    def is_conclusion_conflicting_with_target(conclusion: Category, target: Category) -> bool:
+    def is_conflicting_with_target(conclusion: Category, target: Category) -> bool:
         """
         Check if the conclusion is conflicting with the target category.
 
@@ -320,7 +334,21 @@ class MultiClassRDR(RippleDownRules):
         :param target: The target category to compare the conclusion with.
         :return: Whether the conclusion is conflicting with the target category.
         """
-        return conclusion.__class__ == target.__class__ and target.__class__ != Category and conclusion != target
+        if conclusion.mutually_exclusive:
+            return True
+        else:
+            return not conclusion.value.issubset(target.value)
+
+    @staticmethod
+    def is_same_category_type(conclusion: Category, target: Category) -> bool:
+        """
+        Check if the conclusion is of the same class as the target category.
+
+        :param conclusion: The conclusion to check.
+        :param target: The target category to compare the conclusion with.
+        :return: Whether the conclusion is of the same class as the target category but has a different value.
+        """
+        return conclusion.__class__ == target.__class__ and target.__class__ != Category
 
     def conclusion_is_correct(self, x: Case, target: Category, expert: Expert, evaluated_rule: Rule,
                               add_extra_conclusions: bool) -> bool:

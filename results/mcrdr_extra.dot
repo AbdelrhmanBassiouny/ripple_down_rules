@@ -1,0 +1,216 @@
+digraph tree {
+    "milk == 1.0
+=> Species(mammal)";
+    "aquatic == 1.0
+=> Species(fish)";
+    "feathers == 1.0
+=> Species(bird)";
+    "backbone == 0.0^
+breathes == 0.0^
+legs == 0.0
+=> Species(molusc)";
+    "backbone == 0.0^
+breathes == 0.0^
+fins == 0.0^
+milk == 0.0^
+feathers == 0.0
+=> Species(molusc)";
+    "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0^
+milk == 0.0^
+feathers == 0.0^
+aquatic == 0.0^
+fins == 0.0
+=> Species(insect)";
+    "aquatic == 1.0^
+breathes == 1.0^
+feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+fins == 0.0
+=> Species(amphibian)";
+    "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0
+=> Species(reptile)";
+    "feathers == 0.0^
+milk == 0.0^
+fins == 0.0^
+backbone == 0.0^
+breathes == 1.0
+=> Species(molusc)";
+    "eggs == 1.0^
+tail == 0.0
+=> Stop(null)";
+    "milk == 0.0^
+feathers == 0.0^
+backbone == 0.0^
+fins == 0.0
+=> Species(molusc)";
+    "aquatic == 0.0^
+airborne == 0.0
+=> Category({'LivesOnlyOnLand'})";
+    "aquatic == 1.0^
+fins == 1.0^
+feathers == 0.0^
+airborne == 0.0
+=> Category({'LivesOnlyInWater'})";
+    "aquatic == 1.0^
+fins == 1.0^
+breathes == 0.0
+=> Stop(null)";
+    "legs == 0.0
+=> Stop(null)";
+    "backbone == 0.0^
+fins == 0.0
+=> Stop(null)";
+    "milk == 1.0
+=> Stop(null)";
+    "feathers == 1.0
+=> Stop(null)";
+    "breathes == 1.0^
+fins == 0.0
+=> Stop(null)";
+    "fins == 0.0^
+tail == 1.0
+=> Stop(null)";
+    "milk == 1.0
+=> Species(mammal)" -> "aquatic == 1.0
+=> Species(fish)" [style="bold", label=" next"];
+    "aquatic == 1.0
+=> Species(fish)" -> "feathers == 1.0
+=> Species(bird)" [style="bold", label=" next"];
+    "aquatic == 1.0
+=> Species(fish)" -> "backbone == 0.0^
+fins == 0.0
+=> Stop(null)" [style="bold", label=" except if"];
+    "feathers == 1.0
+=> Species(bird)" -> "backbone == 0.0^
+breathes == 0.0^
+legs == 0.0
+=> Species(molusc)" [style="bold", label=" next"];
+    "backbone == 0.0^
+breathes == 0.0^
+legs == 0.0
+=> Species(molusc)" -> "backbone == 0.0^
+breathes == 0.0^
+fins == 0.0^
+milk == 0.0^
+feathers == 0.0
+=> Species(molusc)" [style="bold", label=" next"];
+    "backbone == 0.0^
+breathes == 0.0^
+fins == 0.0^
+milk == 0.0^
+feathers == 0.0
+=> Species(molusc)" -> "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0^
+milk == 0.0^
+feathers == 0.0^
+aquatic == 0.0^
+fins == 0.0
+=> Species(insect)" [style="bold", label=" next"];
+    "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0^
+milk == 0.0^
+feathers == 0.0^
+aquatic == 0.0^
+fins == 0.0
+=> Species(insect)" -> "aquatic == 1.0^
+breathes == 1.0^
+feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+fins == 0.0
+=> Species(amphibian)" [style="bold", label=" next"];
+    "eggs == 1.0^
+backbone == 0.0^
+breathes == 1.0^
+milk == 0.0^
+feathers == 0.0^
+aquatic == 0.0^
+fins == 0.0
+=> Species(insect)" -> "legs == 0.0
+=> Stop(null)" [style="bold", label=" except if"];
+    "aquatic == 1.0^
+breathes == 1.0^
+feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+fins == 0.0
+=> Species(amphibian)" -> "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0
+=> Species(reptile)" [style="bold", label=" next"];
+    "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0
+=> Species(reptile)" -> "feathers == 0.0^
+milk == 0.0^
+fins == 0.0^
+backbone == 0.0^
+breathes == 1.0
+=> Species(molusc)" [style="bold", label=" next"];
+    "feathers == 0.0^
+milk == 0.0^
+backbone == 1.0^
+tail == 1.0
+=> Species(reptile)" -> "aquatic == 1.0^
+fins == 1.0^
+breathes == 0.0
+=> Stop(null)" [style="bold", label=" except if"];
+    "feathers == 0.0^
+milk == 0.0^
+fins == 0.0^
+backbone == 0.0^
+breathes == 1.0
+=> Species(molusc)" -> "eggs == 1.0^
+tail == 0.0
+=> Stop(null)" [style="bold", label=" except if"];
+    "feathers == 0.0^
+milk == 0.0^
+fins == 0.0^
+backbone == 0.0^
+breathes == 1.0
+=> Species(molusc)" -> "milk == 0.0^
+feathers == 0.0^
+backbone == 0.0^
+fins == 0.0
+=> Species(molusc)" [style="bold", label=" next"];
+    "milk == 0.0^
+feathers == 0.0^
+backbone == 0.0^
+fins == 0.0
+=> Species(molusc)" -> "aquatic == 0.0^
+airborne == 0.0
+=> Category({'LivesOnlyOnLand'})" [style="bold", label=" next"];
+    "aquatic == 0.0^
+airborne == 0.0
+=> Category({'LivesOnlyOnLand'})" -> "aquatic == 1.0^
+fins == 1.0^
+feathers == 0.0^
+airborne == 0.0
+=> Category({'LivesOnlyInWater'})" [style="bold", label=" next"];
+    "backbone == 0.0^
+fins == 0.0
+=> Stop(null)" -> "milk == 1.0
+=> Stop(null)" [style="bold", label=" else if"];
+    "milk == 1.0
+=> Stop(null)" -> "feathers == 1.0
+=> Stop(null)" [style="bold", label=" else if"];
+    "feathers == 1.0
+=> Stop(null)" -> "breathes == 1.0^
+fins == 0.0
+=> Stop(null)" [style="bold", label=" else if"];
+    "breathes == 1.0^
+fins == 0.0
+=> Stop(null)" -> "fins == 0.0^
+tail == 1.0
+=> Stop(null)" [style="bold", label=" else if"];
+}
