@@ -240,7 +240,7 @@ class MultiClassRDR(RippleDownRules):
                         # Rule fired and target is correct or there is no target to compare
                         self.add_conclusion(evaluated_rule)
 
-                if target and not next_rule:
+                if not next_rule:
                     if target not in self.conclusions:
                         # Nothing fired and there is a target that should have been in the conclusions
                         self.add_rule_for_case(x, target, expert)
