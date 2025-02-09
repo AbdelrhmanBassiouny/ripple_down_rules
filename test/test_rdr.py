@@ -1,6 +1,6 @@
 import json
 import os
-from unittest import TestCase, skip
+from unittest import TestCase
 
 from typing_extensions import List, Optional
 
@@ -239,7 +239,6 @@ class TestRDR(TestCase):
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 
-    # @skip("This test is not working")
     def test_fit_grdr_with_extra_conclusions(self):
         use_loaded_answers = True
         save_answers = False
