@@ -20,16 +20,6 @@ class TestRDR(TestCase):
         # fetch dataset
         cls.all_cases, cls.targets = load_zoo_dataset()
 
-    @classmethod
-    def tearDownClass(cls):
-        pass
-
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
-
     def test_setup(self):
         self.assertEqual(len(self.all_cases), 101)
         self.assertTrue(all([len(c.attributes) == 16 for c in self.all_cases]))
