@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import abstractmethod, ABC
 from enum import Enum, auto
 
+from orderedset import OrderedSet
 from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type
 
 from .failures import InvalidOperator
@@ -254,7 +255,7 @@ def str_to_operator_fn(rule_str: str) -> Tuple[Optional[str], Optional[str], Opt
     operator: Optional[Operator] = None
     arg1: Optional[str] = None
     arg2: Optional[str] = None
-    operators = [LessEqual(), GreaterEqual(), Equal(), Less(), Greater(),In()]
+    operators = [LessEqual(), GreaterEqual(), Equal(), Less(), Greater(), In()]
     for op in operators:
         if op.__str__() in rule_str:
             operator = op
@@ -272,6 +273,7 @@ class Condition:
     """
     A condition is a constraint on an attribute that must be satisfied for a case to be classified into a category.
     """
+
     def __init__(self, name: str, value: Any, operator: Operator):
         """
         Create a condition.
@@ -320,6 +322,7 @@ class Attributes(dict):
     """
     A collection of attributes that represents a set of constraints on a case.
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__()
         self.update(*args, **kwargs)
@@ -353,6 +356,7 @@ class Case:
     A case is a collection of attributes that represents an instance that can be classified into a category or
     multiple categories.
     """
+
     def __init__(self, id_: str, attributes: List[Attribute],
                  conclusions: Optional[List[Category]] = None,
                  targets: Optional[List[Category]] = None):
@@ -393,10 +397,7 @@ class Case:
     def add_attribute(self, attribute: Attribute):
         if attribute.name in self.attributes:
             if isinstance(attribute.value, set):
-                if isinstance(self.attributes[attribute.name].value, set):
-                    self.attributes[attribute.name].value.update(attribute.value)
-                else:
-                    self.attributes[attribute.name].value = {self.attributes[attribute.name].value}.union(attribute.value)
+                self.attributes[attribute.name].value.update(attribute.value)
             else:
                 raise ValueError(f"Attribute {attribute.name} already exists in the case.")
         else:
@@ -434,15 +435,103 @@ class Case:
     def ljust(s, sz=15):
         return str(s).ljust(sz)
 
+    def print_all_names(self, all_names: List[str], max_len: int,
+                        target_types: Optional[List[Type[Category]]] = None,
+                        conclusion_types: Optional[List[Type[Category]]] = None):
+        """
+        Print all attribute names.
+
+        :param all_names: list of names.
+        :param max_len: maximum length.
+        :param target_types: list of target types.
+        :param conclusion_types: list of category types.
+        """
+        print(self.get_all_names_str(all_names, max_len, target_types, conclusion_types))
+
     def print_values(self, all_names: Optional[List[str]] = None,
                      targets: Optional[List[Category]] = None,
                      is_corner_case: bool = False,
                      ljust_sz: int = 15,
                      conclusions: Optional[List[Category]] = None):
+        print(self.get_values_str(all_names, targets, is_corner_case, conclusions, ljust_sz))
+
+    def __str__(self):
+        names, ljust = self.get_all_names_and_max_len()
+        row1 = self.get_all_names_str(names, ljust)
+        row2 = self.get_values_str(names, ljust_sz=ljust)
+        return "\n".join([row1, row2])
+
+    def get_all_names_str(self, all_names: List[str], max_len: int,
+                            target_types: Optional[List[Type[Category]]] = None,
+                            conclusion_types: Optional[List[Type[Category]]] = None) -> str:
+        """
+        Get all attribute names, target names and conclusion names.
+
+        :param all_names: list of names.
+        :param max_len: maximum length.
+        :param target_types: list of target types.
+        :param conclusion_types: list of category types.
+        :return: string of names.
+        """
+        if conclusion_types or self.conclusions:
+            conclusion_types = conclusion_types or list(map(type, self.conclusions))
+        category_names = []
+        if conclusion_types:
+            category_types = conclusion_types or [Category]
+            category_names = [category_type.__name__.lower() for category_type in category_types]
+
+        if target_types or self.targets:
+            target_types = target_types if target_types else list(map(type, self.targets))
+        target_names = []
+        if target_types:
+            target_names = [f"target_{target_type.__name__.lower()}" for target_type in target_types]
+
+        names_row = self.ljust(f"names: ", sz=max_len)
+        names_row += self.ljust("ID", sz=max_len)
+        names_row += "".join([f"{self.ljust(name, sz=max_len)}" for name in all_names + category_names + target_names])
+        return names_row
+
+    def get_all_names_and_max_len(self, all_attributes: Optional[List[Attribute]] = None) -> Tuple[List[str], int]:
+        """
+        Get all attribute names and the maximum length of the names and values.
+
+        :param all_attributes: list of attributes
+        :return: list of names and the maximum length
+        """
+        all_attributes = all_attributes if all_attributes else self.attributes_list
+        all_names = list(OrderedSet([a.name for a in all_attributes]))
+        max_len = max([len(name) for name in all_names])
+        max_len = max(max_len, max([len(str(a.value)) for a in all_attributes])) + 4
+        return all_names, max_len
+
+    def get_values_str(self, all_names: Optional[List[str]] = None,
+                          targets: Optional[List[Category]] = None,
+                            is_corner_case: bool = False,
+                            conclusions: Optional[List[Category]] = None,
+                       ljust_sz: int = 15) -> str:
+        """
+        Get the string representation of the values of the case.
+        """
         all_names = list(self.attributes.keys()) if not all_names else all_names
         targets = targets if targets else self.targets
         if targets:
             targets = targets if isinstance(targets, list) else [targets]
+        case_row = self.get_id_and_attribute_values_str(all_names, is_corner_case, ljust_sz)
+        case_row += self.get_targets_str(targets, ljust_sz)
+        case_row += self.get_conclusions_str(conclusions, ljust_sz)
+        return case_row
+
+    def get_id_and_attribute_values_str(self, all_names: Optional[List[str]] = None,
+                                        is_corner_case: bool = False,
+                                        ljust_sz: int = 15) -> str:
+        """
+        Get the string representation of the id and names of the case.
+
+        :param all_names: The names of the attributes to include in the string.
+        :param is_corner_case: Whether the case is a corner case.
+        :param ljust_sz: The size of the ljust.
+        """
+        all_names = list(self.attributes.keys()) if not all_names else all_names
         if is_corner_case:
             case_row = self.ljust(f"corner case: ", sz=ljust_sz)
         else:
@@ -450,30 +539,30 @@ class Case:
         case_row += self.ljust(self.id_, sz=ljust_sz)
         case_row += "".join([f"{self.ljust(self[name].value if name in self.attributes else '', sz=ljust_sz)}"
                              for name in all_names])
-        if targets:
-            case_row += ",".join([self.ljust(t.value, sz=ljust_sz) for t in targets])
-        if conclusions:
-            case_row += ",".join([self.ljust(c.value, sz=ljust_sz) for c in conclusions])
-        print(case_row)
+        return case_row
 
-    def __str__(self):
-        names = list(self.attributes.keys())
-        ljust = max([len(name) for name in names])
-        ljust = max(ljust, max([len(str(a.value)) for a in self.attributes.values()])) + 2
-        row1 = f"Case {self.id_} with attributes: \n"
-        row2 = [f"{name.ljust(ljust)}" for name in names]
-        row2 = "".join(row2)
-        if self.targets:
-            row2 += "Target".ljust(ljust)
-        if self.conclusions:
-            row2 += "Conclusions".ljust(ljust)
-        row2 += "\n"
-        row3 = "".join([f"{str(self.attributes[name].value).ljust(ljust)}" for name in names])
-        if self.targets:
-            row3 += ",".join([str(t.value) for t in self.targets])
-        if self.conclusions:
-            row3 += ",".join([str(c.value) for c in self.conclusions])
-        return row1 + row2 + row3 + "\n"
+    def get_targets_str(self, targets: Optional[List[Category]] = None, ljust_sz: int = 15) -> str:
+        """
+        Get the string representation of the targets of the case.
+        """
+        targets = targets if targets else self.targets
+        return self._get_categories_str(targets, ljust_sz)
+
+    def get_conclusions_str(self, conclusions: Optional[List[Category]] = None, ljust_sz: int = 15) -> str:
+        """
+        Get the string representation of the conclusions of the case.
+        """
+        conclusions = conclusions if conclusions else self.conclusions
+        return self._get_categories_str(conclusions, ljust_sz)
+
+    def _get_categories_str(self, categories: List[Category], ljust_sz: int = 15) -> str:
+        """
+        Get the string representation of the categories of the case.
+        """
+        if not categories:
+            return ""
+        categories_str = [self.ljust(c.value, sz=ljust_sz) for c in categories]
+        return ",".join(categories_str) if len(categories_str) > 1 else categories_str[0]
 
     def __repr__(self):
         return self.__str__()

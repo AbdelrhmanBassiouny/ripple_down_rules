@@ -287,15 +287,6 @@ class MultiClassRDR(RippleDownRules):
         else:
             return self.start_rule.furthest_alternative[-1]
 
-    def is_last_rule(self, rule_idx: int) -> bool:
-        """
-        Check if the rule index is the last rule in the classifier.
-
-        :param rule_idx: The index of the rule to check.
-        :return: Whether the rule index is the last rule in the classifier.
-        """
-        return rule_idx == len(self.start_rules) - 1
-
     def stop_wrong_conclusion_else_add_it(self, x: Case, target: Category, expert: Expert,
                                           evaluated_rule: MultiClassTopRule,
                                           add_extra_conclusions: bool):
