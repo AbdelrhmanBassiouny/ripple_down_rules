@@ -64,6 +64,7 @@ class RippleDownRules(ABC):
             expert: Optional[Expert] = None,
             n_iter: int = None,
             animate_tree: bool = False,
+            keep_open: bool = True,
             **kwargs_for_fit_case):
         """
         Fit the classifier to a batch of cases and categories.
@@ -74,6 +75,7 @@ class RippleDownRules(ABC):
         :param n_iter: The number of iterations to fit the classifier for.
         :param animate_tree: Whether to draw the tree while fitting the classifier.
         :param kwargs_for_fit_case: The keyword arguments to pass to the fit_case method.
+        :param keep_open: Whether to keep the plot open after fitting.
         """
         if animate_tree:
             plt.ion()
@@ -115,6 +117,7 @@ class RippleDownRules(ABC):
         print(f"Finished training in {i} iterations")
         if animate_tree:
             plt.ioff()
+        if keep_open:
             plt.show()
 
     def update_figures(self):

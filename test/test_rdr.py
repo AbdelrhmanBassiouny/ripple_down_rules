@@ -2,10 +2,13 @@ import json
 import os
 from unittest import TestCase
 
+from random_events.product_algebra import SimpleEvent
+from random_events.variable import Symbolic
 from typing_extensions import List, Optional
+from ucimlrepo import fetch_ucirepo
 
-from ripple_down_rules.datasets import load_zoo_dataset
-from ripple_down_rules.datastructures import Case, Category, str_to_operator_fn, Condition, MCRDRMode, Habitat
+from ripple_down_rules.datasets import load_zoo_dataset, infer_variables_from_dataframe
+from ripple_down_rules.datastructures import Case, Category, str_to_operator_fn, Condition, MCRDRMode, Habitat, Equal
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree
@@ -41,6 +44,75 @@ class TestRDR(TestCase):
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
+
+    def test_small_scrdr_with_random_events(self):
+        use_loaded_answers = True
+        save_answers = False
+        draw_tree = False
+        n = 5
+        filename = "small_scrdr_expert_answers_fit"
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+
+        scrdr = SingleClassRDR()
+        scrdr.fit(self.all_cases[:n], self.targets[:n], expert=expert,
+                  animate_tree=draw_tree)
+        render_tree(scrdr.start_rule, use_dot_exporter=True, filename="scrdr")
+
+        cat = scrdr.classify(self.all_cases[2])
+        self.assertEqual(cat, self.targets[2])
+
+        if save_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, filename)
+            expert.save_answers(file)
+
+        data = fetch_ucirepo(id=111)
+        features = data.data.features
+        print("=" * 80)
+        for f in features.columns:
+            if f != "legs":
+                features.loc[:, (f, )] = features[f].apply(lambda x: str(bool(x)))
+        targets = data.data.targets
+        category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
+        targets.loc[:, ("type", )] = targets["type"].apply(lambda x: category_names[x - 1])
+        variables = infer_variables_from_dataframe(features) + infer_variables_from_dataframe(targets)
+        name_to_variable = {v.name: v for v in variables}
+
+        kb = SimpleEvent({v: v.domain for v in variables})
+        kb = kb.as_composite_set()
+
+        for node in (scrdr.start_rule,) + scrdr.start_rule.descendants:
+            left = node.conditions
+            left_event = SimpleEvent()
+            for k,v in left.items():
+                v: Condition
+                if isinstance(v.operator, Equal):
+                    variable: Symbolic = name_to_variable[v.name]
+                    left_event[variable] = variable.make_value(str(bool(v.value)))
+
+            # restate left => right as !left or right
+
+            # create ~left
+            left_event = left_event.__deepcopy__().as_composite_set()
+            not_left = ~left_event
+            not_left.fill_missing_variables(variables)
+
+            # create right
+            right_event = SimpleEvent()
+            right = node.conclusion
+            variable: Symbolic = name_to_variable["type"]
+            right_event[variable] = variable.make_value(right.value)
+            right_event = right_event.as_composite_set()
+            right_event.fill_missing_variables(variables)
+
+            rule = right_event.__deepcopy__() | not_left.__deepcopy__()
+
+            kb = kb & rule
+
+        model = ...
+        # model.conditional(kb)
 
     def test_fit_scrdr(self):
         use_loaded_answers = True
@@ -232,13 +304,13 @@ class TestRDR(TestCase):
     def test_fit_grdr_with_extra_conclusions(self):
         use_loaded_answers = True
         save_answers = False
-        draw_tree = False
+        draw_tree = True
         filename = "grdr_expert_answers_fit_extra"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
 
-        fit_scrdr = self.get_fit_scrdr(draw_tree=False)
+        fit_scrdr = self.get_fit_scrdr(draw_tree=True)
 
         grdr = GeneralRDR({type(fit_scrdr.start_rule.conclusion): fit_scrdr})
 
@@ -262,7 +334,7 @@ class TestRDR(TestCase):
 
         scrdr = SingleClassRDR()
         scrdr.fit(self.all_cases, self.targets, expert=expert,
-                  animate_tree=draw_tree)
+                  animate_tree=draw_tree, keep_open=False)
         return scrdr
 
 
