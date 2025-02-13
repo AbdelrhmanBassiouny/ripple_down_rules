@@ -2,6 +2,7 @@ import json
 import os
 from unittest import TestCase
 
+from probabilistic_model.probabilistic_circuit.nx.helper import fully_factorized
 from random_events.product_algebra import SimpleEvent
 from random_events.variable import Symbolic
 from typing_extensions import List, Optional
@@ -72,7 +73,7 @@ class TestRDR(TestCase):
         features = data.data.features
         print("=" * 80)
         for f in features.columns:
-            if f != "legs":
+            if f != "legs1":
                 features.loc[:, (f, )] = features[f].apply(lambda x: str(bool(x)))
         targets = data.data.targets
         category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
@@ -80,13 +81,12 @@ class TestRDR(TestCase):
         variables = infer_variables_from_dataframe(features) + infer_variables_from_dataframe(targets)
         name_to_variable = {v.name: v for v in variables}
 
-        kb = SimpleEvent({v: v.domain for v in variables})
-        kb = kb.as_composite_set()
+        kb = SimpleEvent({v: v.domain for v in variables}).as_composite_set()
 
         for node in (scrdr.start_rule,) + scrdr.start_rule.descendants:
             left = node.conditions
             left_event = SimpleEvent()
-            for k,v in left.items():
+            for k, v in left.items():
                 v: Condition
                 if isinstance(v.operator, Equal):
                     variable: Symbolic = name_to_variable[v.name]
@@ -95,7 +95,7 @@ class TestRDR(TestCase):
             # restate left => right as !left or right
 
             # create ~left
-            left_event = left_event.__deepcopy__().as_composite_set()
+            left_event = left_event.as_composite_set()
             not_left = ~left_event
             not_left.fill_missing_variables(variables)
 
@@ -107,12 +107,15 @@ class TestRDR(TestCase):
             right_event = right_event.as_composite_set()
             right_event.fill_missing_variables(variables)
 
-            rule = right_event.__deepcopy__() | not_left.__deepcopy__()
-
+            rule = right_event | not_left
             kb = kb & rule
 
-        model = ...
-        # model.conditional(kb)
+        print(*kb.simple_sets, sep="\n")
+        model = fully_factorized(variables, means={}, variances={})
+        print(model)
+        cooler_model, p = model.conditional(kb)
+        print(cooler_model)
+        print(p)
 
     def test_fit_scrdr(self):
         use_loaded_answers = True
@@ -304,7 +307,7 @@ class TestRDR(TestCase):
     def test_fit_grdr_with_extra_conclusions(self):
         use_loaded_answers = True
         save_answers = False
-        draw_tree = True
+        draw_tree = False
         filename = "grdr_expert_answers_fit_extra"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:

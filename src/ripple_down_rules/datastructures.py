@@ -4,6 +4,7 @@ from abc import abstractmethod, ABC
 from enum import Enum, auto
 
 from orderedset import OrderedSet
+from random_events.sigma_algebra import AbstractCompositeSet
 from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type
 
 from .failures import InvalidOperator
@@ -110,18 +111,21 @@ class Attribute:
     """
 
     def __init__(self, name: str, value: Any):
-        self.name = name.lower()
-        self.value = value
+        self.name = name.lower()  # random_events variable
+        self.value: AbstractCompositeSet = value
 
     @classmethod
     def from_category(cls, category: Category) -> Attribute:
-        if not category.mutually_exclusive:
-            if not hasattr(category.value, "__iter__") or isinstance(category.value, str):
-                value = {category.value}
-            else:
-                value = set(category.value)
+        if hasattr(category.value, "__iter__") and not isinstance(category.value, str):
+            # this would be interval, SimpleInterval
+            value = category.value
         else:
             value = category.value
+        if not category.mutually_exclusive:
+            if not hasattr(value, "__iter__") or isinstance(value, str):
+                value = {value}
+            else:
+                value = set(value)  # random_events.set.Set()
         return cls(type(category).__name__, value)
 
     def __eq__(self, other: Attribute):
