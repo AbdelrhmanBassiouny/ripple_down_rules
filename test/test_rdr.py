@@ -14,11 +14,14 @@ from ripple_down_rules.utils import render_tree
 class TestRDR(TestCase):
     all_cases: List[Case]
     targets: List[str]
+    test_results_dir: str = "./test_results"
+    expert_answers_dir: str = "./test_expert_answers"
 
     @classmethod
     def setUpClass(cls):
         # fetch dataset
         cls.all_cases, cls.targets = load_zoo_dataset()
+
 
     def test_setup(self):
         self.assertEqual(len(self.all_cases), 101)
@@ -28,7 +31,7 @@ class TestRDR(TestCase):
     def test_classify_scrdr(self):
         use_loaded_answers = True
         save_answers = False
-        filename = "scrdr_expert_answers_classify"
+        filename = self.expert_answers_dir + "/scrdr_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
@@ -46,7 +49,7 @@ class TestRDR(TestCase):
         use_loaded_answers = True
         save_answers = False
         draw_tree = False
-        filename = "scrdr_expert_answers_fit"
+        filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
@@ -54,7 +57,8 @@ class TestRDR(TestCase):
         scrdr = SingleClassRDR()
         scrdr.fit(self.all_cases, self.targets, expert=expert,
                   animate_tree=draw_tree)
-        render_tree(scrdr.start_rule, use_dot_exporter=True, filename="scrdr")
+        render_tree(scrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/scrdr")
 
         cat = scrdr.classify(self.all_cases[50])
         self.assertEqual(cat, self.targets[50])
@@ -67,7 +71,7 @@ class TestRDR(TestCase):
     def test_classify_mcrdr(self):
         use_loaded_answers = True
         save_answers = False
-        filename = "mcrdr_expert_answers_classify"
+        filename = self.expert_answers_dir + "/mcrdr_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
@@ -88,7 +92,8 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, self.targets,
                   expert=expert, animate_tree=draw_tree)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_stop_only")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/mcrdr_stop_only")
         cats = mcrdr.classify(self.all_cases[50])
         self.assertEqual(cats[0], self.targets[50])
         self.assertTrue(len(cats) == 1)
@@ -99,7 +104,8 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
         mcrdr.fit(self.all_cases, self.targets,
                   expert=expert, animate_tree=draw_tree)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_stop_plus_rule")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/mcrdr_stop_plus_rule")
         cats = mcrdr.classify(self.all_cases[50])
         self.assertEqual(cats[0], self.targets[50])
         self.assertTrue(len(cats) == 1)
@@ -108,14 +114,15 @@ class TestRDR(TestCase):
         use_loaded_answers = True
         save_answers = False
         draw_tree = False
-        filename = "mcrdr_stop_plus_rule_combined_expert_answers_fit"
+        filename = self.expert_answers_dir + "/mcrdr_stop_plus_rule_combined_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRuleCombined)
         mcrdr.fit(self.all_cases, self.targets,
                   expert=expert, animate_tree=draw_tree)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_stop_plus_rule_combined")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/mcrdr_stop_plus_rule_combined")
         cats = mcrdr.classify(self.all_cases[50])
         self.assertEqual(cats[0], self.targets[50])
         self.assertTrue(len(cats) == 1)
@@ -127,7 +134,7 @@ class TestRDR(TestCase):
     def test_classify_mcrdr_with_extra_conclusions(self):
         use_loaded_answers = True
         save_answers = False
-        file_name = "mcrdr_extra_expert_answers_classify"
+        file_name = self.expert_answers_dir + "/mcrdr_extra_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(file_name)
@@ -135,7 +142,8 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR()
         cats = mcrdr.fit_case(self.all_cases[0], self.targets[0],
                               add_extra_conclusions=True, expert=expert)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_extra_classify")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/mcrdr_extra_classify")
 
         self.assertEqual(cats, [self.targets[50], Category("LivesOnlyOnLand")])
 
@@ -153,21 +161,22 @@ class TestRDR(TestCase):
         mcrdr.fit(self.all_cases, self.targets,
                   add_extra_conclusions=False, expert=expert, animate_tree=draw_tree)
         expert = Human(use_loaded_answers=use_loaded_answers)
-        file_name = "mcrdr_extra_expert_answers_fit"
+        file_name = self.expert_answers_dir + "/mcrdr_extra_expert_answers_fit"
         if use_loaded_answers:
             expert.load_answers(file_name)
         mcrdr.fit(self.all_cases, self.targets,
                   add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
         cats = mcrdr.classify(self.all_cases[50])
         self.assertEqual(cats, [self.targets[50], Category("LivesOnlyOnLand")])
-        render_tree(mcrdr.start_rule, use_dot_exporter=True, filename="mcrdr_extra")
+        render_tree(mcrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/mcrdr_extra")
         if save_answers:
             expert.save_answers(file_name)
 
     def test_classify_grdr(self):
         use_loaded_answers = True
         save_answers = False
-        filename = "grdr_expert_answers_classify"
+        filename = self.expert_answers_dir + "/grdr_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
@@ -187,7 +196,7 @@ class TestRDR(TestCase):
         use_loaded_answers = True
         save_answers = False
         draw_tree = False
-        filename = "grdr_expert_answers_fit"
+        filename = self.expert_answers_dir + "/grdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
@@ -219,7 +228,8 @@ class TestRDR(TestCase):
         grdr.fit(self.all_cases, habitat_targets, expert=expert,
                  animate_tree=draw_tree, n_iter=n)
         for rule in grdr.start_rules:
-            render_tree(rule, use_dot_exporter=True, filename=f"grdr_{type(rule.conclusion).__name__}")
+            render_tree(rule, use_dot_exporter=True,
+                        filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
 
         cats = grdr.classify(self.all_cases[50])
         self.assertEqual(cats, [self.targets[50], Habitat("land")])
@@ -233,7 +243,7 @@ class TestRDR(TestCase):
         use_loaded_answers = True
         save_answers = False
         draw_tree = False
-        filename = "grdr_expert_answers_fit_extra"
+        filename = self.expert_answers_dir + "/grdr_expert_answers_fit_extra"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
@@ -245,7 +255,8 @@ class TestRDR(TestCase):
         grdr.fit(self.all_cases[17:], expert=expert,
                  animate_tree=draw_tree, n_iter=20, add_extra_conclusions=True)
         for rule in grdr.start_rules:
-            render_tree(rule, use_dot_exporter=True, filename=f"grdr_{type(rule.conclusion).__name__}")
+            render_tree(rule, use_dot_exporter=True,
+                        filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
 
         cats = grdr.classify(self.all_cases[50])
         self.assertEqual(cats, [self.targets[50], Habitat("land")])
@@ -256,7 +267,7 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def get_fit_scrdr(self, draw_tree=False) -> SingleClassRDR:
-        filename = "scrdr_expert_answers_fit"
+        filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=True)
         expert.load_answers(filename)
 
@@ -268,8 +279,10 @@ class TestRDR(TestCase):
 
 class MCRDRTester(Expert):
 
-    def __init__(self, mode: MCRDRMode = MCRDRMode.StopOnly):
+    def __init__(self, mode: MCRDRMode = MCRDRMode.StopOnly,
+                 expert_answers_dir: str = "./test_expert_answers"):
         self.mode = mode
+        self.expert_answers_dir = expert_answers_dir
         self.all_expert_answers = self.get_all_expert_answers(mode)
         self.current_answer_idx = 0
 
@@ -281,14 +294,13 @@ class MCRDRTester(Expert):
     def ask_for_extra_conclusions(self, x: Case, current_conclusions=None):
         pass
 
-    @staticmethod
-    def get_all_expert_answers(mode: MCRDRMode):
+    def get_all_expert_answers(self, mode: MCRDRMode):
         if mode == MCRDRMode.StopPlusRule:
-            json_file = os.path.join(os.getcwd(), "mcrdr_stop_plus_rule_answers_fit.json")
+            json_file = self.expert_answers_dir + "/mcrdr_stop_plus_rule_answers_fit.json"
             with open(json_file, "r") as f:
                 all_expert_answers = json.load(f)
         elif mode == MCRDRMode.StopOnly:
-            json_file = os.path.join(os.getcwd(), "mcrdr_stop_only_answers_fit.json")
+            json_file = self.expert_answers_dir + "/mcrdr_stop_only_answers_fit.json"
             with open(json_file, "r") as f:
                 all_expert_answers = json.load(f)
         all_expert_conditions = [{name: str_to_operator_fn(c) for name, c in a.items()} for a in all_expert_answers]
