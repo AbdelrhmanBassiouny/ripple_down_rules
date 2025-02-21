@@ -21,7 +21,8 @@ class TestRDR(TestCase):
     def setUpClass(cls):
         # fetch dataset
         cls.all_cases, cls.targets = load_zoo_dataset()
-
+        if not os.path.exists(cls.test_results_dir):
+            os.makedirs(cls.test_results_dir)
 
     def test_setup(self):
         self.assertEqual(len(self.all_cases), 101)
