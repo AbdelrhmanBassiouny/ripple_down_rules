@@ -44,6 +44,29 @@ class RDREdge(Enum):
     """
 
 
+class CategoryValueType(Enum):
+    Binary = auto()
+    """
+    Binary value type (eg. True, False).
+    """
+    Discrete = auto()
+    """
+    Discrete value type (eg. 1, 2, 3).
+    """
+    Continuous = auto()
+    """
+    Continuous value type (eg. 1.0, 2.5, 3.4).
+    """
+    Nominal = auto()
+    """
+    Nominal value type (eg. red, blue, green), categories where the values have no natural order.
+    """
+    Ordinal = auto()
+    """
+    Ordinal value type (eg. low, medium, high), categories where the values have a natural order.
+    """
+
+
 class Category:
     """
     A category is an abstract concept that represents a class or a label. In a classification problem, a category
@@ -53,6 +76,7 @@ class Category:
     to infer if a species flies or not, the concept of flying becomes a category while the species becomes an attribute.
     """
     mutually_exclusive: bool = False
+    value_type: CategoryValueType = CategoryValueType.Nominal
 
     def __init__(self, value: Any):
         self.value = value
