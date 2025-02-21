@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union
 
-from .datastructures import str_to_operator_fn, Condition, Case
+from .datastructures import str_to_operator_fn, Condition, Case, Attribute, Operator
 from .failures import InvalidOperator
 
 if TYPE_CHECKING:
@@ -29,7 +29,7 @@ class Expert(ABC):
     """
 
     @abstractmethod
-    def ask_for_conditions(self, x: Case, targets: List[Category], last_evaluated_rule: Optional[Rule] = None) \
+    def ask_for_conditions(self, x: Case, targets: List[Attribute], last_evaluated_rule: Optional[Rule] = None) \
             -> Dict[str, Condition]:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
@@ -43,8 +43,8 @@ class Expert(ABC):
         pass
 
     @abstractmethod
-    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Category]) \
-            -> Dict[Category, Dict[str, Condition]]:
+    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Attribute]) \
+            -> Dict[Attribute, Dict[str, Condition]]:
         """
         Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
         that category.
@@ -56,9 +56,9 @@ class Expert(ABC):
         pass
 
     @abstractmethod
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Category,
-                                     targets: Optional[List[Category]] = None,
-                                     current_conclusions: Optional[List[Category]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Attribute,
+                                     targets: Optional[List[Attribute]] = None,
+                                     current_conclusions: Optional[List[Attribute]] = None) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
@@ -98,7 +98,7 @@ class Human(Expert):
             self.all_expert_answers = json.load(f)
 
     def ask_for_conditions(self, x: Case,
-                           targets: Union[Category, List[Category]],
+                           targets: Union[Attribute, List[Attribute]],
                            last_evaluated_rule: Optional[Rule] = None) \
             -> Dict[str, Condition]:
         targets = targets if isinstance(targets, list) else [targets]
@@ -125,8 +125,8 @@ class Human(Expert):
         # take user input
         return self._get_conditions(all_names, conditions_for="differentiating features")
 
-    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Category]) \
-            -> Dict[Category, Dict[str, Condition]]:
+    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Attribute]) \
+            -> Dict[Attribute, Dict[str, Condition]]:
         """
         Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
         that category.
@@ -144,7 +144,7 @@ class Human(Expert):
             extra_conclusions[category] = self._get_conditions(all_names, conditions_for="extra conclusions")
         return extra_conclusions
 
-    def ask_for_conclusion(self, x: Case, current_conclusions: Optional[List[Category]] = None) -> Optional[Category]:
+    def ask_for_conclusion(self, x: Case, current_conclusions: Optional[List[Attribute]] = None) -> Optional[Attribute]:
         """
         Ask the expert to provide a conclusion for the case.
 
@@ -172,7 +172,7 @@ class Human(Expert):
             else:
                 return None
 
-    def parse_conclusion(self, value: str) -> Category:
+    def parse_conclusion(self, value: str) -> Attribute:
         """
         Parse the conclusion from the user input. If the conclusion is not found in the known categories,
         a new category is created with the name and value else a new instance of the category is created with the value.
@@ -184,8 +184,8 @@ class Human(Expert):
         if ':' not in value:
             cat_name = "".join([w.capitalize() for w in value.split()])
             if not all(char.isalpha() for char in cat_name):
-                raise ValueError(f"Category name {cat_name} should only contain alphabets")
-            category = Category(cat_name)
+                raise ValueError(f"Attribute name {cat_name} should only contain alphabets")
+            category = Attribute(cat_name)
         else:
             cat_name_value = value.split(":")
             cat_name = cat_name_value[0].strip(' "')
@@ -196,7 +196,7 @@ class Human(Expert):
                 raise ValueError(f"Input format \"{value}\" is not correct")
         return category
 
-    def create_category_instance(self, cat_name: str, cat_value: str) -> Category:
+    def create_category_instance(self, cat_name: str, cat_value: str) -> Attribute:
         """
         Create a new category instance.
 
@@ -207,10 +207,12 @@ class Human(Expert):
         category_type = self.get_category_type(cat_name)
         if not category_type:
             category_type = self.create_new_category_type(cat_name)
-        return category_type(cat_value)
+            return category_type(cat_name, cat_value)
+        else:
+            return category_type(cat_value)
 
     @staticmethod
-    def get_category_type(cat_name: str) -> Optional[Type[Category]]:
+    def get_category_type(cat_name: str) -> Optional[Type[Attribute]]:
         """
         Get the category type from the known categories.
 
@@ -218,25 +220,25 @@ class Human(Expert):
         :return: The category type.
         """
         cat_name = cat_name.capitalize()
-        known_categories = [c.__name__ for c in Category.__subclasses__()]
+        known_categories = [c.__name__ for c in Attribute.__subclasses__()]
         category_type = None
         if cat_name in known_categories:
-            category_type = Category.__subclasses__()[known_categories.index(cat_name)]
+            category_type = Attribute.__subclasses__()[known_categories.index(cat_name)]
         return category_type
 
-    def create_new_category_type(self, cat_name: str) -> Type[Category]:
+    def create_new_category_type(self, cat_name: str) -> Type[Attribute]:
         """
         Create a new category type.
 
         :param cat_name: The name of the category.
         :return: A new category type.
         """
-        category_type: Type[Category] = type(cat_name, (Category,), {})
+        category_type: Type[Attribute] = type(cat_name, (Attribute,), {})
         if self.ask_if_category_is_mutually_exclusive(category_type):
             category_type.mutually_exclusive = True
         return category_type
 
-    def ask_if_category_is_mutually_exclusive(self, category: Type[Category]) -> bool:
+    def ask_if_category_is_mutually_exclusive(self, category: Type[Attribute]) -> bool:
         """
         Ask the expert if the new category can have multiple values.
 
@@ -245,9 +247,9 @@ class Human(Expert):
         question = f"Can a case have multiple values of the new category {category.__name__}? (y/n):"
         return self.ask_yes_no_question(question)
 
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Category,
-                                     targets: Optional[List[Category]] = None,
-                                     current_conclusions: Optional[List[Category]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Attribute,
+                                     targets: Optional[List[Attribute]] = None,
+                                     current_conclusions: Optional[List[Attribute]] = None) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
@@ -397,7 +399,7 @@ class Human(Expert):
 
     @staticmethod
     def validate_input_and_get_error_msgs(all_names, rule) \
-            -> Tuple[List[str], Optional[str], Optional[str], Optional[str]]:
+            -> Tuple[List[str], Optional[str], Optional[str], Optional[Operator]]:
         """
         Validate the input and get error messages.
 

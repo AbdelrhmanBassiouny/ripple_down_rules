@@ -21,7 +21,7 @@ class RippleDownRules(ABC):
     """
     The figure to draw the tree on.
     """
-    expert_accepted_conclusions: Optional[List[Category]] = None
+    expert_accepted_conclusions: Optional[List[Attribute]] = None
     """
     The conclusions that the expert has accepted, such that they are not asked again.
     """
@@ -33,11 +33,11 @@ class RippleDownRules(ABC):
         self.start_rule = start_rule
         self.fig: Optional[plt.Figure] = None
 
-    def __call__(self, x: Case) -> Category:
+    def __call__(self, x: Case) -> Attribute:
         return self.classify(x)
 
     @abstractmethod
-    def classify(self, x: Case) -> Optional[Category]:
+    def classify(self, x: Case) -> Optional[Attribute]:
         """
         Classify a case.
 
@@ -47,8 +47,8 @@ class RippleDownRules(ABC):
         pass
 
     @abstractmethod
-    def fit_case(self, x: Case, target: Optional[Category] = None,
-                 expert: Optional[Expert] = None, **kwargs) -> Category:
+    def fit_case(self, x: Case, target: Optional[Attribute] = None,
+                 expert: Optional[Expert] = None, **kwargs) -> Attribute:
         """
         Fit the RDR on a case, and ask the expert for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category.
@@ -60,7 +60,7 @@ class RippleDownRules(ABC):
         """
         pass
 
-    def fit(self, x_batch: List[Case], y_batch: Optional[List[Category]] = None,
+    def fit(self, x_batch: List[Case], y_batch: Optional[List[Attribute]] = None,
             expert: Optional[Expert] = None,
             n_iter: int = None,
             animate_tree: bool = False,
@@ -134,8 +134,8 @@ class RippleDownRules(ABC):
 
 class SingleClassRDR(RippleDownRules):
 
-    def fit_case(self, x: Case, target: Optional[Category] = None,
-                 expert: Optional[Expert] = None, **kwargs) -> Category:
+    def fit_case(self, x: Case, target: Optional[Attribute] = None,
+                 expert: Optional[Expert] = None, **kwargs) -> Attribute:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
@@ -158,7 +158,7 @@ class SingleClassRDR(RippleDownRules):
 
         return self.classify(x)
 
-    def classify(self, x: Case) -> Optional[Category]:
+    def classify(self, x: Case) -> Optional[Attribute]:
         """
         Classify a case by recursively evaluating the rules until a rule fires or the last rule is reached.
         """
@@ -183,7 +183,7 @@ class MultiClassRDR(RippleDownRules):
     """
     The evaluated rules in the classifier for one case.
     """
-    conclusions: Optional[List[Category]] = None
+    conclusions: Optional[List[Attribute]] = None
     """
     The conclusions that the case belongs to.
     """
@@ -204,7 +204,7 @@ class MultiClassRDR(RippleDownRules):
         super(MultiClassRDR, self).__init__(self.start_rules[0])
         self.mode: MCRDRMode = mode
 
-    def classify(self, x: Case) -> List[Category]:
+    def classify(self, x: Case) -> List[Attribute]:
         evaluated_rule = self.start_rule
         self.conclusions = []
         while evaluated_rule:
@@ -214,8 +214,8 @@ class MultiClassRDR(RippleDownRules):
             evaluated_rule = next_rule
         return self.conclusions
 
-    def fit_case(self, x: Case, targets: Optional[Union[Category, List[Category]]] = None,
-                 expert: Optional[Expert] = None, add_extra_conclusions: bool = False) -> List[Category]:
+    def fit_case(self, x: Case, targets: Optional[Union[Attribute, List[Attribute]]] = None,
+                 expert: Optional[Expert] = None, add_extra_conclusions: bool = False) -> List[Attribute]:
         """
         Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
          or missing by comparing the case with the target category if provided.
@@ -263,7 +263,7 @@ class MultiClassRDR(RippleDownRules):
                 evaluated_rule = next_rule
         return list(OrderedSet(self.conclusions))
 
-    def update_start_rule(self, x: Case, target: Category, expert: Expert):
+    def update_start_rule(self, x: Case, target: Attribute, expert: Expert):
         """
         Update the starting rule of the classifier.
 
@@ -287,7 +287,7 @@ class MultiClassRDR(RippleDownRules):
         else:
             return self.start_rule.furthest_alternative[-1]
 
-    def stop_wrong_conclusion_else_add_it(self, x: Case, target: Category, expert: Expert,
+    def stop_wrong_conclusion_else_add_it(self, x: Case, target: Attribute, expert: Expert,
                                           evaluated_rule: MultiClassTopRule,
                                           add_extra_conclusions: bool):
         """
@@ -299,7 +299,7 @@ class MultiClassRDR(RippleDownRules):
         elif not self.conclusion_is_correct(x, target, expert, evaluated_rule, add_extra_conclusions):
             self.stop_conclusion(x, target, expert, evaluated_rule)
 
-    def stop_conclusion(self, x: Case, target: Category, expert: Expert, evaluated_rule: MultiClassTopRule):
+    def stop_conclusion(self, x: Case, target: Attribute, expert: Expert, evaluated_rule: MultiClassTopRule):
         """
         Stop a conclusion by adding a stopping rule.
 
@@ -317,7 +317,7 @@ class MultiClassRDR(RippleDownRules):
             self.add_top_rule(new_top_rule_conditions, target, x)
 
     @staticmethod
-    def is_conflicting_with_target(conclusion: Category, target: Category) -> bool:
+    def is_conflicting_with_target(conclusion: Attribute, target: Attribute) -> bool:
         """
         Check if the conclusion is conflicting with the target category.
 
@@ -331,7 +331,7 @@ class MultiClassRDR(RippleDownRules):
             return not conclusion.value.issubset(target.value)
 
     @staticmethod
-    def is_same_category_type(conclusion: Category, target: Category) -> bool:
+    def is_same_category_type(conclusion: Attribute, target: Attribute) -> bool:
         """
         Check if the conclusion is of the same class as the target category.
 
@@ -339,9 +339,9 @@ class MultiClassRDR(RippleDownRules):
         :param target: The target category to compare the conclusion with.
         :return: Whether the conclusion is of the same class as the target category but has a different value.
         """
-        return conclusion.__class__ == target.__class__ and target.__class__ != Category
+        return conclusion.__class__ == target.__class__ and target.__class__ != Attribute
 
-    def conclusion_is_correct(self, x: Case, target: Category, expert: Expert, evaluated_rule: Rule,
+    def conclusion_is_correct(self, x: Case, target: Attribute, expert: Expert, evaluated_rule: Rule,
                               add_extra_conclusions: bool) -> bool:
         """
         Ask the expert if the conclusion is correct, and add it to the conclusions if it is.
@@ -362,7 +362,7 @@ class MultiClassRDR(RippleDownRules):
             return True
         return False
 
-    def add_rule_for_case(self, x: Case, target: Category, expert: Expert):
+    def add_rule_for_case(self, x: Case, target: Attribute, expert: Expert):
         """
         Add a rule for a case that has not been classified with any conclusion.
         """
@@ -373,7 +373,7 @@ class MultiClassRDR(RippleDownRules):
             conditions = expert.ask_for_conditions(x, target)
         self.add_top_rule(conditions, target, x)
 
-    def ask_expert_for_extra_conclusions(self, expert: Expert, x: Case) -> List[Category]:
+    def ask_expert_for_extra_conclusions(self, expert: Expert, x: Case) -> List[Attribute]:
         """
         Ask the expert for extra conclusions when no more conclusions can be made.
 
@@ -409,7 +409,7 @@ class MultiClassRDR(RippleDownRules):
                 self.conclusions.remove(c)
             self.conclusions.append(category_type(combined_conclusion))
 
-    def add_top_rule(self, conditions: Dict[str, Condition], conclusion: Category, corner_case: Case):
+    def add_top_rule(self, conditions: Dict[str, Condition], conclusion: Attribute, corner_case: Case):
         """
         Add a top rule to the classifier, which is a rule that is always checked and is part of the start_rules list.
 
@@ -432,7 +432,7 @@ class GeneralRDR(RippleDownRules):
      gets called when the final rule fires.
     """
 
-    def __init__(self, category_rdr_map: Optional[Dict[Type[Category], Union[SingleClassRDR, MultiClassRDR]]] = None):
+    def __init__(self, category_rdr_map: Optional[Dict[Type[Attribute], Union[SingleClassRDR, MultiClassRDR]]] = None):
         """
         :param category_rdr_map: A map of categories to ripple down rules classifiers,
         where each category is a parent category that has a set of mutually exclusive (in case of SCRDR) child
@@ -441,7 +441,7 @@ class GeneralRDR(RippleDownRules):
         Mammal, Bird, Fish, etc. which are mutually exclusive, and Habitat can have child categories like
         Land, Water, Air, etc, which are not mutually exclusive due to some animals living more than one habitat.
         """
-        self.start_rules_dict: Dict[Type[Category], Union[SingleClassRDR, MultiClassRDR]] \
+        self.start_rules_dict: Dict[Type[Attribute], Union[SingleClassRDR, MultiClassRDR]] \
             = category_rdr_map if category_rdr_map else {}
         super(GeneralRDR, self).__init__()
         self.all_figs: List[plt.Figure] = [sr.fig for sr in self.start_rules_dict.values()]
@@ -459,7 +459,7 @@ class GeneralRDR(RippleDownRules):
     def start_rules(self) -> List[Union[SingleClassRule, MultiClassTopRule]]:
         return [rdr.start_rule for rdr in self.start_rules_dict.values()]
 
-    def classify(self, x: Case) -> Optional[List[Category]]:
+    def classify(self, x: Case) -> Optional[List[Attribute]]:
         """
         Classify a case by going through all RDRs and adding the categories that are classified, and then restarting
         the classification until no more categories can be added.
@@ -485,9 +485,9 @@ class GeneralRDR(RippleDownRules):
                 break
         return list(OrderedSet(conclusions))
 
-    def fit_case(self, x: Case, targets: Optional[Union[Category, List[Category]]] = None,
+    def fit_case(self, x: Case, targets: Optional[Union[Attribute, List[Attribute]]] = None,
                  expert: Optional[Expert] = None,
-                 **kwargs) -> List[Category]:
+                 **kwargs) -> List[Attribute]:
         """
         Fit the GRDR on a case, if the target is a new type of category, a new RDR is created for it,
         else the existing RDR of that type will be fitted on the case, and then classification is done and all
@@ -527,7 +527,7 @@ class GeneralRDR(RippleDownRules):
         return [t.__name__ for t in self.start_rules_dict.keys()]
 
     @property
-    def all_types(self) -> List[Type[Category]]:
+    def all_types(self) -> List[Type[Attribute]]:
         """
         Get all the types of categories that the GRDR can classify.
         """

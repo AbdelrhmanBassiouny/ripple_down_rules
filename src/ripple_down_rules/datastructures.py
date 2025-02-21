@@ -144,6 +144,8 @@ class Attribute:
     An attribute is a name-value pair that represents a feature of a case.
     an attribute can be used to compare two cases and to make a conclusion about a case.
     """
+    mutually_exclusive: bool = False
+    value_type: CategoryValueType = CategoryValueType.Nominal
 
     def __init__(self, name: str, value: Any, mutually_exclusive: bool = False,
                  value_type: CategoryValueType = CategoryValueType.Nominal):
@@ -347,7 +349,7 @@ class LessEqual(Operator):
         return "<="
 
 
-def str_to_operator_fn(rule_str: str) -> Tuple[Optional[str], Optional[str], Optional[Callable]]:
+def str_to_operator_fn(rule_str: str) -> Tuple[Optional[str], Optional[str], Optional[Operator]]:
     """
     Convert a string containing a rule to a function that represents the rule.
 
