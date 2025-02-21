@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from orderedset import OrderedSet
 from typing_extensions import List, Optional, Dict, Type, Union
 
-from .datastructures import Category, Condition, Case, Stop, MCRDRMode, Attribute
+from .datastructures import Condition, Case, Stop, MCRDRMode, Attribute
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree

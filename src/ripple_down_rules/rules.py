@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from anytree import NodeMixin
 from typing_extensions import List, Optional, Self, Dict, Union
 
-from .datastructures import Category, Attribute, Condition, Case, Stop, RDREdge
+from .datastructures import Attribute, Condition, Case, Stop, RDREdge
 
 
 class Rule(NodeMixin, ABC):

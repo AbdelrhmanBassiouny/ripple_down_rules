@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union
 
-from .datastructures import str_to_operator_fn, Condition, Case, Category
+from .datastructures import str_to_operator_fn, Condition, Case
 from .failures import InvalidOperator
 
 if TYPE_CHECKING:

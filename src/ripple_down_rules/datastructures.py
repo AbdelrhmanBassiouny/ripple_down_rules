@@ -45,6 +45,10 @@ class RDREdge(Enum):
 
 
 class CategoryValueType(Enum):
+    Unary = auto()
+    """
+    Unary value type (eg. null).
+    """
     Binary = auto()
     """
     Binary value type (eg. True, False).
@@ -67,18 +71,93 @@ class CategoryValueType(Enum):
     """
 
 
-class Category:
-    """
-    A category is an abstract concept that represents a class or a label. In a classification problem, a category
-    represents a class or a label that a case can be classified into. In RDR it is referred to as a conclusion.
-    It is important to know that a concept can be an attribute or a category depending on the context, for example,
-    in the case when one is trying to infer the species of an animal, the species is a category, but when one is trying
-    to infer if a species flies or not, the concept of flying becomes a category while the species becomes an attribute.
-    """
-    mutually_exclusive: bool = False
-    value_type: CategoryValueType = CategoryValueType.Nominal
+# class Category:
+#     """
+#     A category is an abstract concept that represents a class or a label. In a classification problem, a category
+#     represents a class or a label that a case can be classified into. In RDR it is referred to as a conclusion.
+#     It is important to know that a concept can be an attribute or a category depending on the context, for example,
+#     in the case when one is trying to infer the species of an animal, the species is a category, but when one is trying
+#     to infer if a species flies or not, the concept of flying becomes a category while the species becomes an attribute.
+#     """
+#     mutually_exclusive: bool = False
+#     value_type: CategoryValueType = CategoryValueType.Nominal
+#
+#     def __init__(self, value: Any):
+#         self.value = value
+#
+#     @property
+#     def value(self):
+#         return self._value
+#
+#     @value.setter
+#     def value(self, value: Any):
+#         if not self.mutually_exclusive and not isinstance(value, set):
+#             value = {value}
+#         self._value = value
+#
+#     def __eq__(self, other):
+#         if not isinstance(other, Category):
+#             return False
+#         if isinstance(self.value, set) and not isinstance(other.value, set):
+#             return other.value in self.value
+#         elif not isinstance(self.value, set) and isinstance(other.value, set):
+#             return self.value in other.value and len(other.value) == 1
+#         return self.__class__ == other.__class__ and self.value == other.value
+#
+#     def __hash__(self):
+#         return hash(self.value) if not isinstance(self.value, set) else hash(frozenset(self.value))
+#
+#     def __str__(self):
+#         return f"{type(self).__name__}({self.value})"
+#
+#     def __repr__(self):
+#         return self.__str__()
+#
+#
+# class Stop(Category):
+#     """
+#     A stop category is a special category that represents the stopping of the classification to prevent a wrong
+#     conclusion from being made.
+#     """
+#     mutually_exclusive = True
+#
+#     def __init__(self):
+#         super().__init__("null")
+#
+#
+# class Species(Category):
+#     """
+#     A species category is a category that represents the species of an animal.
+#     """
+#     mutually_exclusive: bool = True
+#
+#
+# class Habitat(Category):
+#     """
+#     A habitat category is a category that represents the habitat of an animal.
+#     """
+#     ...
 
-    def __init__(self, value: Any):
+
+class Attribute:
+    """
+    An attribute is a name-value pair that represents a feature of a case.
+    an attribute can be used to compare two cases and to make a conclusion about a case.
+    """
+
+    def __init__(self, name: str, value: Any, mutually_exclusive: bool = False,
+                 value_type: CategoryValueType = CategoryValueType.Nominal):
+        """
+        Create an attribute.
+
+        :param name: The name of the attribute.
+        :param value: The value of the attribute.
+        :param mutually_exclusive: Whether the value of the attribute is mutually exclusive.
+        :param value_type: The type of the value of the attribute.
+        """
+        self.name = name.lower()
+        self.mutually_exclusive: bool = mutually_exclusive
+        self.value_type: CategoryValueType = value_type
         self.value = value
 
     @property
@@ -90,64 +169,6 @@ class Category:
         if not self.mutually_exclusive and not isinstance(value, set):
             value = {value}
         self._value = value
-
-    def __eq__(self, other):
-        if not isinstance(other, Category):
-            return False
-        if isinstance(self.value, set) and not isinstance(other.value, set):
-            return other.value in self.value
-        elif not isinstance(self.value, set) and isinstance(other.value, set):
-            return self.value in other.value and len(other.value) == 1
-        return self.__class__ == other.__class__ and self.value == other.value
-
-    def __hash__(self):
-        return hash(self.value) if not isinstance(self.value, set) else hash(frozenset(self.value))
-
-    def __str__(self):
-        return f"{type(self).__name__}({self.value})"
-
-    def __repr__(self):
-        return self.__str__()
-
-
-class Stop(Category):
-    """
-    A stop category is a special category that represents the stopping of the classification to prevent a wrong
-    conclusion from being made.
-    """
-    mutually_exclusive = True
-
-    def __init__(self):
-        super().__init__("null")
-
-
-class Species(Category):
-    """
-    A species category is a category that represents the species of an animal.
-    """
-    mutually_exclusive: bool = True
-
-
-class Habitat(Category):
-    """
-    A habitat category is a category that represents the habitat of an animal.
-    """
-    ...
-
-
-class Attribute:
-    """
-    An attribute is a name-value pair that represents a feature of a case.
-    an attribute can be used to compare two cases and to make a conclusion about a case.
-    """
-
-    def __init__(self, name: str, value: Any):
-        self.name = name.lower()
-        self.value = value
-
-    @classmethod
-    def from_category(cls, category: Category) -> Attribute:
-        return cls(type(category).__name__, category.value)
 
     def __eq__(self, other: Attribute):
         if not isinstance(other, Attribute):
@@ -169,6 +190,62 @@ class Attribute:
 
     def __repr__(self):
         return self.__str__()
+
+
+class Stop(Attribute):
+    """
+    A stop category is a special category that represents the stopping of the classification to prevent a wrong
+    conclusion from being made.
+    """
+
+    def __init__(self):
+        super().__init__(self.__class__.__name__, "null", mutually_exclusive=True,
+                         value_type=CategoryValueType.Unary)
+        
+
+class SpeciesValue(Enum):
+    Mammal = auto()
+    Bird = auto()
+    Reptile = auto()
+    Fish = auto()
+    Amphibian = auto()
+    Insect = auto()
+    Molusc = auto()
+
+    def __str__(self):
+        return self.name.lower()
+
+    @classmethod
+    def from_str(cls, value: str):
+        return cls[value.capitalize()]
+
+    @classmethod
+    def from_strs(cls, values: List[str]):
+        return [cls.from_str(value) for value in values]
+
+
+class Species(Attribute):
+    """
+    A species category is a category that represents the species of an animal.
+    """
+    def __init__(self, species: SpeciesValue):
+        super().__init__(self.__class__.__name__, species, mutually_exclusive=True,
+                         value_type=CategoryValueType.Nominal)
+
+
+class HabitatValue(Enum):
+    Land = auto()
+    Water = auto()
+    Air = auto()
+
+
+class Habitat(Attribute):
+    """
+    A habitat category is a category that represents the habitat of an animal.
+    """
+    def __init__(self, habitat: HabitatValue):
+        super().__init__(self.__class__.__name__, habitat, mutually_exclusive=True,
+                         value_type=CategoryValueType.Nominal)
 
 
 class Operator(ABC):

@@ -5,7 +5,7 @@ from unittest import TestCase
 from typing_extensions import List, Optional
 
 from ripple_down_rules.datasets import load_zoo_dataset
-from ripple_down_rules.datastructures import Case, Category, str_to_operator_fn, Condition, MCRDRMode, Habitat
+from ripple_down_rules.datastructures import Case, str_to_operator_fn, Condition, MCRDRMode, Habitat, Attribute
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree
@@ -287,7 +287,7 @@ class MCRDRTester(Expert):
         self.all_expert_answers = self.get_all_expert_answers(mode)
         self.current_answer_idx = 0
 
-    def ask_for_conditions(self, x: Case, target: Category, last_evaluated_rule=None):
+    def ask_for_conditions(self, x: Case, target: Attribute, last_evaluated_rule=None):
         answer = self.all_expert_answers[self.current_answer_idx]
         self.current_answer_idx += 1
         return answer
@@ -310,7 +310,7 @@ class MCRDRTester(Expert):
             for a in all_expert_conditions]
         return all_expert_conditions
 
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Category,
-                                     target: Optional[Category] = None,
-                                     current_conclusions: Optional[List[Category]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Attribute,
+                                     target: Optional[Attribute] = None,
+                                     current_conclusions: Optional[List[Attribute]] = None) -> bool:
         pass
