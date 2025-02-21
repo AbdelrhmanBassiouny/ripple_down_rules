@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from abc import abstractmethod, ABC
+from dataclasses import dataclass
 from enum import Enum, auto
 
 from orderedset import OrderedSet
-from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type
+from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type, Union
 
 from .failures import InvalidOperator
 
@@ -71,74 +72,6 @@ class CategoryValueType(Enum):
     """
 
 
-# class Category:
-#     """
-#     A category is an abstract concept that represents a class or a label. In a classification problem, a category
-#     represents a class or a label that a case can be classified into. In RDR it is referred to as a conclusion.
-#     It is important to know that a concept can be an attribute or a category depending on the context, for example,
-#     in the case when one is trying to infer the species of an animal, the species is a category, but when one is trying
-#     to infer if a species flies or not, the concept of flying becomes a category while the species becomes an attribute.
-#     """
-#     mutually_exclusive: bool = False
-#     value_type: CategoryValueType = CategoryValueType.Nominal
-#
-#     def __init__(self, value: Any):
-#         self.value = value
-#
-#     @property
-#     def value(self):
-#         return self._value
-#
-#     @value.setter
-#     def value(self, value: Any):
-#         if not self.mutually_exclusive and not isinstance(value, set):
-#             value = {value}
-#         self._value = value
-#
-#     def __eq__(self, other):
-#         if not isinstance(other, Category):
-#             return False
-#         if isinstance(self.value, set) and not isinstance(other.value, set):
-#             return other.value in self.value
-#         elif not isinstance(self.value, set) and isinstance(other.value, set):
-#             return self.value in other.value and len(other.value) == 1
-#         return self.__class__ == other.__class__ and self.value == other.value
-#
-#     def __hash__(self):
-#         return hash(self.value) if not isinstance(self.value, set) else hash(frozenset(self.value))
-#
-#     def __str__(self):
-#         return f"{type(self).__name__}({self.value})"
-#
-#     def __repr__(self):
-#         return self.__str__()
-#
-#
-# class Stop(Category):
-#     """
-#     A stop category is a special category that represents the stopping of the classification to prevent a wrong
-#     conclusion from being made.
-#     """
-#     mutually_exclusive = True
-#
-#     def __init__(self):
-#         super().__init__("null")
-#
-#
-# class Species(Category):
-#     """
-#     A species category is a category that represents the species of an animal.
-#     """
-#     mutually_exclusive: bool = True
-#
-#
-# class Habitat(Category):
-#     """
-#     A habitat category is a category that represents the habitat of an animal.
-#     """
-#     ...
-
-
 class Attribute:
     """
     An attribute is a name-value pair that represents a feature of a case.
@@ -146,20 +79,15 @@ class Attribute:
     """
     mutually_exclusive: bool = False
     value_type: CategoryValueType = CategoryValueType.Nominal
+    _range: Union[set, Range]
 
-    def __init__(self, name: str, value: Any, mutually_exclusive: bool = False,
-                 value_type: CategoryValueType = CategoryValueType.Nominal):
+    def __init__(self, value: Any):
         """
         Create an attribute.
 
-        :param name: The name of the attribute.
         :param value: The value of the attribute.
-        :param mutually_exclusive: Whether the value of the attribute is mutually exclusive.
-        :param value_type: The type of the value of the attribute.
         """
-        self.name = name.lower()
-        self.mutually_exclusive: bool = mutually_exclusive
-        self.value_type: CategoryValueType = value_type
+        self.name = self.__class__.__name__.lower()
         self.value = value
 
     @property
@@ -184,6 +112,29 @@ class Attribute:
         else:
             return self.value == other.value
 
+    @classmethod
+    def is_possible_value(cls, value: Any) -> bool:
+        if isinstance(value, set):
+            return value.issubset(cls._range)
+        elif isinstance(value, str):
+            return value.capitalize() in cls._range
+        else:
+            return value in cls._range
+
+    @classmethod
+    def is_equivalent(cls, _range: Union[set, Range, Tuple[Union[int, float], Union[int, float]], int, float, str])\
+            -> bool:
+        if isinstance(cls._range, set) and isinstance(_range, set):
+            return _range.issubset(cls._range)
+        elif isinstance(cls._range, set) and isinstance(_range, (Range, tuple)):
+            return False
+        elif isinstance(cls._range, set) and isinstance(_range, (int, float)):
+            return _range in cls._range
+        elif isinstance(cls._range, set) and isinstance(_range, str):
+            return _range.capitalize() in cls._range
+        else:
+            return _range == cls._range
+
     def __hash__(self):
         return hash(self.name)
 
@@ -194,60 +145,182 @@ class Attribute:
         return self.__str__()
 
 
-class Stop(Attribute):
+@dataclass
+class Range:
+    """
+    A range is a pair of values that represents the minimum and maximum values of a numeric category.
+    """
+    min: Union[float, int]
+    max: Union[float, int]
+
+    def __contains__(self, item: Union[float, int]) -> bool:
+        return self.min <= item <= self.max
+
+    def __eq__(self, other: Union[Range, Tuple[Union[float, int], Union[float, int]]]) -> bool:
+        if isinstance(other, tuple):
+            return self.min == other[0] and self.max == other[1]
+        elif isinstance(other, Range):
+            return self.min == other.min and self.max == other.max
+        return False
+
+    def __str__(self) -> str:
+        return f"{self.min} <= x <= {self.max}"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+class Integer(Attribute):
+    """
+    A discrete attribute is an attribute that has a value that is a discrete category.
+    """
+    mutually_exclusive: bool = True
+    value_type = CategoryValueType.Ordinal
+    _range: Range = Range(-float("inf"), float("inf"))
+
+    def __init__(self, value: Any):
+        super().__init__(int(value))
+
+
+class Continuous(Attribute):
+    """
+    A continuous attribute is an attribute that has a value that is a continuous category.
+    """
+    mutually_exclusive: bool = False
+    value_type = CategoryValueType.Continuous
+    _range: Range = Range(-float("inf"), float("inf"))
+
+    def __init__(self, value: Any):
+        super().__init__(float(value))
+
+
+class CategoricalValue(Enum):
+    """
+    A categorical value is a value that is a category.
+    """
+
+    def __eq__(self, other):
+        if isinstance(other, CategoricalValue):
+            return self.name == other.name
+        elif isinstance(other, str):
+            return self.name == other
+        return self.name == other
+
+    def __hash__(self):
+        return hash(self.name)
+
+    @classmethod
+    def __iter__(cls):
+        return iter(cls._value2member_map_)
+
+    @classmethod
+    def from_str(cls, category: str):
+        return cls[category.lower()]
+
+    @classmethod
+    def from_strs(cls, categories: List[str]):
+        return [cls.from_str(c) for c in categories]
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class Categorical(Attribute, ABC):
+    """
+    A categorical attribute is an attribute that has a value that is a category.
+    """
+    mutually_exclusive: bool = False
+    value_type = CategoryValueType.Nominal
+    _range: set
+    Values: Type[CategoricalValue]
+
+    def __init__(self, value: Any):
+        if self.mutually_exclusive and isinstance(value, set):
+            if len(value) > 1:
+                raise ValueError(f"Attribute {self.name} is mutually exclusive and can only have one value.")
+            value = value.pop()
+        if isinstance(value, str):
+            value = self.Values[value.lower()]
+        super().__init__(value)
+
+    @classmethod
+    def from_str(cls, category: str):
+        return cls(cls.Values[category.capitalize()])
+
+    @classmethod
+    def from_strs(cls, categories: List[str]):
+        return [cls.from_str(c) for c in categories]
+
+    @classmethod
+    def add_new_categories(cls, categories: List[str]):
+        for category in categories:
+            cls.add_new_category(category)
+
+    @classmethod
+    def add_new_category(cls, category: str):
+        cls._range.add(category.lower())
+        cls.create_values()
+
+    @classmethod
+    def create_values(cls):
+        cls.Values = CategoricalValue(f"{cls.__name__}Values", {c.lower(): c.lower() for c in cls._range})
+
+
+class Bool(Attribute):
+    """
+    A binary attribute is an attribute that has a value that is a binary category.
+    """
+    mutually_exclusive: bool = True
+    value_type = CategoryValueType.Binary
+    _range: set = {True, False}
+
+    def __init__(self, value: Any):
+        super().__init__(bool(value))
+
+
+class Unary(Attribute):
+    """
+    A unary attribute is an attribute that has a value that is a unary category.
+    """
+    mutually_exclusive: bool = True
+    _range: set
+
+    def __init__(self):
+        super().__init__(self.__class__.__name__)
+
+
+class Stop(Unary):
     """
     A stop category is a special category that represents the stopping of the classification to prevent a wrong
     conclusion from being made.
     """
 
-    def __init__(self):
-        super().__init__(self.__class__.__name__, "null", mutually_exclusive=True,
-                         value_type=CategoryValueType.Unary)
-        
 
-class SpeciesValue(Enum):
-    Mammal = auto()
-    Bird = auto()
-    Reptile = auto()
-    Fish = auto()
-    Amphibian = auto()
-    Insect = auto()
-    Molusc = auto()
-
-    def __str__(self):
-        return self.name.lower()
-
-    @classmethod
-    def from_str(cls, value: str):
-        return cls[value.capitalize()]
-
-    @classmethod
-    def from_strs(cls, values: List[str]):
-        return [cls.from_str(value) for value in values]
-
-
-class Species(Attribute):
+class Species(Categorical):
     """
     A species category is a category that represents the species of an animal.
     """
-    def __init__(self, species: SpeciesValue):
-        super().__init__(self.__class__.__name__, species, mutually_exclusive=True,
-                         value_type=CategoryValueType.Nominal)
+    mutually_exclusive: bool = True
+    _range: set = {"mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"}
+    Values = CategoricalValue("SpeciesValues", {s.lower(): s.lower() for s in _range})
+
+    def __init__(self, species: Species.Values):
+        super().__init__(species)
 
 
-class HabitatValue(Enum):
-    Land = auto()
-    Water = auto()
-    Air = auto()
-
-
-class Habitat(Attribute):
+class Habitat(Categorical):
     """
     A habitat category is a category that represents the habitat of an animal.
     """
-    def __init__(self, habitat: HabitatValue):
-        super().__init__(self.__class__.__name__, habitat, mutually_exclusive=True,
-                         value_type=CategoryValueType.Nominal)
+    mutually_exclusive: bool = False
+    _range: set = {"land", "water", "air"}
+    Values = CategoricalValue("HabitatValues", {s.lower(): s.lower() for s in _range})
+
+    def __init__(self, habitat: Habitat.Values):
+        super().__init__(habitat)
 
 
 class Operator(ABC):
@@ -462,8 +535,8 @@ class Case:
     """
 
     def __init__(self, id_: str, attributes: List[Attribute],
-                 conclusions: Optional[List[Category]] = None,
-                 targets: Optional[List[Category]] = None):
+                 conclusions: Optional[List[Attribute]] = None,
+                 targets: Optional[List[Attribute]] = None):
         """
         Create a case.
 
@@ -473,14 +546,14 @@ class Case:
         """
         self.attributes = Attributes({a.name: a for a in attributes})
         self.id_ = id_
-        self.conclusions: Optional[List[Category]] = conclusions
-        self.targets: Optional[List[Category]] = targets
+        self.conclusions: Optional[List[Attribute]] = conclusions
+        self.targets: Optional[List[Attribute]] = targets
 
-    def remove_attribute_equivalent_to_category(self, category: Category):
+    def remove_attribute_equivalent_to_category(self, category: Attribute):
         if category in self:
             self.remove_attribute_equivalent_to_category_type(type(category))
 
-    def remove_attribute_equivalent_to_category_type(self, category_type: Type[Category]):
+    def remove_attribute_equivalent_to_category_type(self, category_type: Type[Attribute]):
         if category_type in self:
             self.remove_attribute(category_type.__name__)
 
@@ -488,15 +561,12 @@ class Case:
         if attribute_name in self:
             del self.attributes[attribute_name.lower()]
 
-    def add_attributes_from_categories(self, categories: List[Category]):
-        if not categories:
+    def add_attributes(self, attributes: List[Attribute]):
+        if not attributes:
             return
-        categories = categories if isinstance(categories, list) else [categories]
-        for category in categories:
-            self.add_attribute_from_category(category)
-
-    def add_attribute_from_category(self, category: Category):
-        self.add_attribute(Attribute.from_category(category))
+        attributes = attributes if isinstance(attributes, list) else [attributes]
+        for attribute in attributes:
+            self.add_attribute(attribute)
 
     def add_attribute(self, attribute: Attribute):
         if attribute.name in self.attributes:
@@ -528,9 +598,7 @@ class Case:
     def __contains__(self, item):
         if isinstance(item, str):
             return item in self.attributes
-        elif isinstance(item, Category):
-            return Attribute.from_category(item) in self
-        elif isinstance(item, type) and issubclass(item, Category):
+        elif isinstance(item, type) and issubclass(item, Attribute):
             return item.__name__ in self.attributes
         elif isinstance(item, Attribute):
             return item.name in self.attributes and self.attributes[item.name] == item
@@ -540,8 +608,8 @@ class Case:
         return str(s).ljust(sz)
 
     def print_all_names(self, all_names: List[str], max_len: int,
-                        target_types: Optional[List[Type[Category]]] = None,
-                        conclusion_types: Optional[List[Type[Category]]] = None):
+                        target_types: Optional[List[Type[Attribute]]] = None,
+                        conclusion_types: Optional[List[Type[Attribute]]] = None):
         """
         Print all attribute names.
 
@@ -553,10 +621,10 @@ class Case:
         print(self.get_all_names_str(all_names, max_len, target_types, conclusion_types))
 
     def print_values(self, all_names: Optional[List[str]] = None,
-                     targets: Optional[List[Category]] = None,
+                     targets: Optional[List[Attribute]] = None,
                      is_corner_case: bool = False,
                      ljust_sz: int = 15,
-                     conclusions: Optional[List[Category]] = None):
+                     conclusions: Optional[List[Attribute]] = None):
         print(self.get_values_str(all_names, targets, is_corner_case, conclusions, ljust_sz))
 
     def __str__(self):
@@ -566,8 +634,8 @@ class Case:
         return "\n".join([row1, row2])
 
     def get_all_names_str(self, all_names: List[str], max_len: int,
-                            target_types: Optional[List[Type[Category]]] = None,
-                            conclusion_types: Optional[List[Type[Category]]] = None) -> str:
+                            target_types: Optional[List[Type[Attribute]]] = None,
+                            conclusion_types: Optional[List[Type[Attribute]]] = None) -> str:
         """
         Get all attribute names, target names and conclusion names.
 
@@ -581,7 +649,7 @@ class Case:
             conclusion_types = conclusion_types or list(map(type, self.conclusions))
         category_names = []
         if conclusion_types:
-            category_types = conclusion_types or [Category]
+            category_types = conclusion_types or [Attribute]
             category_names = [category_type.__name__.lower() for category_type in category_types]
 
         if target_types or self.targets:
@@ -609,9 +677,9 @@ class Case:
         return all_names, max_len
 
     def get_values_str(self, all_names: Optional[List[str]] = None,
-                          targets: Optional[List[Category]] = None,
+                          targets: Optional[List[Attribute]] = None,
                             is_corner_case: bool = False,
-                            conclusions: Optional[List[Category]] = None,
+                            conclusions: Optional[List[Attribute]] = None,
                        ljust_sz: int = 15) -> str:
         """
         Get the string representation of the values of the case.
@@ -645,21 +713,21 @@ class Case:
                              for name in all_names])
         return case_row
 
-    def get_targets_str(self, targets: Optional[List[Category]] = None, ljust_sz: int = 15) -> str:
+    def get_targets_str(self, targets: Optional[List[Attribute]] = None, ljust_sz: int = 15) -> str:
         """
         Get the string representation of the targets of the case.
         """
         targets = targets if targets else self.targets
         return self._get_categories_str(targets, ljust_sz)
 
-    def get_conclusions_str(self, conclusions: Optional[List[Category]] = None, ljust_sz: int = 15) -> str:
+    def get_conclusions_str(self, conclusions: Optional[List[Attribute]] = None, ljust_sz: int = 15) -> str:
         """
         Get the string representation of the conclusions of the case.
         """
         conclusions = conclusions if conclusions else self.conclusions
         return self._get_categories_str(conclusions, ljust_sz)
 
-    def _get_categories_str(self, categories: List[Category], ljust_sz: int = 15) -> str:
+    def _get_categories_str(self, categories: List[Attribute], ljust_sz: int = 15) -> str:
         """
         Get the string representation of the categories of the case.
         """

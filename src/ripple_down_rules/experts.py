@@ -207,9 +207,7 @@ class Human(Expert):
         category_type = self.get_category_type(cat_name)
         if not category_type:
             category_type = self.create_new_category_type(cat_name)
-            return category_type(cat_name, cat_value)
-        else:
-            return category_type(cat_value)
+        return category_type(cat_value)
 
     @staticmethod
     def get_category_type(cat_name: str) -> Optional[Type[Attribute]]:
@@ -220,10 +218,20 @@ class Human(Expert):
         :return: The category type.
         """
         cat_name = cat_name.capitalize()
-        known_categories = [c.__name__ for c in Attribute.__subclasses__()]
+
+        def get_known_categories(cls: Type[Attribute] = Attribute) -> List[str]:
+            """Get all subclasses of Attribute recursively."""
+            known_categories = []
+            for sub_cls in cls.__subclasses__():
+                known_categories.append(sub_cls)
+                known_categories += get_known_categories(sub_cls)
+            return known_categories
+
+        known_categories = get_known_categories()
+        known_category_names = [cls.__name__ for cls in known_categories]
         category_type = None
-        if cat_name in known_categories:
-            category_type = Attribute.__subclasses__()[known_categories.index(cat_name)]
+        if cat_name in known_category_names:
+            category_type = known_categories[known_category_names.index(cat_name)]
         return category_type
 
     def create_new_category_type(self, cat_name: str) -> Type[Attribute]:

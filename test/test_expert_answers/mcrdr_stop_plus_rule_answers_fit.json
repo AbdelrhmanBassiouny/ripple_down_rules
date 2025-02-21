@@ -1,1 +1,80 @@
-[{"milk": "milk == 1.0"}, {"aquatic": "aquatic == 1.0"}, {"feathers": "feathers == 1.0"}, {"backbone": "backbone == 0.0", "breathes": "breathes == 0.0"}, {"backbone": "backbone == 0.0", "fins": "fins == 0.0"}, {"milk": "milk == 1.0"}, {"feathers": "feathers == 1.0"}, {"eggs": "eggs == 1.0", "breathes": "breathes == 1.0", "backbone": "backbone == 0.0", "milk": "milk == 0.0", "fins": "fins == 0.0", "aquatic": "aquatic == 0.0"}, {"breathes": "breathes == 1.0", "fins": "fins == 0.0"}, {"milk": "milk == 1.0"}, {"backbone": "backbone == 0.0", "aquatic": "aquatic == 0.0"}, {"feathers": "feathers == 1.0"}, {"tail": "tail == 1.0"}, {"milk": "milk == 1.0"}, {"feathers": "feathers == 1.0"}, {"backbone": "backbone == 0.0"}, {"aquatic": "aquatic == 1.0", "breathes": "breathes == 0.0", "fins": "fins == 1.0"}, {"fins": "fins == 0.0"}, {"legs": "legs == 0.0"}, {"tail": "tail == 0.0"}, {"backbone": "backbone == 0.0", "breathes": "breathes == 1.0", "fins": "fins == 0.0", "feathers": "feathers == 0.0", "milk": "milk == 0.0"}]
+[
+  {
+    "milk": "milk == 1.0"
+  },
+  {
+    "aquatic": "aquatic == 1.0"
+  },
+  {
+    "feathers": "feathers == 1.0"
+  },
+  {
+    "backbone": "backbone == 0.0",
+    "breathes": "breathes == 0.0"
+  },
+  {
+    "backbone": "backbone == 0.0",
+    "fins": "fins == 0.0"
+  },
+  {
+    "milk": "milk == 1.0"
+  },
+  {
+    "feathers": "feathers == 1.0"
+  },
+  {
+    "eggs": "eggs == 1.0",
+    "breathes": "breathes == 1.0",
+    "backbone": "backbone == 0.0",
+    "milk": "milk == 0.0",
+    "fins": "fins == 0.0",
+    "aquatic": "aquatic == 0.0"
+  },
+  {
+    "breathes": "breathes == 1.0",
+    "fins": "fins == 0.0"
+  },
+  {
+    "milk": "milk == 1.0"
+  },
+  {
+    "backbone": "backbone == 0.0",
+    "aquatic": "aquatic == 0.0"
+  },
+  {
+    "feathers": "feathers == 1.0"
+  },
+  {
+    "tail": "tail == 1.0"
+  },
+  {
+    "milk": "milk == 1.0"
+  },
+  {
+    "feathers": "feathers == 1.0"
+  },
+  {
+    "backbone": "backbone == 0.0"
+  },
+  {
+    "aquatic": "aquatic == 1.0",
+    "breathes": "breathes == 0.0",
+    "fins": "fins == 1.0"
+  },
+  {
+    "fins": "fins == 0.0"
+  },
+  {
+    "legs": "legs == 0.0"
+  },
+  {
+    "tail": "tail == 0.0"
+  },
+  {
+    "backbone": "backbone == 0.0",
+    "breathes": "breathes == 1.0",
+    "fins": "fins == 0.0",
+    "feathers": "feathers == 0.0",
+    "milk": "milk == 0.0"
+  }
+]

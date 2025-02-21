@@ -474,13 +474,13 @@ class GeneralRDR(RippleDownRules):
             for cat_type, rdr in self.start_rules_dict.items():
                 if cat_type in x_cp:
                     continue
-                pred_cats = rdr.classify(x_cp)
-                pred_cats = pred_cats if isinstance(pred_cats, list) else [pred_cats]
-                if pred_cats:
+                pred_atts = rdr.classify(x_cp)
+                if pred_atts:
+                    pred_atts = pred_atts if isinstance(pred_atts, list) else [pred_atts]
                     added_attributes = True
-                    for pred_cat in pred_cats:
-                        x_cp.add_attribute_from_category(pred_cat)
-                        conclusions.append(pred_cat)
+                    for pred_att in pred_atts:
+                        x_cp.add_attribute(pred_att)
+                        conclusions.append(pred_att)
             if not added_attributes:
                 break
         return list(OrderedSet(conclusions))
@@ -504,18 +504,18 @@ class GeneralRDR(RippleDownRules):
             x_cp = copy(x)
             if type(t) not in self.start_rules_dict:
                 conclusions = self.classify(x)
-                x_cp.add_attributes_from_categories(conclusions)
+                x_cp.add_attributes(conclusions)
                 new_rdr = SingleClassRDR() if type(t).mutually_exclusive else MultiClassRDR()
                 new_conclusions = new_rdr.fit_case(x_cp, t, expert, **kwargs)
                 self.start_rules_dict[type(t)] = new_rdr
-                x_cp.add_attributes_from_categories(new_conclusions)
+                x_cp.add_attributes(new_conclusions)
             elif type(t) not in x_cp:
                 for rdr_type, rdr in self.start_rules_dict.items():
                     if type(t) != rdr_type:
                         conclusions = rdr.classify(x_cp)
                     else:
                         conclusions = self.start_rules_dict[type(t)].fit_case(x_cp, t, expert, **kwargs)
-                    x_cp.add_attributes_from_categories(conclusions)
+                    x_cp.add_attributes(conclusions)
 
         return self.classify(x)
 
