@@ -55,9 +55,17 @@ class Category:
     mutually_exclusive: bool = False
 
     def __init__(self, value: Any):
+        self.value = value
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, value: Any):
         if not self.mutually_exclusive and not isinstance(value, set):
             value = {value}
-        self.value = value
+        self._value = value
 
     def __eq__(self, other):
         if not isinstance(other, Category):
