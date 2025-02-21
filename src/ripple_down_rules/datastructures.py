@@ -115,14 +115,7 @@ class Attribute:
 
     @classmethod
     def from_category(cls, category: Category) -> Attribute:
-        if not category.mutually_exclusive:
-            if not hasattr(category.value, "__iter__") or isinstance(category.value, str):
-                value = {category.value}
-            else:
-                value = set(category.value)
-        else:
-            value = category.value
-        return cls(type(category).__name__, value)
+        return cls(type(category).__name__, category.value)
 
     def __eq__(self, other: Attribute):
         if not isinstance(other, Attribute):
