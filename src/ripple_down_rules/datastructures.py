@@ -98,6 +98,10 @@ class Attribute:
     def value(self, value: Any):
         if not self.mutually_exclusive and not isinstance(value, set):
             value = {value}
+        elif self.mutually_exclusive and isinstance(value, set):
+            if len(value) > 1:
+                raise ValueError(f"Attribute {self.name} is mutually exclusive and can only have one value.")
+            value = value.pop()
         self._value = value
 
     def __eq__(self, other: Attribute):
@@ -237,14 +241,18 @@ class Categorical(Attribute, ABC):
     _range: set
     Values: Type[CategoricalValue]
 
+    def __init_subclass__(cls, **kwargs):
+        """
+        Create the Values enum class for the categorical attribute, this enum class contains all the possible values
+        of the attribute.
+        Note: This method is called when a subclass of Categorical is created (not when an instance is created).
+        """
+        cls.create_values()
+
     def __init__(self, value: Any):
-        if self.mutually_exclusive and isinstance(value, set):
-            if len(value) > 1:
-                raise ValueError(f"Attribute {self.name} is mutually exclusive and can only have one value.")
-            value = value.pop()
-        if isinstance(value, str):
-            value = self.Values[value.lower()]
         super().__init__(value)
+        if isinstance(value, str):
+            self.value = self.Values[value.lower()]
 
     @classmethod
     def from_str(cls, category: str):
@@ -286,6 +294,7 @@ class Unary(Attribute):
     A unary attribute is an attribute that has a value that is a unary category.
     """
     mutually_exclusive: bool = True
+    value_type = CategoryValueType.Unary
     _range: set
 
     def __init__(self):
@@ -304,8 +313,8 @@ class Species(Categorical):
     A species category is a category that represents the species of an animal.
     """
     mutually_exclusive: bool = True
+    value_type = CategoryValueType.Nominal
     _range: set = {"mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"}
-    Values = CategoricalValue("SpeciesValues", {s.lower(): s.lower() for s in _range})
 
     def __init__(self, species: Species.Values):
         super().__init__(species)
@@ -317,7 +326,6 @@ class Habitat(Categorical):
     """
     mutually_exclusive: bool = False
     _range: set = {"land", "water", "air"}
-    Values = CategoricalValue("HabitatValues", {s.lower(): s.lower() for s in _range})
 
     def __init__(self, habitat: Habitat.Values):
         super().__init__(habitat)
