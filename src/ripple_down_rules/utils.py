@@ -4,7 +4,32 @@ import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from typing_extensions import Callable
+from typing_extensions import Callable, Set, Any
+
+
+def make_set(value: Any) -> Set:
+    """
+    Make a set from a value.
+
+    :param value: The value to make a set from.
+    """
+    if hasattr(value, "__iter__") and not isinstance(value, str):
+        return set(value)
+    return {value}
+
+
+def make_value_or_raise_error(value: Any) -> Any:
+    """
+    Make a value or raise an error if the value is not a single value.
+
+    :param value: The value to check.
+    """
+    if hasattr(value, "__iter__") and not isinstance(value, str):
+        if hasattr(value, "__len__") and len(value) == 1:
+            return list(value)[0]
+        else:
+            raise ValueError(f"Expected a single value, got {value}")
+    return value
 
 
 def tree_to_graph(root_node: Node) -> nx.DiGraph:

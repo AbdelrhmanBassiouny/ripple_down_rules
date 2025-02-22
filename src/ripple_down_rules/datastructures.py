@@ -8,6 +8,7 @@ from orderedset import OrderedSet
 from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type, Union, Sequence
 
 from .failures import InvalidOperator
+from .utils import make_set, make_value_or_raise_error
 
 
 class MCRDRMode(Enum):
@@ -96,13 +97,10 @@ class Attribute:
 
     @value.setter
     def value(self, value: Any):
-        if not self.mutually_exclusive and not isinstance(value, set):
-            value = {value}
-        elif self.mutually_exclusive and isinstance(value, set):
-            if len(value) > 1:
-                raise ValueError(f"Attribute {self.name} is mutually exclusive and can only have one value.")
-            value = value.pop()
-        self._value = value
+        if not self.mutually_exclusive:
+            self._value = make_set(value)
+        elif self.mutually_exclusive:
+            self._value = make_value_or_raise_error(value)
 
     def __eq__(self, other: Attribute):
         if not isinstance(other, Attribute):
@@ -138,7 +136,7 @@ class Attribute:
             else:
                 return _range in cls._range
         else:
-            return _range == cls._range
+            return _range in cls._range
 
     def __hash__(self):
         return hash(self.name)
@@ -172,7 +170,7 @@ class Range:
     Whether the maximum value is included in the range.
     """
 
-    def __contains__(self, item: Union[float, int, Sequence[Union[float, int]]]) -> bool:
+    def __contains__(self, item: Union[float, int, Sequence[Union[float, int]], Range]) -> bool:
         """
         Check if a value or an iterable of values are within the range.
 
@@ -182,6 +180,8 @@ class Range:
             raise ValueError(f"Item {item} contains non-numeric values.")
         elif hasattr(item, "__iter__"):
             return min(item) in self and max(item) in self
+        elif isinstance(item, Range):
+            return self == item
         else:
             return self.is_numeric_value_in_range(item)
 
@@ -206,6 +206,8 @@ class Range:
             return False
         elif hasattr(value, "__iter__"):
             return all(isinstance(i, (float, int)) for i in value)
+        elif isinstance(value, Range):
+            return value.is_numeric(value.min) and value.is_numeric(value.max)
         else:
             return isinstance(value, (float, int))
 
@@ -231,7 +233,7 @@ class Integer(Attribute):
     """
     mutually_exclusive: bool = True
     value_type = CategoryValueType.Ordinal
-    _range: Range = Range(-float("inf"), float("inf"))
+    _range: Range = Range(-float("inf"), float("inf"), min_closed=False, max_closed=False)
 
     def __init__(self, value: Any):
         super().__init__(int(value))
@@ -243,7 +245,7 @@ class Continuous(Attribute):
     """
     mutually_exclusive: bool = False
     value_type = CategoryValueType.Continuous
-    _range: Range = Range(-float("inf"), float("inf"))
+    _range: Range = Range(-float("inf"), float("inf"), min_closed=False, max_closed=False)
 
     def __init__(self, value: Any):
         super().__init__(float(value))
@@ -265,8 +267,8 @@ class CategoricalValue(Enum):
         return hash(self.name)
 
     @classmethod
-    def __iter__(cls):
-        return iter(cls._value2member_map_)
+    def to_list(cls):
+        return list(cls._value2member_map_.values())
 
     @classmethod
     def from_str(cls, category: str):
