@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Set
 
 from .datastructures import str_to_operator_fn, Condition, Case, Attribute, Operator
 from .failures import InvalidOperator
+from .utils import make_set, make_value_or_raise_error, get_all_subclasses
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -26,6 +27,10 @@ class Expert(ABC):
     use_loaded_answers: bool = False
     """
     A flag to indicate if the expert should use loaded answers or not.
+    """
+    known_categories: Optional[Dict[str, Type[Attribute]]] = None
+    """
+    The known categories (i.e. Attribute types) to use.
     """
 
     @abstractmethod
@@ -115,7 +120,7 @@ class Human(Expert):
         all_names, max_len = x.get_all_names_and_max_len(all_attributes)
 
         if not self.use_loaded_answers:
-            x.print_all_names(all_names, max_len, target_types=list(map(type, targets)))
+            max_len = x.print_all_names(all_names, max_len, target_types=list(map(type, targets)))
 
             if last_evaluated_rule and last_evaluated_rule.fired:
                 last_evaluated_rule.corner_case.print_values(all_names, is_corner_case=True,
@@ -154,7 +159,7 @@ class Human(Expert):
         conclusion_types = list(map(type, current_conclusions)) if current_conclusions else None
         all_names, max_len = x.get_all_names_and_max_len()
         if not self.use_loaded_answers:
-            x.print_all_names(all_names, max_len, conclusion_types=conclusion_types)
+            max_len = x.print_all_names(all_names, max_len, conclusion_types=conclusion_types)
             x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
         while True:
             if not self.use_loaded_answers:
@@ -185,18 +190,18 @@ class Human(Expert):
             cat_name = "".join([w.capitalize() for w in value.split()])
             if not all(char.isalpha() for char in cat_name):
                 raise ValueError(f"Attribute name {cat_name} should only contain alphabets")
-            category = Attribute(cat_name)
+            cat_value = True
         else:
             cat_name_value = value.split(":")
             cat_name = cat_name_value[0].strip(' "')
             if len(cat_name_value) == 2:
                 cat_value = self.parse_value(cat_name_value[1])
-                category = self.create_category_instance(cat_name, cat_value)
             else:
                 raise ValueError(f"Input format \"{value}\" is not correct")
+        category = self.create_category_instance(cat_name, cat_value)
         return category
 
-    def create_category_instance(self, cat_name: str, cat_value: str) -> Attribute:
+    def create_category_instance(self, cat_name: str, cat_value: Union[str, int, float, set]) -> Attribute:
         """
         Create a new category instance.
 
@@ -206,54 +211,46 @@ class Human(Expert):
         """
         category_type = self.get_category_type(cat_name)
         if not category_type:
-            category_type = self.create_new_category_type(cat_name)
+            category_type = self.create_new_category_type(cat_name, cat_value)
         return category_type(cat_value)
 
-    @staticmethod
-    def get_category_type(cat_name: str) -> Optional[Type[Attribute]]:
+    def get_category_type(self, cat_name: str) -> Optional[Type[Attribute]]:
         """
         Get the category type from the known categories.
 
         :param cat_name: The name of the category.
         :return: The category type.
         """
-        cat_name = cat_name.capitalize()
-
-        def get_known_categories(cls: Type[Attribute] = Attribute) -> List[str]:
-            """Get all subclasses of Attribute recursively."""
-            known_categories = []
-            for sub_cls in cls.__subclasses__():
-                known_categories.append(sub_cls)
-                known_categories += get_known_categories(sub_cls)
-            return known_categories
-
-        known_categories = get_known_categories()
-        known_category_names = [cls.__name__ for cls in known_categories]
+        cat_name = cat_name.lower()
+        self.known_categories = get_all_subclasses(Attribute) if not self.known_categories else self.known_categories
+        self.known_categories.update(Attribute._registry)
         category_type = None
-        if cat_name in known_category_names:
-            category_type = known_categories[known_category_names.index(cat_name)]
+        if cat_name in self.known_categories:
+            category_type = self.known_categories[cat_name]
         return category_type
 
-    def create_new_category_type(self, cat_name: str) -> Type[Attribute]:
+    def create_new_category_type(self, cat_name: str, cat_value: Union[str, int, float, set]) -> Type[Attribute]:
         """
         Create a new category type.
 
         :param cat_name: The name of the category.
+        :param cat_value: The value of the category.
         :return: A new category type.
         """
         category_type: Type[Attribute] = type(cat_name, (Attribute,), {})
-        if self.ask_if_category_is_mutually_exclusive(category_type):
+        if self.ask_if_category_is_mutually_exclusive(category_type.__name__):
             category_type.mutually_exclusive = True
+        Attribute.register(category_type)
         return category_type
 
-    def ask_if_category_is_mutually_exclusive(self, category: Type[Attribute]) -> bool:
+    def ask_if_category_is_mutually_exclusive(self, category_name: str) -> bool:
         """
         Ask the expert if the new category can have multiple values.
 
-        :param category: The category to check.
+        :param category_name: The name of the category to ask about.
         """
-        question = f"Can a case have multiple values of the new category {category.__name__}? (y/n):"
-        return self.ask_yes_no_question(question)
+        question = f"Can a case have multiple values of the new category {category_name}? (y/n):"
+        return not self.ask_yes_no_question(question)
 
     def ask_if_conclusion_is_correct(self, x: Case, conclusion: Attribute,
                                      targets: Optional[List[Attribute]] = None,
@@ -272,7 +269,7 @@ class Human(Expert):
             targets = targets if isinstance(targets, list) else [targets]
             x.conclusions = current_conclusions
             x.targets = targets
-            question = f"Is the conclusion {conclusion.value} correct for the case (y/n):" \
+            question = f"Is the conclusion {conclusion} correct for the case (y/n):" \
                        f"\n{str(x)}"
         return self.ask_yes_no_question(question)
 
@@ -343,7 +340,7 @@ class Human(Expert):
             rule_conditions[name] = Condition(name, parsed_value, operator)
         return rule_conditions, messages
 
-    def parse_value(self, value: str) -> Union[str, float, set]:
+    def parse_value(self, value: str) -> Union[str, int, float, set]:
         """
         Parse the value from the user input.
 
@@ -353,13 +350,13 @@ class Human(Expert):
         if self.is_set(value):
             set_values = value[1:-1].split(",")
             for i, val in enumerate(set_values):
-                set_values[i] = self.parse_string_or_float(val)
+                set_values[i] = self.parse_string_int_or_float(val)
             parsed_value = set(set_values)
         else:
-            parsed_value = self.parse_string_or_float(value)
+            parsed_value = self.parse_string_int_or_float(value)
         return parsed_value
 
-    def parse_string_or_float(self, val: str) -> Union[str, float]:
+    def parse_string_int_or_float(self, val: str) -> Union[str, int, float]:
         """
         Parse the value to a string or a float.
 
@@ -368,6 +365,8 @@ class Human(Expert):
         """
         if self.is_string(val):
             return val.strip(' "' + "'")
+        elif val.isdigit():
+            return int(val)
         elif self.is_float(val):
             return float(val)
         return val

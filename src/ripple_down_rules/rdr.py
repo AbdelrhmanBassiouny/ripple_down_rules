@@ -505,7 +505,7 @@ class GeneralRDR(RippleDownRules):
             if type(t) not in self.start_rules_dict:
                 conclusions = self.classify(x)
                 x_cp.add_attributes(conclusions)
-                new_rdr = SingleClassRDR() if type(t).mutually_exclusive else MultiClassRDR()
+                new_rdr = SingleClassRDR() if t.mutually_exclusive else MultiClassRDR()
                 new_conclusions = new_rdr.fit_case(x_cp, t, expert, **kwargs)
                 self.start_rules_dict[type(t)] = new_rdr
                 x_cp.add_attributes(new_conclusions)

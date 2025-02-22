@@ -5,10 +5,11 @@ from unittest import TestCase
 from typing_extensions import List, Optional
 
 from ripple_down_rules.datasets import load_zoo_dataset
-from ripple_down_rules.datastructures import Case, str_to_operator_fn, Condition, MCRDRMode, Habitat, Attribute
+from ripple_down_rules.datastructures import Case, str_to_operator_fn, Condition, MCRDRMode, Habitat, Attribute, \
+    Attributes
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import render_tree
+from ripple_down_rules.utils import render_tree, import_class
 
 
 class TestRDR(TestCase):
@@ -27,7 +28,7 @@ class TestRDR(TestCase):
     def test_setup(self):
         self.assertEqual(len(self.all_cases), 101)
         self.assertTrue(all([len(c.attributes) == 16 for c in self.all_cases]))
-        self.assertTrue(all([isinstance(c.attributes, dict) for c in self.all_cases]))
+        self.assertTrue(all([isinstance(c.attributes, Attributes) for c in self.all_cases]))
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -163,8 +164,8 @@ class TestRDR(TestCase):
                               add_extra_conclusions=True, expert=expert)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_extra_classify")
-
-        self.assertEqual(cats, [self.targets[50], Attribute("LivesOnlyOnLand")])
+        LivesOnlyOnLand = Attribute.get_subclass("LivesOnlyOnLand")
+        self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
 
         if save_answers:
             cwd = os.getcwd()
@@ -178,7 +179,7 @@ class TestRDR(TestCase):
         expert = MCRDRTester()
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, self.targets,
-                  add_extra_conclusions=False, expert=expert, animate_tree=draw_tree)
+                  add_extra_conclusions=False, expert=expert, animate_tree=False)
         expert = Human(use_loaded_answers=use_loaded_answers)
         file_name = self.expert_answers_dir + "/mcrdr_extra_expert_answers_fit"
         if use_loaded_answers:
@@ -186,7 +187,8 @@ class TestRDR(TestCase):
         mcrdr.fit(self.all_cases, self.targets,
                   add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
         cats = mcrdr.classify(self.all_cases[50])
-        self.assertEqual(cats, [self.targets[50], Attribute("LivesOnlyOnLand")])
+        LivesOnlyOnLand = Attribute.get_subclass("LivesOnlyOnLand")
+        self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_extra")
         if save_answers:

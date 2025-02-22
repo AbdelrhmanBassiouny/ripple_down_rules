@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
+import os
 from abc import abstractmethod, ABC
+from collections import UserDict
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -8,7 +11,7 @@ from orderedset import OrderedSet
 from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type, Union, Sequence
 
 from .failures import InvalidOperator
-from .utils import make_set, make_value_or_raise_error
+from .utils import make_set, make_value_or_raise_error, import_class
 
 
 class MCRDRMode(Enum):
@@ -73,14 +76,65 @@ class CategoryValueType(Enum):
     """
 
 
-class Attribute:
+class Attribute(ABC):
     """
     An attribute is a name-value pair that represents a feature of a case.
     an attribute can be used to compare two cases, to make a conclusion (which is also an attribute) about a case.
     """
     mutually_exclusive: bool = False
+    """
+    Whether the attribute is mutually exclusive, this means that the attribute instance can only have one value.
+    """
     value_type: CategoryValueType = CategoryValueType.Nominal
+    """
+    The type of the value of the attribute.
+    """
     _range: Union[set, Range]
+    """
+    The range of the attribute, this can be a set of possible values or a range of numeric values (int, float).
+    """
+
+    _registry: Dict[str, Type[Attribute]] = {}
+    """
+    A dictionary of all dynamically created subclasses of the attribute class.
+    """
+
+    @classmethod
+    def register(cls, subclass: Type[Attribute]):
+        """
+        Register a subclass of the attribute class, this is used to be able to dynamically create Attribute subclasses.
+
+        :param subclass: The subclass to register.
+        """
+        if not issubclass(subclass, Attribute):
+            raise ValueError(f"{subclass} is not a subclass of Attribute.")
+        # Add the subclass to the registry if it is not already in the registry.
+        if subclass not in cls._registry:
+            cls._registry[subclass.__name__.lower()] = subclass
+        else:
+            raise ValueError(f"{subclass} is already registered.")
+
+    @classmethod
+    def get_subclass(cls, name: str) -> Type[Attribute]:
+        """
+        Get a subclass of the attribute class by name.
+
+        :param name: The name of the subclass.
+        :return: The subclass.
+        """
+        if ' ' in name or '_' in name:
+            name = name.capitalize().strip(' _')
+
+        if name.lower() in cls._registry:
+            return cls._registry[name.lower()]
+        raise ValueError(f"No subclass with name {name}.")
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        Set the name of the attribute class to the name of the class in lowercase.
+        """
+        super().__init_subclass__(**kwargs)
+        cls.name = cls.__name__.lower()
 
     def __init__(self, value: Any):
         """
@@ -88,7 +142,6 @@ class Attribute:
 
         :param value: The value of the attribute.
         """
-        self.name = self.__class__.__name__.lower()
         self.value = value
 
     @property
@@ -122,7 +175,7 @@ class Attribute:
             return value in cls._range
 
     @classmethod
-    def is_within_range(cls, _range: Union[set, Range, Any])\
+    def is_within_range(cls, _range: Union[set, Range, Any]) \
             -> bool:
         if isinstance(cls._range, set):
             if hasattr(_range, "__iter__") and not isinstance(_range, str):
@@ -298,9 +351,10 @@ class Categorical(Attribute, ABC):
         of the attribute.
         Note: This method is called when a subclass of Categorical is created (not when an instance is created).
         """
+        super().__init_subclass__(**kwargs)
         cls.create_values()
 
-    def __init__(self, value: Any):
+    def __init__(self, value: Union[Categorical.Values, str]):
         super().__init__(value)
         if isinstance(value, str):
             self.value = self.Values[value.lower()]
@@ -367,7 +421,7 @@ class Species(Categorical):
     value_type = CategoryValueType.Nominal
     _range: set = {"mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"}
 
-    def __init__(self, species: Species.Values):
+    def __init__(self, species: Union[Species.Values, str]):
         super().__init__(species)
 
 
@@ -379,7 +433,7 @@ class Habitat(Categorical):
     value_type = CategoryValueType.Nominal
     _range: set = {"land", "water", "air"}
 
-    def __init__(self, habitat: Habitat.Values):
+    def __init__(self, habitat: Union[Habitat.Values, str]):
         super().__init__(habitat)
 
 
@@ -508,7 +562,7 @@ def str_to_operator_fn(rule_str: str) -> Tuple[Optional[str], Optional[str], Opt
 
 class Condition:
     """
-    A condition is a constraint on an attribute that must be satisfied for a case to be classified into a category.
+    A condition is a constraint on an attribute that must be satisfied for a case to be classified.
     """
 
     def __init__(self, name: str, value: Any, operator: Operator):
@@ -555,24 +609,27 @@ class Condition:
         return self.__str__()
 
 
-class Attributes(dict):
+class Attributes(UserDict):
     """
-    A collection of attributes that represents a set of constraints on a case.
+    A collection of attributes that represents a set of constraints on a case. This is a dictionary where the keys are
+    the names of the attributes and the values are the attributes. All are stored in lower case.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        self.update(*args, **kwargs)
+    def __getitem__(self, item: Union[str, Attribute]) -> Attribute:
+        if isinstance(item, Attribute):
+            return self[item.name]
+        else:
+            return super().__getitem__(item.lower())
 
-    def update(self, *args, **kwargs):
-        for k, v in dict(*args, **kwargs).items():
-            self[k.lower()] = v
-
-    def __getitem__(self, item):
-        return super().__getitem__(item.lower())
-
-    def __setitem__(self, key, value):
-        super().__setitem__(key.lower(), value)
+    def __setitem__(self, name: str, value: Attribute):
+        name = name.lower()
+        if name in self:
+            if not value.mutually_exclusive:
+                self[name].value.update(value)
+            else:
+                raise ValueError(f"Attribute {name} already exists in the case and is mutually exclusive.")
+        else:
+            super().__setitem__(name, value)
 
     def __contains__(self, item):
         return super().__contains__(item.lower())
@@ -590,8 +647,8 @@ class Attributes(dict):
 
 class Case:
     """
-    A case is a collection of attributes that represents an instance that can be classified into a category or
-    multiple categories.
+    A case is a collection of attributes that represents an instance that can be classified by inferring new attributes
+    or additional attribute values for the case.
     """
 
     def __init__(self, id_: str, attributes: List[Attribute],
@@ -609,17 +666,9 @@ class Case:
         self.conclusions: Optional[List[Attribute]] = conclusions
         self.targets: Optional[List[Attribute]] = targets
 
-    def remove_attribute_equivalent_to_category(self, category: Attribute):
-        if category in self:
-            self.remove_attribute_equivalent_to_category_type(type(category))
-
-    def remove_attribute_equivalent_to_category_type(self, category_type: Type[Attribute]):
-        if category_type in self:
-            self.remove_attribute(category_type.__name__)
-
     def remove_attribute(self, attribute_name: str):
         if attribute_name in self:
-            del self.attributes[attribute_name.lower()]
+            del self.attributes[attribute_name]
 
     def add_attributes(self, attributes: List[Attribute]):
         if not attributes:
@@ -629,13 +678,7 @@ class Case:
             self.add_attribute(attribute)
 
     def add_attribute(self, attribute: Attribute):
-        if attribute.name in self.attributes:
-            if isinstance(attribute.value, set):
-                self.attributes[attribute.name].value.update(attribute.value)
-            else:
-                raise ValueError(f"Attribute {attribute.name} already exists in the case.")
-        else:
-            self.attributes[attribute.name] = attribute
+        self.attributes[attribute.name] = attribute
 
     @property
     def attribute_values(self):
@@ -648,8 +691,8 @@ class Case:
     def __eq__(self, other):
         return self.attributes == other.attributes
 
-    def __getitem__(self, attribute_name):
-        return self.attributes.get(attribute_name.lower(), None)
+    def __getitem__(self, attribute_or_attribute_name: Union[str, Attribute]) -> Attribute:
+        return self.attributes.get(attribute_or_attribute_name, None)
 
     def __sub__(self, other):
         return {k: self.attributes[k] for k in self.attributes
@@ -669,7 +712,7 @@ class Case:
 
     def print_all_names(self, all_names: List[str], max_len: int,
                         target_types: Optional[List[Type[Attribute]]] = None,
-                        conclusion_types: Optional[List[Type[Attribute]]] = None):
+                        conclusion_types: Optional[List[Type[Attribute]]] = None) -> int:
         """
         Print all attribute names.
 
@@ -677,8 +720,11 @@ class Case:
         :param max_len: maximum length.
         :param target_types: list of target types.
         :param conclusion_types: list of category types.
+        :return: maximum length.
         """
-        print(self.get_all_names_str(all_names, max_len, target_types, conclusion_types))
+        all_names_str, max_len = self.get_all_names_str(all_names, max_len, target_types, conclusion_types)
+        print(all_names_str)
+        return max_len
 
     def print_values(self, all_names: Optional[List[str]] = None,
                      targets: Optional[List[Attribute]] = None,
@@ -689,13 +735,13 @@ class Case:
 
     def __str__(self):
         names, ljust = self.get_all_names_and_max_len()
-        row1 = self.get_all_names_str(names, ljust)
+        row1, ljust = self.get_all_names_str(names, ljust)
         row2 = self.get_values_str(names, ljust_sz=ljust)
         return "\n".join([row1, row2])
 
     def get_all_names_str(self, all_names: List[str], max_len: int,
-                            target_types: Optional[List[Type[Attribute]]] = None,
-                            conclusion_types: Optional[List[Type[Attribute]]] = None) -> str:
+                          target_types: Optional[List[Type[Attribute]]] = None,
+                          conclusion_types: Optional[List[Type[Attribute]]] = None) -> Tuple[str, int]:
         """
         Get all attribute names, target names and conclusion names.
 
@@ -703,7 +749,7 @@ class Case:
         :param max_len: maximum length.
         :param target_types: list of target types.
         :param conclusion_types: list of category types.
-        :return: string of names.
+        :return: string of names, maximum length.
         """
         if conclusion_types or self.conclusions:
             conclusion_types = conclusion_types or list(map(type, self.conclusions))
@@ -718,10 +764,11 @@ class Case:
         if target_types:
             target_names = [f"target_{target_type.__name__.lower()}" for target_type in target_types]
 
-        names_row = self.ljust(f"names: ", sz=max_len)
-        names_row += self.ljust("ID", sz=max_len)
-        names_row += "".join([f"{self.ljust(name, sz=max_len)}" for name in all_names + category_names + target_names])
-        return names_row
+        curr_max_len = max(max_len, max([len(name) for name in all_names + category_names + target_names])+2)
+        names_row = self.ljust(f"names: ", sz=curr_max_len)
+        names_row += self.ljust("ID", sz=curr_max_len)
+        names_row += "".join([f"{self.ljust(name, sz=curr_max_len)}" for name in all_names + category_names + target_names])
+        return names_row, curr_max_len
 
     def get_all_names_and_max_len(self, all_attributes: Optional[List[Attribute]] = None) -> Tuple[List[str], int]:
         """
@@ -737,9 +784,9 @@ class Case:
         return all_names, max_len
 
     def get_values_str(self, all_names: Optional[List[str]] = None,
-                          targets: Optional[List[Attribute]] = None,
-                            is_corner_case: bool = False,
-                            conclusions: Optional[List[Attribute]] = None,
+                       targets: Optional[List[Attribute]] = None,
+                       is_corner_case: bool = False,
+                       conclusions: Optional[List[Attribute]] = None,
                        ljust_sz: int = 15) -> str:
         """
         Get the string representation of the values of the case.
@@ -749,8 +796,8 @@ class Case:
         if targets:
             targets = targets if isinstance(targets, list) else [targets]
         case_row = self.get_id_and_attribute_values_str(all_names, is_corner_case, ljust_sz)
-        case_row += self.get_targets_str(targets, ljust_sz)
         case_row += self.get_conclusions_str(conclusions, ljust_sz)
+        case_row += self.get_targets_str(targets, ljust_sz)
         return case_row
 
     def get_id_and_attribute_values_str(self, all_names: Optional[List[str]] = None,
@@ -794,7 +841,7 @@ class Case:
         if not categories:
             return ""
         categories_str = [self.ljust(c.value, sz=ljust_sz) for c in categories]
-        return ",".join(categories_str) if len(categories_str) > 1 else categories_str[0]
+        return "".join(categories_str) if len(categories_str) > 1 else categories_str[0]
 
     def __repr__(self):
         return self.__str__()

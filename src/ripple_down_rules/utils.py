@@ -1,10 +1,39 @@
 import logging
 
+import importlib.util
+import os
+
 import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from typing_extensions import Callable, Set, Any
+from typing_extensions import Callable, Set, Any, Type, List, Dict
+
+
+def get_all_subclasses(cls: Type) -> Dict[str, Type]:
+    """
+    Get all subclasses of Attribute recursively.
+
+    :param cls: The class to get the subclasses of.
+    :return: A dictionary of all subclasses.
+    """
+    all_subclasses: Dict[str, Type] = {}
+    for sub_cls in cls.__subclasses__():
+        all_subclasses[sub_cls.__name__.lower()] = sub_cls
+        all_subclasses.update(get_all_subclasses(sub_cls))
+    return all_subclasses
+
+
+def import_class(class_name: str, file_path: str = "dynamically_created_attributes.py"):
+    module_name = os.path.splitext(file_path)[0]
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    # Access the class from the module
+    new_class = getattr(module, class_name)
+    print(f"Class {class_name} imported dynamically.")
+    return new_class
 
 
 def make_set(value: Any) -> Set:
@@ -101,7 +130,6 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
         print(f"{pre}{node.weight or ''} {node.__str__(sep='')}")
     if use_dot_exporter:
         unique_node_names = get_unique_node_names_func(root)
-
 
         de = DotExporter(root,
                          nodenamefunc=unique_node_names,

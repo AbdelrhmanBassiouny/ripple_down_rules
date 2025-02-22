@@ -1,1 +1,1 @@
-["lives only on land", "aquatic==0,airborne==0", "", "y", "", "lives only in water", "aquatic==1,fins==1,feathers==0,airborne==0", "", "y", "", "y", "", "y", "", "y", "", "y", "", "y", "", "y", ""]
+["lives only on land", "n", "aquatic==0,airborne==0", "", "y", "", "lives only in water", "n", "aquatic==1,fins==1", "", "y", "", "y", "", "y", "", "y", "", "y", "", "y", "", "y", ""]
