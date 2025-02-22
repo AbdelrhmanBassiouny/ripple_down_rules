@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from orderedset import OrderedSet
-from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type, Union
+from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type, Union, Sequence
 
 from .failures import InvalidOperator
 
@@ -110,32 +110,33 @@ class Attribute:
         if self.name != other.name:
             return False
         if isinstance(self.value, set) and not isinstance(other.value, set):
-            return other.value in self.value
-        elif isinstance(self.value, set) and isinstance(other.value, set):
-            return other.value.issubset(self.value)
+            if hasattr(other.value, "__iter__") and not isinstance(other.value, str):
+                return self.value == set(other.value)
+            return self.value == {other.value}
         else:
             return self.value == other.value
 
     @classmethod
     def is_possible_value(cls, value: Any) -> bool:
-        if isinstance(value, set):
-            return value.issubset(cls._range)
+        if hasattr(value, "__iter__") and not isinstance(value, str):
+            return set(value).issubset(cls._range)
         elif isinstance(value, str):
-            return value.capitalize() in cls._range
+            return value.lower() in cls._range
         else:
             return value in cls._range
 
     @classmethod
-    def is_equivalent(cls, _range: Union[set, Range, Tuple[Union[int, float], Union[int, float]], int, float, str])\
+    def is_within_range(cls, _range: Union[set, Range, Any])\
             -> bool:
-        if isinstance(cls._range, set) and isinstance(_range, set):
-            return _range.issubset(cls._range)
-        elif isinstance(cls._range, set) and isinstance(_range, (Range, tuple)):
-            return False
-        elif isinstance(cls._range, set) and isinstance(_range, (int, float)):
-            return _range in cls._range
-        elif isinstance(cls._range, set) and isinstance(_range, str):
-            return _range.capitalize() in cls._range
+        if isinstance(cls._range, set):
+            if hasattr(_range, "__iter__") and not isinstance(_range, str):
+                return set(_range).issubset(cls._range)
+            elif isinstance(_range, Range):
+                return False
+            elif isinstance(_range, str):
+                return _range.lower() in cls._range
+            else:
+                return _range in cls._range
         else:
             return _range == cls._range
 
@@ -155,20 +156,70 @@ class Range:
     A range is a pair of values that represents the minimum and maximum values of a numeric category.
     """
     min: Union[float, int]
+    """
+    The minimum value of the range.
+    """
     max: Union[float, int]
+    """
+    The maximum value of the range.
+    """
+    min_closed: bool = True
+    """
+    Whether the minimum value is included in the range.
+    """
+    max_closed: bool = True
+    """
+    Whether the maximum value is included in the range.
+    """
 
-    def __contains__(self, item: Union[float, int]) -> bool:
-        return self.min <= item <= self.max
+    def __contains__(self, item: Union[float, int, Sequence[Union[float, int]]]) -> bool:
+        """
+        Check if a value or an iterable of values are within the range.
 
-    def __eq__(self, other: Union[Range, Tuple[Union[float, int], Union[float, int]]]) -> bool:
-        if isinstance(other, tuple):
-            return self.min == other[0] and self.max == other[1]
-        elif isinstance(other, Range):
-            return self.min == other.min and self.max == other.max
-        return False
+        :param item: The value or values to check.
+        """
+        if not self.is_numeric(item):
+            raise ValueError(f"Item {item} contains non-numeric values.")
+        elif hasattr(item, "__iter__"):
+            return min(item) in self and max(item) in self
+        else:
+            return self.is_numeric_value_in_range(item)
+
+    def is_numeric_value_in_range(self, value: Union[float, int]) -> bool:
+        """
+        Check if a numeric value is in the range.
+
+        :param value: The value to check.
+        """
+        satisfies_min = (self.min_closed and value >= self.min) or (not self.min_closed and value > self.min)
+        satisfies_max = (self.max_closed and value <= self.max) or (not self.max_closed and value < self.max)
+        return satisfies_min and satisfies_max
+
+    @staticmethod
+    def is_numeric(value: Any) -> bool:
+        """
+        Check if a value is numeric.
+
+        :param value: The value to check.
+        """
+        if isinstance(value, str):
+            return False
+        elif hasattr(value, "__iter__"):
+            return all(isinstance(i, (float, int)) for i in value)
+        else:
+            return isinstance(value, (float, int))
+
+    def __eq__(self, other: Range) -> bool:
+        if not isinstance(other, Range):
+            return False
+        return (self.min == other.min and self.max == other.max
+                and self.min_closed == other.min_closed
+                and self.max_closed == other.max_closed)
 
     def __str__(self) -> str:
-        return f"{self.min} <= x <= {self.max}"
+        left = "[" if self.min_closed else "("
+        right = "]" if self.max_closed else ")"
+        return f"{left}{self.min}, {self.max}{right}"
 
     def __repr__(self) -> str:
         return self.__str__()
