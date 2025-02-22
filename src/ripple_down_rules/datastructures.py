@@ -76,7 +76,7 @@ class CategoryValueType(Enum):
 class Attribute:
     """
     An attribute is a name-value pair that represents a feature of a case.
-    an attribute can be used to compare two cases and to make a conclusion about a case.
+    an attribute can be used to compare two cases, to make a conclusion (which is also an attribute) about a case.
     """
     mutually_exclusive: bool = False
     value_type: CategoryValueType = CategoryValueType.Nominal
@@ -108,9 +108,7 @@ class Attribute:
         if self.name != other.name:
             return False
         if isinstance(self.value, set) and not isinstance(other.value, set):
-            if hasattr(other.value, "__iter__") and not isinstance(other.value, str):
-                return self.value == set(other.value)
-            return self.value == {other.value}
+            return self.value == make_set(other.value)
         else:
             return self.value == other.value
 
@@ -378,6 +376,7 @@ class Habitat(Categorical):
     A habitat category is a category that represents the habitat of an animal.
     """
     mutually_exclusive: bool = False
+    value_type = CategoryValueType.Nominal
     _range: set = {"land", "water", "air"}
 
     def __init__(self, habitat: Habitat.Values):
