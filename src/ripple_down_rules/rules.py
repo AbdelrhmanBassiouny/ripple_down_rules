@@ -15,7 +15,7 @@ class Rule(NodeMixin, ABC):
     """
 
     def __init__(self, conditions: Optional[Dict[str, Condition]] = None,
-                 conclusion: Optional[Category] = None,
+                 conclusion: Optional[Attribute] = None,
                  parent: Optional[Rule] = None,
                  corner_case: Optional[Case] = None,
                  weight: Optional[str] = None):
@@ -168,7 +168,7 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
             returned_rule = self.alternative(x) if self.alternative else self
         return returned_rule if returned_rule.fired else self
 
-    def fit_rule(self, x: Case, target: Category, conditions: Optional[Dict[str, Condition]] = None):
+    def fit_rule(self, x: Case, target: Attribute, conditions: Optional[Dict[str, Condition]] = None):
         if not conditions:
             conditions = Condition.from_two_cases(self.corner_case, x)
         new_rule = SingleClassRule(conditions, target,
@@ -188,6 +188,7 @@ class MultiClassStopRule(Rule, HasAlternativeRule):
     """
     The top rule of the rule, which is the nearest ancestor that fired and this rule is a refinement of.
     """
+
     def __init__(self, *args, **kwargs):
         super(MultiClassStopRule, self).__init__(*args, **kwargs)
         self.conclusion = Stop()
@@ -217,7 +218,7 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         elif self.alternative:  # Here alternative refers to next rule in MultiClassRDR
             return self.alternative
 
-    def fit_rule(self, x: Case, target: Category, conditions: Optional[Dict[str, Condition]] = None):
+    def fit_rule(self, x: Case, target: Attribute, conditions: Optional[Dict[str, Condition]] = None):
         if not conditions:
             conditions = Condition.from_two_cases(self.corner_case, x)
 

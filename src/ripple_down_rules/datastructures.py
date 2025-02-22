@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-import importlib.util
-import os
 from abc import abstractmethod, ABC
 from collections import UserDict
 from dataclasses import dataclass
 from enum import Enum, auto
 
 from orderedset import OrderedSet
-from typing_extensions import Any, Callable, Tuple, Optional, List, Dict, Type, Union, Sequence
+from typing_extensions import Any, Tuple, Optional, List, Dict, Type, Union, Sequence
 
 from .failures import InvalidOperator
-from .utils import make_set, make_value_or_raise_error, import_class
+from .utils import make_set, make_value_or_raise_error
 
 
 class MCRDRMode(Enum):
@@ -764,10 +762,11 @@ class Case:
         if target_types:
             target_names = [f"target_{target_type.__name__.lower()}" for target_type in target_types]
 
-        curr_max_len = max(max_len, max([len(name) for name in all_names + category_names + target_names])+2)
+        curr_max_len = max(max_len, max([len(name) for name in all_names + category_names + target_names]) + 2)
         names_row = self.ljust(f"names: ", sz=curr_max_len)
         names_row += self.ljust("ID", sz=curr_max_len)
-        names_row += "".join([f"{self.ljust(name, sz=curr_max_len)}" for name in all_names + category_names + target_names])
+        names_row += "".join(
+            [f"{self.ljust(name, sz=curr_max_len)}" for name in all_names + category_names + target_names])
         return names_row, curr_max_len
 
     def get_all_names_and_max_len(self, all_attributes: Optional[List[Attribute]] = None) -> Tuple[List[str], int]:

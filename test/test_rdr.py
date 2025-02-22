@@ -9,7 +9,7 @@ from ripple_down_rules.datastructures import Case, str_to_operator_fn, Condition
     Attributes
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import render_tree, import_class
+from ripple_down_rules.utils import render_tree
 
 
 class TestRDR(TestCase):

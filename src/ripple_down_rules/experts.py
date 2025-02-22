@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Set
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union
 
 from .datastructures import str_to_operator_fn, Condition, Case, Attribute, Operator
 from .failures import InvalidOperator
-from .utils import make_set, make_value_or_raise_error, get_all_subclasses
+from .utils import get_all_subclasses
 
 if TYPE_CHECKING:
     from .rdr import Rule

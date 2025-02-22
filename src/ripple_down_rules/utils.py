@@ -1,13 +1,12 @@
-import logging
-
 import importlib.util
+import logging
 import os
 
 import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from typing_extensions import Callable, Set, Any, Type, List, Dict
+from typing_extensions import Callable, Set, Any, Type, Dict
 
 
 def get_all_subclasses(cls: Type) -> Dict[str, Type]:
