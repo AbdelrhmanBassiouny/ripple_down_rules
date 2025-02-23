@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import ast
+import os
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from typing_extensions import Set, Optional, List
 
-from ripple_down_rules.datastructures import str_to_operator_fn
-from ripple_down_rules.utils import make_set, get_attribute_values
+from ripple_down_rules.datastructures import str_to_operator_fn, RDRMode, Case
+from ripple_down_rules.experts import Human
+from ripple_down_rules.rdr import SingleClassRDR
+from ripple_down_rules.utils import make_set, get_attribute_values, get_completions
 
 
 class PhysicalObject:
@@ -60,29 +63,39 @@ case_attr_types = {attr: type(getattr(case, attr)) for attr in case_attrs}
 sub_attrs_types = {attr: {sub_attr: type(getattr(getattr(case, attr), sub_attr)) for sub_attr in sub_attrs[attr]} for attr in case_attrs}
 
 
-def add_completions(case, complete):
-    for attr in dir(case):
-        if attr.startswith("__") or attr.startswith("_"):
-            continue
-        complete.append(f"{case.__class__.__name__}.{attr}")
-        for sub_attr in dir(getattr(case, attr)):
-            if sub_attr.startswith("__"):
-                continue
-            if hasattr(sub_attr, "__iter__") and not isinstance(sub_attr, str):
-                for sub_attr_element in sub_attr:
-                    complete.append(f"{attr}.{sub_attr_element}")
-                    complete.append(f"{case.__class__.__name__}.{attr}.{sub_attr_element}")
-            else:
-                complete.append(f"{attr}.{sub_attr}")
-                complete.append(f"{case.__class__.__name__}.{attr}.{sub_attr}")
-    return complete
 
 
-add_completions(case, complete)
-completer = WordCompleter(complete)
+
+# case = Case.from_object(robot)
+case = robot
+# target = type(case["contained_objects"])([part_b, part_c, part_d, part_e])
+target = {part_b, part_c, part_d, part_e}
+
+completions = get_completions(case)
+completer = WordCompleter(completions)
 session = PromptSession(completer=completer)
 
 
+def test_classify_scrdr(case, target, expert_answers_dir="./test_expert_answers"):
+    use_loaded_answers = False
+    save_answers = True
+    filename = expert_answers_dir + "/relational_scrdr_expert_answers_classify"
+    expert = Human(use_loaded_answers=use_loaded_answers)
+    if use_loaded_answers:
+        expert.load_answers(filename)
+
+    scrdr = SingleClassRDR(mode=RDRMode.Relational)
+    cat = scrdr.fit_case(case, target, expert=expert)
+    assert cat == target
+
+    if save_answers:
+        cwd = os.getcwd()
+        file = os.path.join(cwd, filename)
+        expert.save_answers(file)
+
+
+test_classify_scrdr(case, target)
+exit()
 while True:
     user_input = session.prompt(f"\nGive Conclusion on {case.__class__.__name__}.contained_objects >>> ")
     if user_input.lower() in ['exit', 'quit', '']:

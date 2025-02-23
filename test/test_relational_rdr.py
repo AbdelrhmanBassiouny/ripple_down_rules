@@ -1,10 +1,10 @@
 import os
 from unittest import TestCase
 
-from typing_extensions import List, Optional, Set, Any, Type
+from typing_extensions import List, Optional, Set, Type
 
 from ripple_down_rules.datastructures import Case, Attribute, \
-    CategoryValueType, RDRMode, Categorical
+    RDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
 
@@ -59,6 +59,8 @@ class TestRDR(TestCase):
         part_c.contained_objects = {part_d}
         part_d.contained_objects = {part_e}
         cls.case: Case = Case.from_object(robot)
+        for attr_name, attr_value in cls.case.attributes.items():
+            setattr(cls.case, attr_name, attr_value)
         cls.target = type(cls.case["contained_objects"])([part_b, part_c, part_d, part_e])
         print(cls.target)
 

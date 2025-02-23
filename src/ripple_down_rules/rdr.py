@@ -34,6 +34,7 @@ class RippleDownRules(ABC):
         """
         self.start_rule = start_rule
         self.fig: Optional[plt.Figure] = None
+        self.mode: RDRMode = mode
 
     def __call__(self, x: Case) -> Attribute:
         return self.classify(x)
@@ -147,7 +148,9 @@ class SingleClassRDR(RippleDownRules):
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :return: The category that the case belongs to.
         """
-        expert = expert if expert else Human()
+        expert = expert if expert else Human(mode=self.mode)
+        if self.mode == RDRMode.Relational:
+            target = expert.ask_for_relational_conclusion(x, target)
         if not self.start_rule:
             conditions = expert.ask_for_conditions(x, target)
             self.start_rule = SingleClassRule(conditions, target, corner_case=Case(x.id_, x.attributes_list))

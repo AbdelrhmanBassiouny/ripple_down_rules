@@ -894,8 +894,8 @@ class Attributes(UserDict):
     def __setitem__(self, name: str, value: Attribute):
         name = name.lower()
         if name in self:
-            if not value.mutually_exclusive:
-                self[name].value.update(value)
+            if (isinstance(value, Attribute) and not value.mutually_exclusive) or hasattr(value, "__iter__"):
+                self[name].value = type(self[name].value)(make_set(self[name].value).union(make_set(value)))
             else:
                 raise ValueError(f"Attribute {name} already exists in the case and is mutually exclusive.")
         else:
@@ -951,7 +951,10 @@ class Case:
         """
         if not attributes:
             attributes = cls.get_attributes_from_object(obj)
-        return cls(obj.__class__.__name__, attributes, conclusions, targets)
+        case = cls(obj.__class__.__name__, attributes, conclusions, targets)
+        for attr_name, attr_value in case.attributes.items():
+            setattr(case, attr_name, attr_value)
+        return case
 
     @staticmethod
     def get_attributes_from_object(obj: Any) -> List[Attribute]:

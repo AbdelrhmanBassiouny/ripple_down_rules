@@ -8,7 +8,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence
 
-from .datastructures import str_to_operator_fn, Condition, Case, Attribute, Operator
+from .datastructures import str_to_operator_fn, Condition, Case, Attribute, Operator, RDRMode
 from .failures import InvalidOperator
 from .utils import get_all_subclasses, get_attribute_values, get_completions
 
@@ -35,6 +35,9 @@ class Expert(ABC):
     """
     The known categories (i.e. Attribute types) to use.
     """
+
+    def __init__(self, mode: RDRMode = RDRMode.Propositional):
+        self.mode: RDRMode = mode
 
     @abstractmethod
     def ask_for_conditions(self, x: Case, targets: List[Attribute], last_evaluated_rule: Optional[Rule] = None) \
@@ -77,13 +80,23 @@ class Expert(ABC):
         """
         pass
 
+    def ask_for_relational_conclusion(self, x: Case, for_attribute: Union[str, Attribute, Sequence[Attribute]])\
+            -> Optional[Attribute]:
+        """
+        Ask the expert to provide a relational conclusion for the case.
+
+        :param x: The case to classify.
+        :param for_attribute: The attribute to provide the conclusion for.
+        """
+
 
 class Human(Expert):
     """
     The Human Expert class, an expert that asks the human to provide differentiating features and conclusions.
     """
 
-    def __init__(self, use_loaded_answers: bool = False):
+    def __init__(self, use_loaded_answers: bool = False, mode: RDRMode = RDRMode.Propositional):
+        super().__init__(mode)
         self.all_expert_answers = []
         self.use_loaded_answers = use_loaded_answers
 
@@ -160,13 +173,14 @@ class Human(Expert):
         :param x: The case to classify.
         :param for_attribute: The attribute to provide the conclusion for.
         """
+        # all_names = self.get_and_print_all_names_and_conclusions(x)
         session = self.get_prompt_session_for_case(x)
 
         for_attribute_name = self.get_attribute_name(for_attribute)
 
         if not hasattr(x, for_attribute_name):
             raise ValueError(f"Attribute {for_attribute_name} not found in the case")
-
+        attr_value = None
         while True:
             user_input = session.prompt(f"\nGive Conclusion on {x.__class__.__name__}.{for_attribute_name} >>> ")
             if user_input.lower() in ['exit', 'quit', '']:
@@ -181,6 +195,7 @@ class Human(Expert):
                 print(f"Evaluated expression: {attr_value}")
             except SyntaxError as e:
                 print(f"Syntax error: {e}")
+        return attr_value
 
     @staticmethod
     def get_prompt_session_for_case(x: Case) -> PromptSession:
@@ -203,15 +218,19 @@ class Human(Expert):
         :param attribute: The attribute object to get the attribute name from.
         :return: The attribute name.
         """
-        if hasattr(attribute, "__iter__") and not isinstance(attribute, str):
+        if isinstance(attribute, type):
+            attribute_name = attribute.__name__
+        elif hasattr(attribute, "__iter__") and not isinstance(attribute, str):
+            if isinstance(attribute, set):
+                attribute = list(attribute)
             attribute_name = attribute[0].__class__.__name__
         elif isinstance(attribute, Attribute):
             attribute_name = attribute.__class__.__name__
         elif isinstance(attribute, str):
             attribute_name = attribute
         else:
-            raise ValueError(f"Attribute {attribute} is not valid, expected an str, an Attribute or a list of"
-                             f" same type Attributes")
+            raise ValueError(f"Attribute {attribute} is not valid, expected an str, an Attribute, an Attribute Type"
+                             f" or a list of same type Attributes")
         return attribute_name
 
     @staticmethod
@@ -228,6 +247,7 @@ class Human(Expert):
         # Evaluate expression
         attr = getattr(x, user_attr)
         if user_sub_attr:
+            attr = attr.value if isinstance(attr, Attribute) else attr
             attr = get_attribute_values(attr, user_sub_attr)
         attr = set().union(*attr) if hasattr(attr, "__iter__") and not isinstance(attr, str) else attr
         return attr
@@ -239,11 +259,7 @@ class Human(Expert):
         :param x: The case to classify.
         :param current_conclusions: The current conclusions for the case if any.
         """
-        conclusion_types = list(map(type, current_conclusions)) if current_conclusions else None
-        all_names, max_len = x.get_all_names_and_max_len()
-        if not self.use_loaded_answers:
-            max_len = x.print_all_names(all_names, max_len, conclusion_types=conclusion_types)
-            x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
+        all_names = self.get_and_print_all_names_and_conclusions(x, current_conclusions)
         while True:
             if not self.use_loaded_answers:
                 print("Please provide the conclusion as \"name:value\" or \"name\" or press enter to end:")
@@ -259,6 +275,22 @@ class Human(Expert):
                     print(e)
             else:
                 return None
+
+    def get_and_print_all_names_and_conclusions(self, x: Case, current_conclusions: Optional[List[Attribute]] = None)\
+            -> List[str]:
+        """
+        Get and print all names and conclusions for the case.
+
+        :param x: The case to get the names and conclusions for.
+        :param current_conclusions: The current conclusions for the case.
+        :return: The list of all names.
+        """
+        conclusion_types = list(map(type, current_conclusions)) if current_conclusions else None
+        all_names, max_len = x.get_all_names_and_max_len()
+        if not self.use_loaded_answers:
+            max_len = x.print_all_names(all_names, max_len, conclusion_types=conclusion_types)
+            x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
+        return all_names
 
     def parse_conclusion(self, value: str) -> Attribute:
         """

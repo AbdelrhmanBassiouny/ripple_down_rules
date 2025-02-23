@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import importlib.util
 import logging
 import os
@@ -6,7 +8,10 @@ import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from typing_extensions import Callable, Set, Any, Type, Dict, List
+from typing_extensions import Callable, Set, Any, Type, Dict, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ripple_down_rules.datastructures import Attribute
 
 
 def get_completions(case: Any) -> List[str]:
