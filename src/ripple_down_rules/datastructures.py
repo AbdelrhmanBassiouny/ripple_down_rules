@@ -5,8 +5,9 @@ from collections import UserDict
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from orderedset import OrderedSet
-from typing_extensions import Any, Tuple, Optional, List, Dict, Type, Union, Sequence
+from ordered_set import OrderedSet
+from typing_extensions import Any, Tuple, Optional, List, Dict, Type, Union, Sequence, Set, Self, get_origin, get_args, \
+    get_type_hints
 
 from .failures import InvalidOperator
 from .utils import make_set, make_value_or_raise_error
@@ -83,6 +84,10 @@ class CategoryValueType(Enum):
     """
     Ordinal value type (eg. low, medium, high), categories where the values have a natural order.
     """
+    Iterable = auto()
+    """
+    Iterable value type (eg. [1, 2, 3]).
+    """
 
 
 class Attribute(ABC):
@@ -98,37 +103,45 @@ class Attribute(ABC):
     """
     The type of the value of the attribute.
     """
-    _range: Union[set, Range]
+    _range: Union[set, Range] = None
     """
     The range of the attribute, this can be a set of possible values or a range of numeric values (int, float).
     """
 
-    _registry: Dict[str, Type[Attribute]] = {}
+    _registry: Dict[str, Type[Self]] = {}
     """
     A dictionary of all dynamically created subclasses of the attribute class.
     """
 
     @classmethod
-    def create_attribute(cls, name: str, mutually_exclusive_: bool, value_type_: CategoryValueType,
-                         range_: Union[set, Range])\
-            -> Type[Attribute]:
+    def create_attribute(cls, name: str, mutually_exclusive: bool, value_type: CategoryValueType,
+                         range_: Union[set, Range], **kwargs) \
+            -> Type[Self]:
         """
         Create a new attribute subclass.
 
         :param name: The name of the attribute.
-        :param mutually_exclusive_: Whether the attribute is mutually exclusive.
-        :param value_type_: The type of the value of the attribute.
+        :param mutually_exclusive: Whether the attribute is mutually exclusive.
+        :param value_type: The type of the value of the attribute.
         :param range_: The range of the attribute.
         :return: The new attribute subclass.
         """
-        class NewAttribute(Attribute):
-            mutually_exclusive = mutually_exclusive_
-            value_type = value_type_
-            _range = range_
-
-        NewAttribute.__name__ = name
-        cls.register(NewAttribute)
-        return NewAttribute
+        kwargs.update(mutually_exclusive=mutually_exclusive, value_type=value_type, _range=range_)
+        if name in cls._registry:
+            if not cls._registry[name].mutually_exclusive == mutually_exclusive:
+                print(f"Mutually exclusive of {name} is different from {cls._registry[name].mutually_exclusive}.")
+                cls._registry[name].mutually_exclusive = mutually_exclusive
+            if not cls._registry[name].value_type == value_type:
+                raise ValueError(f"Value type of {name} is different from {cls._registry[name].value_type}.")
+            if not cls._registry[name].within_range(range_):
+                if isinstance(cls._registry[name]._range, set):
+                    cls._registry[name]._range.union(range_)
+                else:
+                    raise ValueError(f"Range of {name} is different from {cls._registry[name]._range}.")
+            return cls._registry[name]
+        new_attribute_type: Type[Self] = type(name.lower(), (cls,), {}, **kwargs)
+        cls.register(new_attribute_type)
+        return new_attribute_type
 
     @classmethod
     def register(cls, subclass: Type[Attribute]):
@@ -164,8 +177,16 @@ class Attribute(ABC):
         """
         Set the name of the attribute class to the name of the class in lowercase.
         """
-        super().__init_subclass__(**kwargs)
+        super().__init_subclass__()
         cls.name = cls.__name__.lower()
+
+        mutually_exclusive = kwargs.get("mutually_exclusive", None)
+        value_type = kwargs.get("value_type", None)
+        _range = kwargs.get("_range", None)
+
+        cls.mutually_exclusive = mutually_exclusive if mutually_exclusive else cls.mutually_exclusive
+        cls.value_type = value_type if value_type else cls.value_type
+        cls._range = _range if _range else cls._range
 
     def __init__(self, value: Any):
         """
@@ -181,10 +202,37 @@ class Attribute(ABC):
 
     @value.setter
     def value(self, value: Any):
+        value = self.make_value(value)
         if not self.mutually_exclusive:
             self._value = make_set(value)
-        elif self.mutually_exclusive:
-            self._value = make_value_or_raise_error(value)
+        else:
+            self._value = value
+
+    @classmethod
+    def make_value(cls, value: Any) -> Any:
+        """
+        Make a value for the attribute.
+
+        :param value: The value to make.
+        """
+        if not cls.is_possible_value(value):
+            raise ValueError(f"Value {value} is not a possible value for {cls.__name__} with range {cls._range}.")
+        if cls.value_type == CategoryValueType.Iterable:
+            if not hasattr(value, "__iter__") or isinstance(value, str):
+                value = [value]
+        else:
+            value = make_value_or_raise_error(value)
+        return cls._make_value(value)
+
+    @classmethod
+    @abstractmethod
+    def _make_value(cls, value: Any) -> Any:
+        """
+        Make a value for the attribute.
+
+        :param value: The value to make.
+        """
+        pass
 
     def __eq__(self, other: Attribute):
         if not isinstance(other, Attribute):
@@ -197,28 +245,35 @@ class Attribute(ABC):
             return self.value == other.value
 
     @classmethod
+    @abstractmethod
     def is_possible_value(cls, value: Any) -> bool:
-        if hasattr(value, "__iter__") and not isinstance(value, str):
-            return set(value).issubset(cls._range)
-        elif isinstance(value, str):
-            return value.lower() in cls._range
-        else:
-            return value in cls._range
+        """
+        Check if a value is a possible value for the attribute or if it can be converted to a possible value.
+
+        :param value: The value to check.
+        """
+        pass
 
     @classmethod
-    def is_within_range(cls, _range: Union[set, Range, Any]) \
+    def is_within_range(cls, value: Union[set, Range, Any]) \
             -> bool:
+        """
+        Check if a value is within the range of the attribute.
+
+        :param value: The value to check.
+        :return: Boolean indicating whether the value is within the range or not.
+        """
         if isinstance(cls._range, set):
-            if hasattr(_range, "__iter__") and not isinstance(_range, str):
-                return set(_range).issubset(cls._range)
-            elif isinstance(_range, Range):
+            if hasattr(value, "__iter__") and not isinstance(value, str):
+                return set(value).issubset(cls._range)
+            elif isinstance(value, Range):
                 return False
-            elif isinstance(_range, str):
-                return _range.lower() in cls._range
+            elif isinstance(value, str):
+                return value.lower() in cls._range
             else:
-                return _range in cls._range
+                return value in cls._range
         else:
-            return _range in cls._range
+            return value in cls._range
 
     def __hash__(self):
         return hash(self.name)
@@ -317,8 +372,16 @@ class Integer(Attribute):
     value_type = CategoryValueType.Ordinal
     _range: Range = Range(-float("inf"), float("inf"), min_closed=False, max_closed=False)
 
-    def __init__(self, value: Any):
-        super().__init__(int(value))
+    @classmethod
+    def _make_value(cls, value: Any) -> int:
+        return int(value)
+
+    @classmethod
+    def is_possible_value(cls, value: Any) -> bool:
+        if isinstance(value, str):
+            return value.isdigit() and cls.is_within_range(int(value))
+        else:
+            return isinstance(value, int) and cls.is_within_range(value)
 
 
 class Continuous(Attribute):
@@ -329,8 +392,15 @@ class Continuous(Attribute):
     value_type = CategoryValueType.Continuous
     _range: Range = Range(-float("inf"), float("inf"), min_closed=False, max_closed=False)
 
-    def __init__(self, value: Any):
-        super().__init__(float(value))
+    @classmethod
+    def _make_value(cls, value: Any) -> float:
+        return float(value)
+
+    @classmethod
+    def is_possible_value(cls, value: Any) -> bool:
+        if isinstance(value, str):
+            return value.replace(".", "", 1).isdigit() and cls.is_within_range(float(value))
+        return isinstance(value, (float, int)) and cls.is_within_range(value)
 
 
 class CategoricalValue(Enum):
@@ -350,7 +420,7 @@ class CategoricalValue(Enum):
 
     @classmethod
     def to_list(cls):
-        return list(cls._value2member_map_.values())
+        return list(cls._value2member_map_.keys())
 
     @classmethod
     def from_str(cls, category: str):
@@ -373,7 +443,7 @@ class Categorical(Attribute, ABC):
     """
     mutually_exclusive: bool = False
     value_type = CategoryValueType.Nominal
-    _range: set
+    _range: Set[Union[str, type]] = None
     Values: Type[CategoricalValue]
 
     def __init_subclass__(cls, **kwargs):
@@ -383,16 +453,46 @@ class Categorical(Attribute, ABC):
         Note: This method is called when a subclass of Categorical is created (not when an instance is created).
         """
         super().__init_subclass__(**kwargs)
+        if not cls._range:
+            cls._range = set()
         cls.create_values()
 
     def __init__(self, value: Union[Categorical.Values, str]):
         super().__init__(value)
-        if isinstance(value, str):
-            self.value = self.Values[value.lower()]
+
+    @classmethod
+    def _make_value(cls, value: Union[str, Categorical.Values]) -> Categorical.Values:
+        if len(cls._range) == 0:
+            if isinstance(value, str):
+                cls.add_new_category(value)
+            else:
+                cls.add_new_category(type(value))
+            return cls._make_value(value)
+        if isinstance(value, str) and len(cls._range) > 0 and type(list(cls._range)[0]) == str:
+            return cls.Values[value.lower()]
+        elif isinstance(value, cls.Values) or any(isinstance(v, type) and isinstance(value, v) for v in cls.Values.to_list()):
+            return value
+        else:
+            raise ValueError(f"Value {value} should be a string or a CategoricalValue.")
+
+    @classmethod
+    def is_possible_value(cls, value: Any) -> bool:
+        if len(cls._range) == 0:
+            if isinstance(value, str):
+                cls.add_new_category(value)
+            else:
+                cls.add_new_category(type(value))
+            return cls.is_possible_value(value)
+        if isinstance(value, str) and len(cls._range) > 0 and type(list(cls._range)[0]) == str:
+            return cls.is_within_range(value.lower())
+        elif isinstance(value, cls.Values) or any(isinstance(value, v) for v in cls.Values.to_list()):
+            return True
+        else:
+            return False
 
     @classmethod
     def from_str(cls, category: str):
-        return cls(cls.Values[category.capitalize()])
+        return cls(cls.Values[category.lower()])
 
     @classmethod
     def from_strs(cls, categories: List[str]):
@@ -405,12 +505,125 @@ class Categorical(Attribute, ABC):
 
     @classmethod
     def add_new_category(cls, category: str):
-        cls._range.add(category.lower())
+        if isinstance(category, str):
+            cls._range.add(category.lower())
+        elif isinstance(category, type):
+            cls._range.add(category)
+        else:
+            raise ValueError(f"Category {category} should be a string or a type.")
         cls.create_values()
 
     @classmethod
     def create_values(cls):
-        cls.Values = CategoricalValue(f"{cls.__name__}Values", {c.lower(): c.lower() for c in cls._range})
+        if all(isinstance(c, str) for c in cls._range):
+            cls.Values = CategoricalValue(f"{cls.__name__}Values", {c.lower(): c.lower() for c in cls._range})
+        else:
+            cls.Values = CategoricalValue(f"{cls.__name__}Values",
+                                          {c.__name__.lower(): c for c in cls._range})
+
+
+class ListOf(Attribute, ABC):
+    """
+    A list of attribute is an attribute that has a value that is a list of other attributes, but all the attributes in
+    the list must have the same type.
+    """
+    mutually_exclusive: bool = True
+    value_type = CategoryValueType.Iterable
+    _range: Set[Attribute]
+    element_type: Type[Attribute]
+    list_size: Optional[int] = None
+
+    def __init__(self, value: List[element_type]):
+        super().__init__(value)
+
+    @classmethod
+    def create_attribute(cls, name: str, element_type: Type[Attribute],
+                         list_size: Optional[int] = None) -> Type[Self]:
+        """
+        Create a new attribute subclass that is a list of other attributes ot type _element_type.
+
+        :param name: The name of the attribute.
+        :param element_type: The type of the elements in the list.
+        :param list_size: The size of the list.
+        :return: The new attribute subclass.
+        """
+        return super().create_attribute(name, cls.mutually_exclusive, cls.value_type, make_set(element_type),
+                                        element_type=element_type, list_size=list_size)
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        """
+        super().__init_subclass__(**kwargs)
+        element_type = kwargs.get("element_type", None)
+        list_size = kwargs.get("list_size", None)
+        if not element_type:
+            raise ValueError("ListOf subclasses must have an element_type.")
+        cls.element_type = element_type
+        cls.list_size = list_size
+
+    @classmethod
+    def is_possible_value(cls, value: Any) -> bool:
+        if not hasattr(value, "__iter__") or isinstance(value, str):
+            value = [value]
+        if cls.list_size and len(value) != cls.list_size:
+            return False
+        else:
+            return all(cls.element_type.is_possible_value(v) for v in value)
+
+    @classmethod
+    def _make_value(cls, value: Any) -> List[element_type]:
+        if cls.list_size and len(value) != cls.list_size:
+            raise ValueError(f"Value {value} should be a list with size {cls.list_size},"
+                             f"got list of size {len(value)} instead.")
+        value = [cls.element_type.make_value(v) if not isinstance(v, cls.element_type) else v for v in value]
+        return value
+
+
+class DictOf(Attribute, ABC):
+    """
+    A dictionary of attribute is an attribute that has a value that is a dictionary of other attributes, but all the
+    attributes in the dictionary must have the same type.
+    """
+    mutually_exclusive: bool = True
+    value_type = CategoryValueType.Iterable
+    _range: Set[Attribute]
+    element_type: Type[Attribute]
+
+    def __init__(self, value: Dict[str, element_type]):
+        super().__init__(value)
+
+    @classmethod
+    def create_attribute(cls, name: str, element_type: Type[Attribute]) -> Type[Self]:
+        """
+        Create a new attribute subclass that is a dictionary of other attributes ot type _element_type.
+
+        :param name: The name of the attribute.
+        :param element_type: The type of the elements in the dictionary.
+        :return: The new attribute subclass.
+        """
+        return super().create_attribute(name, cls.mutually_exclusive, cls.value_type, make_set(element_type),
+                                        element_type=element_type)
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        """
+        super().__init_subclass__(**kwargs)
+        element_type = kwargs.get("element_type", None)
+        if not element_type:
+            raise ValueError("DictOf subclasses must have an element_type.")
+        cls.element_type = element_type
+
+    @classmethod
+    def is_possible_value(cls, value: Any) -> bool:
+        if not isinstance(value, dict):
+            return False
+        else:
+            return all(cls.element_type.is_possible_value(v) for v in value.values())
+
+    @classmethod
+    def _make_value(cls, value: Any) -> Dict[str, element_type]:
+        value = {k: cls.element_type.make_value(v) if not isinstance(v, cls.element_type) else v for k, v in value.items()}
+        return value
 
 
 class Bool(Attribute):
@@ -421,8 +634,24 @@ class Bool(Attribute):
     value_type = CategoryValueType.Binary
     _range: set = {True, False}
 
-    def __init__(self, value: Any):
-        super().__init__(bool(value))
+    def __init__(self, value: Union[bool, str, int, float]):
+        super().__init__(value)
+
+    @classmethod
+    def _make_value(cls, value: Any) -> bool:
+        return bool(value)
+
+    @classmethod
+    def is_possible_value(cls, value: Any) -> bool:
+        if isinstance(value, str):
+            return value.lower() in ["true", "false"]
+        if isinstance(value, bool):
+            return True
+        if isinstance(value, int):
+            return value in [0, 1]
+        if isinstance(value, float):
+            return value in [0.0, 1.0]
+        return False
 
 
 class Unary(Attribute):
@@ -435,6 +664,16 @@ class Unary(Attribute):
 
     def __init__(self):
         super().__init__(self.__class__.__name__)
+
+    @classmethod
+    def _make_value(cls, value: Any) -> str:
+        return cls.__name__
+
+    @classmethod
+    def is_possible_value(cls, value: Any) -> bool:
+        if isinstance(value, str):
+            return value.lower() == cls.__name__.lower()
+        return False
 
 
 class Stop(Unary):
@@ -696,6 +935,87 @@ class Case:
         self.id_ = id_
         self.conclusions: Optional[List[Attribute]] = conclusions
         self.targets: Optional[List[Attribute]] = targets
+
+    @classmethod
+    def from_object(cls, obj: Any, attributes: Optional[List[Attribute]] = None,
+                    conclusions: Optional[List[Attribute]] = None,
+                    targets: Optional[List[Attribute]] = None) -> Case:
+        """
+        Create a case from an object.
+
+        :param obj: The object to create the case from.
+        :param attributes: The attributes of the case.
+        :param conclusions: The conclusions that has been made about the case.
+        :param targets: The targets of the case.
+        :return: The case.
+        """
+        if not attributes:
+            attributes = cls.get_attributes_from_object(obj)
+        return cls(obj.__class__.__name__, attributes, conclusions, targets)
+
+    @staticmethod
+    def get_attributes_from_object(obj: Any) -> List[Attribute]:
+        """
+        Get the attributes of an object.
+
+        :param obj: The object to get the attributes from.
+        :return: The attributes of the object.
+        """
+        attributes = []
+        for attr_name in dir(obj):
+            attr = getattr(obj, attr_name)
+            if not attr_name.startswith("_") and not callable(attr):
+                matched_attribute = Case.get_or_create_matching_attribute(attr, attr_name)
+                attributes.append(matched_attribute)
+        return attributes
+
+    @staticmethod
+    def get_or_create_matching_attribute(attr_value: Any, attr_name: str) -> Attribute:
+        """
+        Get or create a matching attribute type for an attribute value.
+
+        :param attr_value: The value of the attribute.
+        :param attr_name: The name of the attribute.
+        :return: The matching attribute type instantiated with the attribute value.
+        """
+        iterable = hasattr(attr_value, "__iter__") and not isinstance(attr_value, str)
+        if iterable:
+            element_attr_name = f"{attr_name}_element"
+            iterable_type = ListOf
+            values = attr_value
+            if type(attr_value) == dict:
+                values = list(attr_value.values())
+                iterable_type = DictOf
+            if len(values) == 0:
+                _range = make_set(type(values[0])) if len(values) > 0 else make_set(values)
+                attr_type = Categorical.create_attribute(element_attr_name, False, CategoryValueType.Nominal,
+                                                         _range)
+                print(f"Created categorical attribute {element_attr_name} from iterable {attr_value}"
+                      f" as there are no values.")
+            elif all(Integer.is_possible_value(v) for v in values):
+                attr_type = Integer
+            elif all(Continuous.is_possible_value(v) for v in values):
+                attr_type = Continuous
+            elif all(Bool.is_possible_value(v) for v in values):
+                attr_type = Bool
+            else:
+                if list(set(map(type, values))) == [type(values[0])]:
+                    attr_type = type(Case.get_or_create_matching_attribute(values[0], element_attr_name))
+                else:
+                    raise ValueError(f"Cannot create attribute: Values in iterable {attr_name} are of different types, "
+                                     f"{list(set(map(type, values)))}.")
+            attr_type = iterable_type.create_attribute(attr_name, attr_type)
+        else:
+            if Integer.is_possible_value(attr_value):
+                attr_type = Integer
+            elif Continuous.is_possible_value(attr_value):
+                attr_type = Continuous
+            elif Bool.is_possible_value(attr_value):
+                attr_type = Bool
+            else:
+                attr_type = Categorical.create_attribute(attr_name, False, CategoryValueType.Nominal,
+                                                         make_set(type(attr_value)))
+        return attr_type(attr_value)
 
     def remove_attribute(self, attribute_name: str):
         if attribute_name in self:

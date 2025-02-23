@@ -1,15 +1,12 @@
-import json
 import os
 from unittest import TestCase
 
 from typing_extensions import List, Optional, Set, Any, Type
 
-from ripple_down_rules.datasets import load_zoo_dataset
-from ripple_down_rules.datastructures import Case, str_to_operator_fn, Condition, MCRDRMode, Habitat, Attribute, \
-    Attributes, CategoryValueType, RDRMode
-from ripple_down_rules.experts import Expert, Human
-from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import render_tree
+from ripple_down_rules.datastructures import Case, Attribute, \
+    CategoryValueType, RDRMode, Categorical
+from ripple_down_rules.experts import Human
+from ripple_down_rules.rdr import SingleClassRDR
 
 
 class PhysicalObject:
@@ -42,13 +39,9 @@ class Robot(PhysicalObject):
         self.parts = parts or []
 
 
-contained_objects_type = Attribute.create_attribute("contained_objects", False,
-                                                            CategoryValueType.Nominal, {PhysicalObject})
-
-
 class TestRDR(TestCase):
-    case: Any
-    target: contained_objects_type
+    case: Case
+    target: Type[Attribute]
     test_results_dir: str = "./test_results"
     expert_answers_dir: str = "./test_expert_answers"
 
@@ -65,8 +58,12 @@ class TestRDR(TestCase):
         part_a.contained_objects = {part_b, part_c}
         part_c.contained_objects = {part_d}
         part_d.contained_objects = {part_e}
-        cls.case = robot
-        cls.target = contained_objects_type({'B', 'C', 'D', 'E'})
+        cls.case: Case = Case.from_object(robot)
+        cls.target = type(cls.case["contained_objects"])([part_b, part_c, part_d, part_e])
+        print(cls.target)
+
+    def test_target(self):
+        pass
 
     def test_classify_scrdr(self):
         use_loaded_answers = False

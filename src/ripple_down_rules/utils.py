@@ -81,7 +81,7 @@ def make_set(value: Any) -> Set:
 
     :param value: The value to make a set from.
     """
-    if hasattr(value, "__iter__") and not isinstance(value, str):
+    if hasattr(value, "__iter__") and not isinstance(value, (str, type)):
         return set(value)
     return {value}
 

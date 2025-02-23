@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from copy import copy
 
 from matplotlib import pyplot as plt
-from orderedset import OrderedSet
+from ordered_set import OrderedSet
 from typing_extensions import List, Optional, Dict, Type, Union
 
 from .datastructures import Condition, Case, Stop, MCRDRMode, Attribute, RDRMode

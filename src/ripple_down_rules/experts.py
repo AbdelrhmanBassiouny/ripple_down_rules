@@ -226,11 +226,9 @@ class Human(Expert):
         user_attr = attr_chain[0]
         user_sub_attr = attr_chain[1] if len(attr_chain) > 1 else None
         # Evaluate expression
+        attr = getattr(x, user_attr)
         if user_sub_attr:
-            attr = getattr(x, user_attr)
             attr = get_attribute_values(attr, user_sub_attr)
-        else:
-            attr = getattr(x, user_attr)
         attr = set().union(*attr) if hasattr(attr, "__iter__") and not isinstance(attr, str) else attr
         return attr
 
