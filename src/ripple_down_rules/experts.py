@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import ast
 import json
 from abc import ABC, abstractmethod
 
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import WordCompleter
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence
 
 from .datastructures import str_to_operator_fn, Condition, Case, Attribute, Operator
 from .failures import InvalidOperator
-from .utils import get_all_subclasses
+from .utils import get_all_subclasses, get_attribute_values, get_completions
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -148,6 +151,88 @@ class Human(Expert):
                 break
             extra_conclusions[category] = self._get_conditions(all_names, conditions_for="extra conclusions")
         return extra_conclusions
+
+    def ask_for_relational_conclusion(self, x: Case, for_attribute: Union[str, Attribute, Sequence[Attribute]])\
+            -> Optional[Attribute]:
+        """
+        Ask the expert to provide a relational conclusion for the case.
+
+        :param x: The case to classify.
+        :param for_attribute: The attribute to provide the conclusion for.
+        """
+        session = self.get_prompt_session_for_case(x)
+
+        for_attribute_name = self.get_attribute_name(for_attribute)
+
+        if not hasattr(x, for_attribute_name):
+            raise ValueError(f"Attribute {for_attribute_name} not found in the case")
+
+        while True:
+            user_input = session.prompt(f"\nGive Conclusion on {x.__class__.__name__}.{for_attribute_name} >>> ")
+            if user_input.lower() in ['exit', 'quit', '']:
+                break
+            print(f"Evaluating: {user_input}")
+            try:
+                # Parse the input into an AST
+                tree = ast.parse(user_input, mode='eval')
+                print(f"AST parsed successfully: {ast.dump(tree)}")
+                attr_value = self.parse_relational_conclusion(x, user_input)
+                x[for_attribute_name] = attr_value
+                print(f"Evaluated expression: {attr_value}")
+            except SyntaxError as e:
+                print(f"Syntax error: {e}")
+
+    @staticmethod
+    def get_prompt_session_for_case(x: Case) -> PromptSession:
+        """
+        Get a prompt session for the case.
+
+        :param x: The case to get the prompt session for.
+        :return: The prompt session.
+        """
+        completions = get_completions(x)
+        completer = WordCompleter(completions)
+        session = PromptSession(completer=completer)
+        return session
+
+    @staticmethod
+    def get_attribute_name(attribute: Union[str, Attribute, Sequence[Attribute]]) -> str:
+        """
+        Get the attribute name.
+
+        :param attribute: The attribute object to get the attribute name from.
+        :return: The attribute name.
+        """
+        if hasattr(attribute, "__iter__") and not isinstance(attribute, str):
+            attribute_name = attribute[0].__class__.__name__
+        elif isinstance(attribute, Attribute):
+            attribute_name = attribute.__class__.__name__
+        elif isinstance(attribute, str):
+            attribute_name = attribute
+        else:
+            raise ValueError(f"Attribute {attribute} is not valid, expected an str, an Attribute or a list of"
+                             f" same type Attributes")
+        return attribute_name
+
+    @staticmethod
+    def parse_relational_conclusion(x: Case, conclusion: str) -> Any:
+        """
+        Parse a relational conclusion from a string and get the attribute values equivalent to the conclusion from the case.
+
+        :param x: The case to get the attribute values from.
+        :param conclusion: The conclusion to parse.
+        """
+        attr_chain = conclusion.split('.')
+        user_attr = attr_chain[0]
+        user_sub_attr = attr_chain[1] if len(attr_chain) > 1 else None
+        # Evaluate expression
+        if user_sub_attr:
+            attr = getattr(x, user_attr)
+            attr = get_attribute_values(attr, user_sub_attr)
+        else:
+            attr = getattr(x, user_attr)
+        attr = set().union(*attr) if hasattr(attr, "__iter__") and not isinstance(attr, str) else attr
+        return attr
 
     def ask_for_conclusion(self, x: Case, current_conclusions: Optional[List[Attribute]] = None) -> Optional[Attribute]:
         """

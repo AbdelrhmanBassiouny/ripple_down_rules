@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from orderedset import OrderedSet
 from typing_extensions import List, Optional, Dict, Type, Union
 
-from .datastructures import Condition, Case, Stop, MCRDRMode, Attribute
+from .datastructures import Condition, Case, Stop, MCRDRMode, Attribute, RDRMode
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree
@@ -26,9 +26,11 @@ class RippleDownRules(ABC):
     The conclusions that the expert has accepted, such that they are not asked again.
     """
 
-    def __init__(self, start_rule: Optional[Rule] = None):
+    def __init__(self, start_rule: Optional[Rule] = None,
+                 mode: RDRMode = RDRMode.Propositional):
         """
         :param start_rule: The starting rule for the classifier.
+        :param mode: The mode of the classifier, either Propositional or Relational.
         """
         self.start_rule = start_rule
         self.fig: Optional[plt.Figure] = None

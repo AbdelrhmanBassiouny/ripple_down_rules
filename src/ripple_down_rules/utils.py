@@ -6,7 +6,47 @@ import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from typing_extensions import Callable, Set, Any, Type, Dict
+from typing_extensions import Callable, Set, Any, Type, Dict, List
+
+
+def get_completions(case: Any) -> List[str]:
+    """
+    Get all completions for the case object. This is used in the IPython shell to provide completions for the user.
+
+    :param case: The case object to get completions for.
+    :return: A list of completions.
+    """
+    # Define completer with all object attributes and comparison operators
+    completions = ['==', '!=', '>', '<', '>=', '<=', 'in', 'not', 'and', 'or', 'is']
+    completions += ["isinstance(", "issubclass(", "type(", "len(", "hasattr(", "getattr(", "setattr(", "delattr("]
+    for attr in dir(case):
+        if attr.startswith("__") or attr.startswith("_"):
+            continue
+        completions.append(f"{case.__class__.__name__}.{attr}")
+        for sub_attr in dir(getattr(case, attr)):
+            if sub_attr.startswith("__"):
+                continue
+            if hasattr(sub_attr, "__iter__") and not isinstance(sub_attr, str):
+                for sub_attr_element in sub_attr:
+                    completions.append(f"{attr}.{sub_attr_element}")
+                    completions.append(f"{case.__class__.__name__}.{attr}.{sub_attr_element}")
+            else:
+                completions.append(f"{attr}.{sub_attr}")
+                completions.append(f"{case.__class__.__name__}.{attr}.{sub_attr}")
+    return completions
+
+
+def get_attribute_values(obj: Any, attribute: Any) -> Any:
+    """
+    Get an attribute from a python object, if it is iterable, get the attribute values from all elements and unpack them
+    into a list.
+
+    :param obj: The object to get the sub attribute from.
+    :param attribute: The  attribute to get.
+    """
+    if hasattr(obj, "__iter__") and not isinstance(obj, str):
+        return [get_attribute_values(a, attribute) for a in obj]
+    return getattr(obj, attribute)
 
 
 def get_all_subclasses(cls: Type) -> Dict[str, Type]:

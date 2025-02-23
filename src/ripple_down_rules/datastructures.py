@@ -12,6 +12,17 @@ from .failures import InvalidOperator
 from .utils import make_set, make_value_or_raise_error
 
 
+class RDRMode(Enum):
+    Propositional = auto()
+    """
+    Propositional mode, the mode where the rules are propositional.
+    """
+    Relational = auto()
+    """
+    Relational mode, the mode where the rules are relational.
+    """
+
+
 class MCRDRMode(Enum):
     """
     The modes of the MultiClassRDR.
@@ -96,6 +107,28 @@ class Attribute(ABC):
     """
     A dictionary of all dynamically created subclasses of the attribute class.
     """
+
+    @classmethod
+    def create_attribute(cls, name: str, mutually_exclusive_: bool, value_type_: CategoryValueType,
+                         range_: Union[set, Range])\
+            -> Type[Attribute]:
+        """
+        Create a new attribute subclass.
+
+        :param name: The name of the attribute.
+        :param mutually_exclusive_: Whether the attribute is mutually exclusive.
+        :param value_type_: The type of the value of the attribute.
+        :param range_: The range of the attribute.
+        :return: The new attribute subclass.
+        """
+        class NewAttribute(Attribute):
+            mutually_exclusive = mutually_exclusive_
+            value_type = value_type_
+            _range = range_
+
+        NewAttribute.__name__ = name
+        cls.register(NewAttribute)
+        return NewAttribute
 
     @classmethod
     def register(cls, subclass: Type[Attribute]):
@@ -676,7 +709,10 @@ class Case:
             self.add_attribute(attribute)
 
     def add_attribute(self, attribute: Attribute):
-        self.attributes[attribute.name] = attribute
+        self[attribute.name] = attribute
+
+    def __setitem__(self, attribute_name: str, attribute: Attribute):
+        self.attributes[attribute_name] = attribute
 
     @property
     def attribute_values(self):
