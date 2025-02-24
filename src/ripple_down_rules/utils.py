@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
-import inspect
 import logging
 import os
 
@@ -9,7 +9,95 @@ import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from typing_extensions import Callable, Set, Any, Type, Dict, List, TYPE_CHECKING
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import WordCompleter
+from typing_extensions import Callable, Set, Any, Type, Dict, List, Tuple, Optional, Union
+
+
+def prompt_user_for_input(prompt: str, session: PromptSession,
+                          user_input: Optional[str] = None) -> Tuple[str, ast.AST]:
+    """
+    Prompt the user for input.
+
+    :param prompt: The prompt to display to the user.
+    :param session: The prompt session to use.
+    :param user_input: The user input to use. If given, the user input will be used instead of prompting the user.
+    :return: The user input and the AST tree.
+    """
+    while True:
+        if not user_input:
+            user_input = session.prompt(f"\n{prompt} >>> ")
+        if user_input.lower() in ['exit', 'quit', '']:
+            break
+        try:
+            # Parse the input into an AST
+            tree = ast.parse(user_input, mode='eval')
+            print(f"AST parsed successfully: {ast.dump(tree)}")
+            return user_input, tree
+        except SyntaxError as e:
+            print(f"Syntax error: {e}")
+
+
+def parse_relational_conclusion(obj: Any, conclusion: str) -> Any:
+    """
+    Parse a relational conclusion from a string and get the attribute values equivalent to the conclusion from the case.
+
+    :param obj: The object to get the attribute values from.
+    :param conclusion: The conclusion to parse.
+    """
+    attr_chain = conclusion.split('.')
+    user_attr = attr_chain[0]
+    user_sub_attr = attr_chain[1] if len(attr_chain) > 1 else None
+    # Evaluate expression
+    attr = getattr(obj, user_attr)
+    if user_sub_attr:
+        attr = get_attribute_values(attr, user_sub_attr)
+    return attr
+
+
+def get_prompt_session_for_obj(obj: Any) -> PromptSession:
+    """
+    Get a prompt session for an object.
+
+    :param obj: The object to get the prompt session for.
+    :return: The prompt session.
+    """
+    completions = get_completions(obj)
+    completer = WordCompleter(completions)
+    session = PromptSession(completer=completer)
+    return session
+
+
+class VariableVisitor(ast.NodeVisitor):
+    """
+    A visitor to extract all variables and comparisons from a python expression represented as an AST tree.
+    """
+    compares: List[Tuple[Union[ast.Name, ast.Call], ast.cmpop, Union[ast.Name, ast.Call]]]
+    variables: Set[str]
+    all: List[ast.BoolOp]
+
+    def __init__(self):
+        self.variables = set()
+        self.compares = list()
+        self.all = list()
+
+    def visit_BinOp(self, node):
+        self.all.append(node)
+        self.generic_visit(node)
+
+    def visit_BoolOp(self, node):
+        self.all.append(node)
+        self.generic_visit(node)
+
+    def visit_Compare(self, node):
+        self.all.append(node)
+        self.compares.append([node.left, node.ops[0], node.comparators[0]])
+        self.generic_visit(node)
+
+    def visit_Name(self, node):
+        if f"__{node.id}__" not in dir(__builtins__):
+            self.variables.add(node.id)
+        self.generic_visit(node)
 
 
 def get_property_name(obj: Any, prop: Any) -> str:
@@ -62,8 +150,32 @@ def get_attribute_values(obj: Any, attribute: Any) -> Any:
     :param attribute: The  attribute to get.
     """
     if hasattr(obj, "__iter__") and not isinstance(obj, str):
-        return [get_attribute_values(a, attribute) for a in obj]
+        all_values = [get_attribute_values(a, attribute) for a in obj]
+        if can_be_a_set(all_values):
+            return set().union(*all_values)
+        else:
+            return set(all_values)
     return getattr(obj, attribute)
+
+
+def can_be_a_set(value: Any) -> bool:
+    """
+    Check if a value can be a set.
+
+    :param value: The value to check.
+    """
+    if hasattr(value, "__iter__") and not isinstance(value, str):
+        if isinstance(value, set):
+            return True
+        if len(value) == 0:
+            return True
+        elif any(isinstance(v, (int, float, str, bool)) for v in value):
+            return False
+        else:
+            return True
+    else:
+        return False
+
 
 
 def get_all_subclasses(cls: Type) -> Dict[str, Type]:

@@ -14,11 +14,11 @@ class Attribute(ABC):
     An attribute is a name-value pair that represents a feature of a case.
     an attribute can be used to compare two cases, to make a conclusion (which is also an attribute) about a case.
     """
-    mutually_exclusive: bool = False
+    _mutually_exclusive: bool = False
     """
     Whether the attribute is mutually exclusive, this means that the attribute instance can only have one value.
     """
-    value_type: CategoryValueType = CategoryValueType.Nominal
+    _value_type: CategoryValueType = CategoryValueType.Nominal
     """
     The type of the value of the attribute.
     """
@@ -47,12 +47,12 @@ class Attribute(ABC):
         """
         kwargs.update(mutually_exclusive=mutually_exclusive, value_type=value_type, _range=range_)
         if name in cls._registry:
-            if not cls._registry[name].mutually_exclusive == mutually_exclusive:
-                print(f"Mutually exclusive of {name} is different from {cls._registry[name].mutually_exclusive}.")
-                cls._registry[name].mutually_exclusive = mutually_exclusive
-            if not cls._registry[name].value_type == value_type:
-                raise ValueError(f"Value type of {name} is different from {cls._registry[name].value_type}.")
-            if not cls._registry[name].within_range(range_):
+            if not cls._registry[name]._mutually_exclusive == mutually_exclusive:
+                print(f"Mutually exclusive of {name} is different from {cls._registry[name]._mutually_exclusive}.")
+                cls._registry[name]._mutually_exclusive = mutually_exclusive
+            if not cls._registry[name]._value_type == value_type:
+                raise ValueError(f"Value type of {name} is different from {cls._registry[name]._value_type}.")
+            if not cls._registry[name].is_within_range(range_):
                 if isinstance(cls._registry[name]._range, set):
                     cls._registry[name]._range.union(range_)
                 else:
@@ -77,34 +77,19 @@ class Attribute(ABC):
         else:
             raise ValueError(f"{subclass} is already registered.")
 
-    @classmethod
-    def get_subclass(cls, name: str) -> Type[Attribute]:
-        """
-        Get a subclass of the attribute class by name.
-
-        :param name: The name of the subclass.
-        :return: The subclass.
-        """
-        if ' ' in name or '_' in name:
-            name = name.capitalize().strip(' _')
-
-        if name.lower() in cls._registry:
-            return cls._registry[name.lower()]
-        raise ValueError(f"No subclass with name {name}.")
-
     def __init_subclass__(cls, **kwargs):
         """
         Set the name of the attribute class to the name of the class in lowercase.
         """
         super().__init_subclass__()
-        cls.name = cls.__name__.lower()
+        cls._name = cls.__name__.lower()
 
         mutually_exclusive = kwargs.get("mutually_exclusive", None)
         value_type = kwargs.get("value_type", None)
         _range = kwargs.get("_range", None)
 
-        cls.mutually_exclusive = mutually_exclusive if mutually_exclusive else cls.mutually_exclusive
-        cls.value_type = value_type if value_type else cls.value_type
+        cls._mutually_exclusive = mutually_exclusive if mutually_exclusive else cls._mutually_exclusive
+        cls._value_type = value_type if value_type else cls._value_type
         cls._range = _range if _range else cls._range
 
     def __init__(self, value: Any):
@@ -113,19 +98,19 @@ class Attribute(ABC):
 
         :param value: The value of the attribute.
         """
-        self.value = value
+        self._value = value
 
     @property
-    def value(self):
-        return self._value
+    def _value(self):
+        return self._value_
 
-    @value.setter
-    def value(self, value: Any):
+    @_value.setter
+    def _value(self, value: Any):
         value = self.make_value(value)
-        if not self.mutually_exclusive:
-            self._value = make_set(value)
+        if not self._mutually_exclusive:
+            self._value_ = make_set(value)
         else:
-            self._value = value
+            self._value_ = value
 
     @classmethod
     def make_value(cls, value: Any) -> Any:
@@ -136,10 +121,10 @@ class Attribute(ABC):
         """
         if not cls.is_possible_value(value):
             raise ValueError(f"Value {value} is not a possible value for {cls.__name__} with range {cls._range}.")
-        if cls.value_type == CategoryValueType.Iterable:
+        if cls._value_type == CategoryValueType.Iterable:
             if not hasattr(value, "__iter__") or isinstance(value, str):
                 value = [value]
-        elif not cls.mutually_exclusive:
+        elif not cls._mutually_exclusive:
             value = make_set(value)
         else:
             value = make_value_or_raise_error(value)
@@ -158,12 +143,12 @@ class Attribute(ABC):
     def __eq__(self, other: Attribute):
         if not isinstance(other, Attribute):
             return False
-        if self.name != other.name:
+        if self._name != other._name:
             return False
-        if isinstance(self.value, set) and not isinstance(other.value, set):
-            return self.value == make_set(other.value)
+        if isinstance(self._value, set) and not isinstance(other._value, set):
+            return self._value == make_set(other._value)
         else:
-            return self.value == other.value
+            return self._value == other._value
 
     @classmethod
     @abstractmethod
@@ -197,10 +182,10 @@ class Attribute(ABC):
             return value in cls._range
 
     def __hash__(self):
-        return hash(self.name)
+        return hash(self._name)
 
     def __str__(self):
-        return f"{self.name}: {self.value}"
+        return f"{self._name}: {self._value}"
 
     def __repr__(self):
         return self.__str__()
@@ -210,8 +195,8 @@ class Integer(Attribute):
     """
     A discrete attribute is an attribute that has a value that is a discrete category.
     """
-    mutually_exclusive: bool = True
-    value_type = CategoryValueType.Ordinal
+    _mutually_exclusive: bool = True
+    _value_type = CategoryValueType.Ordinal
     _range: Range = Range(-float("inf"), float("inf"), min_closed=False, max_closed=False)
 
     @classmethod
@@ -230,8 +215,8 @@ class Continuous(Attribute):
     """
     A continuous attribute is an attribute that has a value that is a continuous category.
     """
-    mutually_exclusive: bool = False
-    value_type = CategoryValueType.Continuous
+    _mutually_exclusive: bool = False
+    _value_type = CategoryValueType.Continuous
     _range: Range = Range(-float("inf"), float("inf"), min_closed=False, max_closed=False)
 
     @classmethod
@@ -249,8 +234,8 @@ class Categorical(Attribute, ABC):
     """
     A categorical attribute is an attribute that has a value that is a category.
     """
-    mutually_exclusive: bool = False
-    value_type = CategoryValueType.Nominal
+    _mutually_exclusive: bool = False
+    _value_type = CategoryValueType.Nominal
     _range: Set[Union[str, type]] = None
     Values: Type[CategoricalValue]
 
@@ -298,6 +283,8 @@ class Categorical(Attribute, ABC):
             return cls.is_within_range(value)
         elif isinstance(value, cls.Values) or any(isinstance(v, type) and isinstance(value, v) for v in cls.Values.to_list()):
             return True
+        elif isinstance(value, set):
+            return all(cls.is_possible_value(v) for v in value)
         else:
             return False
 
@@ -338,8 +325,8 @@ class ListOf(Attribute, ABC):
     A list of attribute is an attribute that has a value that is a list of other attributes, but all the attributes in
     the list must have the same type.
     """
-    mutually_exclusive: bool = True
-    value_type = CategoryValueType.Iterable
+    _mutually_exclusive: bool = True
+    _value_type = CategoryValueType.Iterable
     _range: Set[Attribute]
     element_type: Type[Attribute]
     list_size: Optional[int] = None
@@ -395,8 +382,8 @@ class DictOf(Attribute, ABC):
     A dictionary of attribute is an attribute that has a value that is a dictionary of other attributes, but all the
     attributes in the dictionary must have the same type.
     """
-    mutually_exclusive: bool = True
-    value_type = CategoryValueType.Iterable
+    _mutually_exclusive: bool = True
+    _value_type = CategoryValueType.Iterable
     _range: Set[Attribute]
     element_type: Type[Attribute]
 
@@ -442,8 +429,8 @@ class Bool(Attribute):
     """
     A binary attribute is an attribute that has a value that is a binary category.
     """
-    mutually_exclusive: bool = True
-    value_type = CategoryValueType.Binary
+    _mutually_exclusive: bool = True
+    _value_type = CategoryValueType.Binary
     _range: set = {True, False}
 
     def __init__(self, value: Union[bool, str, int, float]):
@@ -476,8 +463,8 @@ class Unary(Attribute):
     """
     A unary attribute is an attribute that has a value that is a unary category.
     """
-    mutually_exclusive: bool = True
-    value_type = CategoryValueType.Unary
+    _mutually_exclusive: bool = True
+    _value_type = CategoryValueType.Unary
     _range: set
 
     def __init__(self):
@@ -505,8 +492,8 @@ class Species(Categorical):
     """
     A species category is a category that represents the species of an animal.
     """
-    mutually_exclusive: bool = True
-    value_type = CategoryValueType.Nominal
+    _mutually_exclusive: bool = True
+    _value_type = CategoryValueType.Nominal
     _range: set = {"mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"}
 
     def __init__(self, species: Union[Species.Values, str]):
@@ -517,8 +504,8 @@ class Habitat(Categorical):
     """
     A habitat category is a category that represents the habitat of an animal.
     """
-    mutually_exclusive: bool = False
-    value_type = CategoryValueType.Nominal
+    _mutually_exclusive: bool = False
+    _value_type = CategoryValueType.Nominal
     _range: set = {"land", "water", "air"}
 
     def __init__(self, habitat: Union[Habitat.Values, str]):

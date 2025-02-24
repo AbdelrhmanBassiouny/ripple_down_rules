@@ -155,7 +155,7 @@ class SingleClassRDR(RippleDownRules):
             relational_conclusion = expert.ask_for_relational_conclusion(x, for_property)
         if not self.start_rule:
             conditions = expert.ask_for_conditions(x, target)
-            self.start_rule = SingleClassRule(conditions, target, corner_case=Case(x.id_, x.attributes_list))
+            self.start_rule = SingleClassRule(conditions, target, corner_case=Case(x._id, x._attributes_list))
 
         pred = self.evaluate(x)
 
@@ -282,7 +282,7 @@ class MultiClassRDR(RippleDownRules):
             conditions = expert.ask_for_conditions(x, target)
             self.start_rule.conditions = conditions
             self.start_rule.conclusion = target
-            self.start_rule.corner_case = Case(x.id_, x.attributes_list)
+            self.start_rule.corner_case = Case(x._id, x._attributes_list)
 
     @property
     def last_top_rule(self) -> Optional[MultiClassTopRule]:
@@ -332,10 +332,10 @@ class MultiClassRDR(RippleDownRules):
         :param target: The target category to compare the conclusion with.
         :return: Whether the conclusion is conflicting with the target category.
         """
-        if conclusion.mutually_exclusive:
+        if conclusion._mutually_exclusive:
             return True
         else:
-            return not conclusion.value.issubset(target.value)
+            return not conclusion._value.issubset(target._value)
 
     @staticmethod
     def is_same_category_type(conclusion: Attribute, target: Attribute) -> bool:
@@ -412,7 +412,7 @@ class MultiClassRDR(RippleDownRules):
                 else {evaluated_rule.conclusion.value}
             category_type = type(evaluated_rule.conclusion)
             for c in same_type_conclusions:
-                combined_conclusion.union(c.value if isinstance(c.value, set) else {c.value})
+                combined_conclusion.union(c._value if isinstance(c._value, set) else {c._value})
                 self.conclusions.remove(c)
             self.conclusions.append(category_type(combined_conclusion))
 

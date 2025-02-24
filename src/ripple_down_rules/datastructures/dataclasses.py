@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 
 from typing_extensions import Union, Sequence, Any, Dict, List, TYPE_CHECKING
 
@@ -42,15 +43,15 @@ class Condition:
 
     @classmethod
     def from_case(cls, case: Case, operator: Operator = Equal()) -> Dict[str, Condition]:
-        return cls.from_attributes(case.attributes_list, operator)
+        return cls.from_attributes(case._attributes_list, operator)
 
     @classmethod
     def from_attributes(cls, attributes: List[Attribute], operator: Operator = Equal()) -> Dict[str, Condition]:
-        return {a.name: cls.from_attribute(a, operator) for a in attributes}
+        return {a._name: cls.from_attribute(a, operator) for a in attributes}
 
     @classmethod
     def from_attribute(cls, attribute: Attribute, operator: Operator = Equal()) -> Condition:
-        return cls(attribute.name, attribute.value, operator)
+        return cls(attribute._name, attribute._value, operator)
 
     def __call__(self, x: Any) -> bool:
         return self.operator(x, self.value)
@@ -73,13 +74,20 @@ class ObjectPropertyTarget:
     The value of the property. This has to be the exact property value not a value that is equal to the property value,
     as this is used to get the name of the property.
     """
+    target_value: Any
+    """
+    The target value of the property.
+    """
 
-    @property
-    def name(self) -> str:
-        """
-        Get the name of the property.
-        """
-        return get_property_name(self.obj, self.value)
+    def __init__(self, obj: Any, value: Any, target_value: Any):
+        self.obj = obj
+        self.value = value
+        self.name = get_property_name(self.obj, self.value)
+        self.__class__.__name__ = self.name
+        self.target_value = target_value
+
+    def __str__(self):
+        return f"{self.target_value}"
 
 
 @dataclass

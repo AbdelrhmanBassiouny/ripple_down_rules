@@ -63,7 +63,7 @@ class Rule(NodeMixin, ABC):
             raise ValueError("Rule has no conditions")
         self.fired = True
         for att_name, condition in self.conditions.items():
-            if att_name not in x.attributes or not condition(x.attributes[att_name].value):
+            if att_name not in x._attributes or not condition(x._attributes[att_name]._value):
                 self.fired = False
                 break
         return self.evaluate_next_rule(x)

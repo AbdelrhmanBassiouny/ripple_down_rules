@@ -9,7 +9,7 @@ from typing_extensions import Union, List, Optional, Any, Type, Tuple, Dict
 from ripple_down_rules.datastructures.attribute import Attribute, ListOf, DictOf, Categorical, Integer, Continuous, \
     Bool, Unary
 from ripple_down_rules.datastructures.enums import CategoryValueType
-from ripple_down_rules.utils import make_set, get_property_name
+from ripple_down_rules.utils import make_set, get_property_name, can_be_a_set, get_attribute_values
 
 
 class Attributes(UserDict):
@@ -20,15 +20,15 @@ class Attributes(UserDict):
 
     def __getitem__(self, item: Union[str, Attribute]) -> Attribute:
         if isinstance(item, Attribute):
-            return self[item.name]
+            return self[item._name]
         else:
             return super().__getitem__(item.lower())
 
     def __setitem__(self, name: str, value: Attribute):
         name = name.lower()
         if name in self:
-            if (isinstance(value, Attribute) and not value.mutually_exclusive) or hasattr(value, "__iter__"):
-                self[name].value = type(self[name].value)(make_set(self[name].value).union(make_set(value)))
+            if (isinstance(value, Attribute) and not value._mutually_exclusive) or hasattr(value, "__iter__"):
+                self[name]._value = type(self[name]._value)(make_set(self[name]._value).union(make_set(value)))
             else:
                 raise ValueError(f"Attribute {name} already exists in the case and is mutually exclusive.")
         else:
@@ -67,11 +67,13 @@ class Case:
         :param targets: The targets of the case.
         :param obj: The object that the case represents.
         """
-        self.attributes = Attributes({a.name: a for a in attributes})
-        self.id_ = id_
-        self.conclusions: Optional[List[Attribute]] = conclusions
-        self.targets: Optional[List[Attribute]] = targets
-        self.obj: Any = obj
+        self._attributes = Attributes({a._name: a for a in attributes})
+        for attribute in attributes:
+            setattr(self, attribute._name, attribute)
+        self._id = id_
+        self._conclusions: Optional[List[Attribute]] = conclusions
+        self._targets: Optional[List[Attribute]] = targets
+        self._obj: Any = obj
 
     @classmethod
     def create_cases_from_dataframe(cls, df: pd.DataFrame, ids: List[str]) -> List[Case]:
@@ -128,7 +130,7 @@ class Case:
         :param property_value: The value of the property.
         :return: The property.
         """
-        return self.get_property_from_name(get_property_name(self.obj, property_value))
+        return self.get_property_from_name(get_property_name(self._obj, property_value))
 
     def get_property_from_name(self, property_name: str) -> Type:
         """
@@ -137,7 +139,7 @@ class Case:
         :param property_name: The name of the property.
         :return: The property.
         """
-        return getattr(self.obj, property_name)
+        return getattr(self._obj, property_name)
 
     @staticmethod
     def get_attributes_from_object(obj: Any) -> List[Attribute]:
@@ -150,9 +152,10 @@ class Case:
         attributes = []
         for attr_name in dir(obj):
             attr = getattr(obj, attr_name)
-            if not attr_name.startswith("_") and not callable(attr):
-                matched_attribute = Case.get_or_create_matching_attribute(attr, attr_name)
-                attributes.append(matched_attribute)
+            if attr_name.startswith("_") or callable(attr):
+                continue
+            matched_attribute = Case.get_or_create_matching_attribute(attr, attr_name)
+            attributes.append(matched_attribute)
         return attributes
 
     @staticmethod
@@ -165,8 +168,8 @@ class Case:
         :return: The matching attribute type instantiated with the attribute value.
         """
         iterable = hasattr(attr_value, "__iter__") and not isinstance(attr_value, str)
-        if iterable:
-            element_attr_name = f"{attr_name}_element"
+        element_attr_name = f"{attr_name}_element"
+        if iterable and not can_be_a_set(attr_value):
             iterable_type = ListOf
             values = attr_value
             if type(attr_value) == dict:
@@ -198,6 +201,21 @@ class Case:
                 attr_type = Continuous
             elif Bool.is_possible_value(attr_value):
                 attr_type = Bool
+            elif iterable:
+                attr_value = make_set(attr_value)
+                attr_value_element = list(attr_value)[0] if len(attr_value) > 0 else None
+                attr_value_type = type(attr_value_element) if attr_value_element else None
+                range_ = make_set(attr_value_type) if attr_value_type else set()
+                attr_type = Categorical.create_attribute(attr_name, False,
+                                                         CategoryValueType.Nominal, range_)
+                if attr_value_element:
+                    for sub_attr in dir(attr_value_element):
+                        sub_attr_value = set()
+                        if sub_attr.startswith("_") or callable(getattr(attr_value_element, sub_attr)):
+                            continue
+                        for attr_element in attr_value:
+                            sub_attr_value = sub_attr_value.union(get_attribute_values(attr_element, sub_attr))
+                        setattr(attr_type, sub_attr, Case.get_or_create_matching_attribute(sub_attr_value, sub_attr))
             else:
                 attr_type = Categorical.create_attribute(attr_name, False, CategoryValueType.Nominal,
                                                          make_set(type(attr_value)))
@@ -205,7 +223,7 @@ class Case:
 
     def remove_attribute(self, attribute_name: str):
         if attribute_name in self:
-            del self.attributes[attribute_name]
+            del self._attributes[attribute_name]
 
     def add_attributes(self, attributes: List[Attribute]):
         if not attributes:
@@ -215,44 +233,44 @@ class Case:
             self.add_attribute(attribute)
 
     def add_attribute(self, attribute: Attribute):
-        self[attribute.name] = attribute
+        self[attribute._name] = attribute
 
     def __setitem__(self, attribute_name: str, attribute: Attribute):
-        self.attributes[attribute_name] = attribute
-        if self.obj:
-            setattr(self.obj, attribute_name, attribute)
+        self._attributes[attribute_name] = attribute
+        if self._obj:
+            setattr(self._obj, attribute_name, attribute)
 
     @property
-    def attribute_values(self):
-        return [a.value for a in self.attributes.values()]
+    def _attribute_values(self):
+        return [a._value for a in self._attributes.values()]
 
     @property
-    def attributes_list(self):
-        return list(self.attributes.values())
+    def _attributes_list(self):
+        return list(self._attributes.values())
 
     def __eq__(self, other):
-        return self.attributes == other.attributes
+        return self._attributes == other._attributes
 
     def __getitem__(self, attribute_description: Union[str, Attribute, Any]) -> Attribute:
         if isinstance(attribute_description, (Attribute, str)):
-            return self.attributes.get(attribute_description, None)
+            return self._attributes.get(attribute_description, None)
         else:
-            return self.attributes[get_property_name(self.obj, attribute_description)]
+            return self._attributes[get_property_name(self._obj, attribute_description)]
 
     def __sub__(self, other):
-        return {k: self.attributes[k] for k in self.attributes
-                if self.attributes[k] != other.attributes[k]}
+        return {k: self._attributes[k] for k in self._attributes
+                if self._attributes[k] != other._attributes[k]}
 
     def __contains__(self, item):
         if isinstance(item, str):
-            return item in self.attributes
+            return item in self._attributes
         elif isinstance(item, type) and issubclass(item, Attribute):
-            return item.__name__ in self.attributes
+            return item.__name__ in self._attributes
         elif isinstance(item, Attribute):
-            return item.name in self.attributes and self.attributes[item.name] == item
+            return item._name in self._attributes and self._attributes[item._name] == item
 
     @staticmethod
-    def ljust(s, sz=15):
+    def _ljust(s, sz=15):
         return str(s).ljust(sz)
 
     def print_all_names(self, all_names: List[str], max_len: int,
@@ -296,24 +314,24 @@ class Case:
         :param conclusion_types: list of category types.
         :return: string of names, maximum length.
         """
-        if conclusion_types or self.conclusions:
-            conclusion_types = conclusion_types or list(map(type, self.conclusions))
+        if conclusion_types or self._conclusions:
+            conclusion_types = conclusion_types or list(map(type, self._conclusions))
         category_names = []
         if conclusion_types:
             category_types = conclusion_types or [Attribute]
             category_names = [category_type.__name__.lower() for category_type in category_types]
 
-        if target_types or self.targets:
-            target_types = target_types if target_types else list(map(type, self.targets))
+        if target_types or self._targets:
+            target_types = target_types if target_types else list(map(type, self._targets))
         target_names = []
         if target_types:
             target_names = [f"target_{target_type.__name__.lower()}" for target_type in target_types]
 
         curr_max_len = max(max_len, max([len(name) for name in all_names + category_names + target_names]) + 2)
-        names_row = self.ljust(f"names: ", sz=curr_max_len)
-        names_row += self.ljust("ID", sz=curr_max_len)
+        names_row = self._ljust(f"names: ", sz=curr_max_len)
+        names_row += self._ljust("ID", sz=curr_max_len)
         names_row += "".join(
-            [f"{self.ljust(name, sz=curr_max_len)}" for name in all_names + category_names + target_names])
+            [f"{self._ljust(name, sz=curr_max_len)}" for name in all_names + category_names + target_names])
         return names_row, curr_max_len
 
     def get_all_names_and_max_len(self, all_attributes: Optional[List[Attribute]] = None) -> Tuple[List[str], int]:
@@ -323,10 +341,10 @@ class Case:
         :param all_attributes: list of attributes
         :return: list of names and the maximum length
         """
-        all_attributes = all_attributes if all_attributes else self.attributes_list
-        all_names = list(OrderedSet([a.name for a in all_attributes]))
+        all_attributes = all_attributes if all_attributes else self._attributes_list
+        all_names = list(OrderedSet([a._name for a in all_attributes]))
         max_len = max([len(name) for name in all_names])
-        max_len = max(max_len, max([len(str(a.value)) for a in all_attributes])) + 4
+        max_len = max(max_len, max([len(str(a._value)) for a in all_attributes])) + 4
         return all_names, max_len
 
     def get_values_str(self, all_names: Optional[List[str]] = None,
@@ -337,8 +355,8 @@ class Case:
         """
         Get the string representation of the values of the case.
         """
-        all_names = list(self.attributes.keys()) if not all_names else all_names
-        targets = targets if targets else self.targets
+        all_names = list(self._attributes.keys()) if not all_names else all_names
+        targets = targets if targets else self._targets
         if targets:
             targets = targets if isinstance(targets, list) else [targets]
         case_row = self.get_id_and_attribute_values_str(all_names, is_corner_case, ljust_sz)
@@ -356,13 +374,13 @@ class Case:
         :param is_corner_case: Whether the case is a corner case.
         :param ljust_sz: The size of the ljust.
         """
-        all_names = list(self.attributes.keys()) if not all_names else all_names
+        all_names = list(self._attributes.keys()) if not all_names else all_names
         if is_corner_case:
-            case_row = self.ljust(f"corner case: ", sz=ljust_sz)
+            case_row = self._ljust(f"corner case: ", sz=ljust_sz)
         else:
-            case_row = self.ljust(f"case: ", sz=ljust_sz)
-        case_row += self.ljust(self.id_, sz=ljust_sz)
-        case_row += "".join([f"{self.ljust(self[name].value if name in self.attributes else '', sz=ljust_sz)}"
+            case_row = self._ljust(f"case: ", sz=ljust_sz)
+        case_row += self._ljust(self._id, sz=ljust_sz)
+        case_row += "".join([f"{self._ljust(self[name]._value if name in self._attributes else '', sz=ljust_sz)}"
                              for name in all_names])
         return case_row
 
@@ -370,14 +388,14 @@ class Case:
         """
         Get the string representation of the targets of the case.
         """
-        targets = targets if targets else self.targets
+        targets = targets if targets else self._targets
         return self._get_categories_str(targets, ljust_sz)
 
     def get_conclusions_str(self, conclusions: Optional[List[Attribute]] = None, ljust_sz: int = 15) -> str:
         """
         Get the string representation of the conclusions of the case.
         """
-        conclusions = conclusions if conclusions else self.conclusions
+        conclusions = conclusions if conclusions else self._conclusions
         return self._get_categories_str(conclusions, ljust_sz)
 
     def _get_categories_str(self, categories: List[Union[Attribute, Any]], ljust_sz: int = 15) -> str:
@@ -386,12 +404,12 @@ class Case:
         """
         if not categories:
             return ""
-        categories_str = [self.ljust(c.value if isinstance(c, Attribute) else c, sz=ljust_sz) for c in categories]
+        categories_str = [self._ljust(c._value if isinstance(c, Attribute) else c, sz=ljust_sz) for c in categories]
         return "".join(categories_str) if len(categories_str) > 1 else categories_str[0]
 
     def __repr__(self):
         return self.__str__()
 
     def __copy__(self):
-        conclusions_cp = self.conclusions.copy() if self.conclusions else None
-        return Case(self.id_, self.attributes_list.copy(), conclusions_cp)
+        conclusions_cp = self._conclusions.copy() if self._conclusions else None
+        return Case(self._id, self._attributes_list.copy(), conclusions_cp)

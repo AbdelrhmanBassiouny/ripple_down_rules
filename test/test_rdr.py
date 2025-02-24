@@ -30,8 +30,8 @@ class TestRDR(TestCase):
 
     def test_setup(self):
         self.assertEqual(len(self.all_cases), 101)
-        self.assertTrue(all([len(c.attributes) == 16 for c in self.all_cases]))
-        self.assertTrue(all([isinstance(c.attributes, Attributes) for c in self.all_cases]))
+        self.assertTrue(all([len(c._attributes) == 16 for c in self.all_cases]))
+        self.assertTrue(all([isinstance(c._attributes, Attributes) for c in self.all_cases]))
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -167,7 +167,7 @@ class TestRDR(TestCase):
                               add_extra_conclusions=True, expert=expert)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_extra_classify")
-        LivesOnlyOnLand = Attribute.get_subclass("LivesOnlyOnLand")
+        LivesOnlyOnLand = get_all_subclasses(Attribute)["LivesOnlyOnLand".lower()]
         self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
 
         if save_answers:
@@ -231,19 +231,19 @@ class TestRDR(TestCase):
 
         def get_habitat(x: Case, t: Attribute):
             all_habs = []
-            if t.value == "mammal" and x["aquatic"].value == 0:
+            if t._value == "mammal" and x["aquatic"]._value == 0:
                 all_habs.append(Habitat("land"))
-            elif t.value == "bird":
+            elif t._value == "bird":
                 all_habs.append(Habitat({"land"}))
-                if x["airborne"].value == 1:
+                if x["airborne"]._value == 1:
                     all_habs[-1].value.update({"air"})
-                if x["aquatic"].value == 1:
+                if x["aquatic"]._value == 1:
                     all_habs[-1].value.update({"water"})
-            elif t.value == "fish":
+            elif t._value == "fish":
                 all_habs.append(Habitat("water"))
-            elif t.value == "molusc":
+            elif t._value == "molusc":
                 all_habs.append(Habitat({"land"}))
-                if x["aquatic"].value == 1:
+                if x["aquatic"]._value == 1:
                     all_habs[-1].value.update({"water"})
             return all_habs + [t]
 
