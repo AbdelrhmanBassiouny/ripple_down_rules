@@ -9,7 +9,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence, Callable
 
-from .datastructures import str_to_operator_fn, Condition, Case, Attribute, Operator, RDRMode
+from .datastructures import Operator, Condition, Attribute, Case, RDRMode
 from .failures import InvalidOperator
 from .utils import get_all_subclasses, get_attribute_values, get_completions, get_property_name
 
@@ -81,7 +81,7 @@ class Expert(ABC):
         """
         pass
 
-    def ask_for_relational_conclusion(self, x: Case, for_attribute: Union[str, Attribute, Sequence[Attribute]])\
+    def ask_for_relational_conclusion(self, x: Case, for_attribute: Union[str, Attribute, Sequence[Attribute]]) \
             -> Optional[Attribute]:
         """
         Ask the expert to provide a relational conclusion for the case.
@@ -207,17 +207,7 @@ class Human(Expert):
         :param user_input: The input to parse.
         :return: The parsed conditions as a dictionary.
         """
-        rule_conditions = {}
-        operators = get_all_subclasses(Operator)
-        rules = re.split()
-        all_messages = []
-        for rule in rules:
-            rule_conditions, messages = self.parse_rule(rule, all_names)
-            all_messages += messages if messages else []
-            rule_conditions.update(rule_conditions)
-        if all_messages:
-            print("\n".join(all_messages))
-        return rule_conditions
+        pass
 
     def ask_for_conditions(self, x: Case,
                            targets: Union[Attribute, List[Attribute]],
@@ -279,7 +269,7 @@ class Human(Expert):
             extra_conclusions[category] = self._get_conditions(all_names, conditions_for="extra conclusions")
         return extra_conclusions
 
-    def ask_for_relational_conclusion(self, x: Case, for_attribute: Any)\
+    def ask_for_relational_conclusion(self, x: Case, for_attribute: Any) \
             -> Optional[Callable[[Case], None]]:
         """
         Ask the expert to provide a relational conclusion for the case.
@@ -308,6 +298,7 @@ class Human(Expert):
                 def apply_conclusion(x: Case) -> None:
                     attr_value = self.parse_relational_conclusion(x.obj, user_input)
                     x[for_attribute_name] = attr_value
+
                 print(f"Evaluated expression: {apply_conclusion(x)}")
             except SyntaxError as e:
                 print(f"Syntax error: {e}")
@@ -391,7 +382,7 @@ class Human(Expert):
             else:
                 return None
 
-    def get_and_print_all_names_and_conclusions(self, x: Case, current_conclusions: Optional[List[Attribute]] = None)\
+    def get_and_print_all_names_and_conclusions(self, x: Case, current_conclusions: Optional[List[Attribute]] = None) \
             -> List[str]:
         """
         Get and print all names and conclusions for the case.
@@ -645,7 +636,9 @@ class Human(Expert):
         :return: list of error messages, and the name, value and operator of the rule.
         """
         try:
-            name, value, operator = str_to_operator_fn(rule)
+            operator = Operator.parse_operators(rule)[0]
+            name = operator.arg_names[0]
+            value = operator.arg_names[1]
             messages = []
             if not name:
                 messages.append(f"Name cannot be empty")

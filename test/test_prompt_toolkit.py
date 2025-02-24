@@ -7,10 +7,10 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from typing_extensions import Set, Optional, List
 
-from ripple_down_rules.datastructures import str_to_operator_fn, RDRMode, Case
+from ripple_down_rules.datastructures import RDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import make_set, get_attribute_values, get_completions
+from ripple_down_rules.utils import get_completions
 
 
 class PhysicalObject:

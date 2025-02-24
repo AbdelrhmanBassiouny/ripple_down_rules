@@ -5,8 +5,8 @@ from unittest import TestCase
 from typing_extensions import List, Optional
 
 from ripple_down_rules.datasets import load_zoo_dataset
-from ripple_down_rules.datastructures import Case, str_to_operator_fn, Condition, MCRDRMode, Habitat, Attribute, \
-    Attributes
+from ripple_down_rules.datastructures import Case, Condition, MCRDRMode, Habitat, Attribute, \
+    Attributes, Operator
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree
@@ -324,9 +324,9 @@ class MCRDRTester(Expert):
             json_file = self.expert_answers_dir + "/mcrdr_stop_only_answers_fit.json"
             with open(json_file, "r") as f:
                 all_expert_answers = json.load(f)
-        all_expert_conditions = [{name: str_to_operator_fn(c) for name, c in a.items()} for a in all_expert_answers]
+        all_expert_conditions = [{name: Operator.parse_operators(c)[0] for name, c in a.items()} for a in all_expert_answers]
         all_expert_conditions = [
-            {name: Condition(n, float(value), operator) for name, (n, value, operator) in a.items()}
+            {name: Condition(op.arg_names[0], float(op.arg_names[1]), op) for name, op in a.items()}
             for a in all_expert_conditions]
         return all_expert_conditions
 
