@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import logging
 import os
 
@@ -10,34 +11,45 @@ from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
 from typing_extensions import Callable, Set, Any, Type, Dict, List, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from ripple_down_rules.datastructures import Attribute
+
+def get_property_name(obj: Any, prop: Any) -> str:
+    """
+    Get the name of a property from an object.
+
+    :param obj: The object to get the property name from.
+    :param prop: The property to get the name of.
+    """
+    for name in dir(obj):
+        if name.startswith("_"):
+            continue
+        if getattr(obj, name) is prop:
+            return name
 
 
-def get_completions(case: Any) -> List[str]:
+def get_completions(obj: Any) -> List[str]:
     """
     Get all completions for the case object. This is used in the IPython shell to provide completions for the user.
 
-    :param case: The case object to get completions for.
+    :param obj: The case object to get completions for.
     :return: A list of completions.
     """
     # Define completer with all object attributes and comparison operators
     completions = ['==', '!=', '>', '<', '>=', '<=', 'in', 'not', 'and', 'or', 'is']
     completions += ["isinstance(", "issubclass(", "type(", "len(", "hasattr(", "getattr(", "setattr(", "delattr("]
-    for attr in dir(case):
+    for attr in dir(obj):
         if attr.startswith("__") or attr.startswith("_"):
             continue
-        completions.append(f"{case.__class__.__name__}.{attr}")
-        for sub_attr in dir(getattr(case, attr)):
+        completions.append(f"{obj.__class__.__name__}.{attr}")
+        for sub_attr in dir(getattr(obj, attr)):
             if sub_attr.startswith("__"):
                 continue
             if hasattr(sub_attr, "__iter__") and not isinstance(sub_attr, str):
                 for sub_attr_element in sub_attr:
                     completions.append(f"{attr}.{sub_attr_element}")
-                    completions.append(f"{case.__class__.__name__}.{attr}.{sub_attr_element}")
+                    completions.append(f"{obj.__class__.__name__}.{attr}.{sub_attr_element}")
             else:
                 completions.append(f"{attr}.{sub_attr}")
-                completions.append(f"{case.__class__.__name__}.{attr}.{sub_attr}")
+                completions.append(f"{obj.__class__.__name__}.{attr}.{sub_attr}")
     return completions
 
 
@@ -56,7 +68,7 @@ def get_attribute_values(obj: Any, attribute: Any) -> Any:
 
 def get_all_subclasses(cls: Type) -> Dict[str, Type]:
     """
-    Get all subclasses of Attribute recursively.
+    Get all subclasses of a class recursively.
 
     :param cls: The class to get the subclasses of.
     :return: A dictionary of all subclasses.

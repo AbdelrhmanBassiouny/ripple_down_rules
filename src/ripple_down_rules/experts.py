@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from abc import ABC, abstractmethod
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence, Callable
 
 from .datastructures import str_to_operator_fn, Condition, Case, Attribute, Operator, RDRMode
 from .failures import InvalidOperator
-from .utils import get_all_subclasses, get_attribute_values, get_completions
+from .utils import get_all_subclasses, get_attribute_values, get_completions, get_property_name
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -118,6 +119,106 @@ class Human(Expert):
         with open(path + '.json', "r") as f:
             self.all_expert_answers = json.load(f)
 
+    def _get_relational_conditions(self, x: Case, targets: List[Attribute],
+                                   conditions_for="differentiating features") -> Dict[str, Condition]:
+        """
+        Ask the expert to provide the differentiating features between two cases or unique features for a case
+        that doesn't have a corner case to compare to.
+
+        :param x: The case to classify.
+        :param targets: The target categories to compare the case with.
+        :param conditions_for: A string indicating what the conditions are for.
+        :return: The differentiating features as new rule conditions.
+        """
+        # if not self.use_loaded_answers:
+        #     print(f"Please provide comma separated conditions for {conditions_for}:")
+        while True:
+            if self.use_loaded_answers:
+                value = self.all_expert_answers.pop(0)
+            else:
+                # Initialze prompt session and get conditions from user written input
+                session = self.get_prompt_session_for_obj(x.obj)
+                rule_conditions: Dict[str, Condition] = None
+                while True:
+                    user_input = session.prompt(
+                        f"\nGive Conditions for {x.__class__.__name__}.{targets[0].name} >>> ")
+                    if user_input.lower() in ['exit', 'quit', '']:
+                        break
+                    print(f"Evaluating: {user_input}")
+                    try:
+                        # Parse the input into an AST
+                        tree = ast.parse(user_input, mode='eval')
+                        print(f"AST parsed successfully: {ast.dump(tree)}")
+
+                        # Step 2: Extract variable names from the tree
+                        class VariableVisitor(ast.NodeVisitor):
+                            def __init__(self):
+                                self.variables = set()
+                                self.compares = list()
+                                self.all = list()
+
+                            def visit_BinOp(self, node):
+                                self.all.append(node)
+                                self.generic_visit(node)
+
+                            def visit_BoolOp(self, node):
+                                self.all.append(node)
+                                self.generic_visit(node)
+
+                            def visit_Compare(self, node):
+                                self.all.append(node)
+                                self.compares.append([node.left, node.ops[0], node.comparators[0]])
+                                self.generic_visit(node)
+
+                            def visit_Name(self, node):
+                                if node.id not in dir(__builtins__):
+                                    self.variables.add(node.id)
+                                self.generic_visit(node)
+
+                        visitor = VariableVisitor()
+                        visitor.visit(tree)
+
+                        # Step 3: Compile the AST into a function
+                        code = compile(tree, filename="<string>", mode="eval")
+                        arg_names = ", ".join(visitor.variables)
+
+                        # Step 4: Create a callable function
+                        def generated_function(**kwargs):
+                            try:
+                                # Pass only the required arguments to eval
+                                context = {key: kwargs[key] for key in visitor.variables if key in kwargs}
+                                return eval(code, {"__builtins__": None}, context)
+                            except Exception as e:
+                                raise ValueError(f"Error during evaluation: {e}")
+
+                        def rule_condition(x: Case) -> None:
+                            return self.parse_relational_conditions(x.obj, user_input)
+
+                        print(f"Evaluated expression: {rule_condition(x)}")
+                    except SyntaxError as e:
+                        print(f"Syntax error: {e}")
+                return rule_conditions
+
+    def parse_relational_conditions(self, x: Case, user_input: str) -> Dict[str, Condition]:
+        """
+        Parse the conditions from the user input.
+
+        :param x: The case to classify.
+        :param user_input: The input to parse.
+        :return: The parsed conditions as a dictionary.
+        """
+        rule_conditions = {}
+        operators = get_all_subclasses(Operator)
+        rules = re.split()
+        all_messages = []
+        for rule in rules:
+            rule_conditions, messages = self.parse_rule(rule, all_names)
+            all_messages += messages if messages else []
+            rule_conditions.update(rule_conditions)
+        if all_messages:
+            print("\n".join(all_messages))
+        return rule_conditions
+
     def ask_for_conditions(self, x: Case,
                            targets: Union[Attribute, List[Attribute]],
                            last_evaluated_rule: Optional[Rule] = None) \
@@ -126,12 +227,8 @@ class Human(Expert):
         if last_evaluated_rule and not self.use_loaded_answers:
             action = "Refinement" if last_evaluated_rule.fired else "Alternative"
             print(f"{action} needed for rule:\n")
-        if last_evaluated_rule and last_evaluated_rule.fired:
-            all_attributes = last_evaluated_rule.corner_case.attributes_list + x.attributes_list
-        else:
-            if not self.use_loaded_answers:
-                print("Please provide a rule for case:")
-            all_attributes = x.attributes_list
+
+        all_attributes = self.get_all_attributes(x, last_evaluated_rule)
 
         all_names, max_len = x.get_all_names_and_max_len(all_attributes)
 
@@ -143,8 +240,25 @@ class Human(Expert):
                                                              ljust_sz=max_len)
             x.print_values(all_names, targets=targets, ljust_sz=max_len)
 
-        # take user input
-        return self._get_conditions(all_names, conditions_for="differentiating features")
+        if self.mode == RDRMode.Relational:
+            return self._get_relational_conditions(x, targets, conditions_for="differentiating features")
+        else:
+            return self._get_conditions(all_names, conditions_for="differentiating features")
+
+    def get_all_attributes(self, x: Case, last_evaluated_rule: Optional[Rule] = None) -> List[Attribute]:
+        """
+        Get all attributes for the case.
+
+        :param x: The case to get the attributes for.
+        :param last_evaluated_rule: The last evaluated rule.
+        """
+        if last_evaluated_rule and last_evaluated_rule.fired:
+            all_attributes = last_evaluated_rule.corner_case.attributes_list + x.attributes_list
+        else:
+            if not self.use_loaded_answers:
+                print("Please provide a rule for case:")
+            all_attributes = x.attributes_list
+        return all_attributes
 
     def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Attribute]) \
             -> Dict[Attribute, Dict[str, Condition]]:
@@ -165,22 +279,22 @@ class Human(Expert):
             extra_conclusions[category] = self._get_conditions(all_names, conditions_for="extra conclusions")
         return extra_conclusions
 
-    def ask_for_relational_conclusion(self, x: Case, for_attribute: Union[str, Attribute, Sequence[Attribute]])\
-            -> Optional[Attribute]:
+    def ask_for_relational_conclusion(self, x: Case, for_attribute: Any)\
+            -> Optional[Callable[[Case], None]]:
         """
         Ask the expert to provide a relational conclusion for the case.
 
         :param x: The case to classify.
         :param for_attribute: The attribute to provide the conclusion for.
         """
-        # all_names = self.get_and_print_all_names_and_conclusions(x)
-        session = self.get_prompt_session_for_case(x)
+        all_names = self.get_and_print_all_names_and_conclusions(x)
+        session = self.get_prompt_session_for_obj(x.obj)
 
-        for_attribute_name = self.get_attribute_name(for_attribute)
+        for_attribute_name = get_property_name(x.obj, for_attribute)
 
-        if not hasattr(x, for_attribute_name):
+        if not hasattr(x.obj, for_attribute_name):
             raise ValueError(f"Attribute {for_attribute_name} not found in the case")
-        attr_value = None
+        apply_conclusion = None
         while True:
             user_input = session.prompt(f"\nGive Conclusion on {x.__class__.__name__}.{for_attribute_name} >>> ")
             if user_input.lower() in ['exit', 'quit', '']:
@@ -190,22 +304,24 @@ class Human(Expert):
                 # Parse the input into an AST
                 tree = ast.parse(user_input, mode='eval')
                 print(f"AST parsed successfully: {ast.dump(tree)}")
-                attr_value = self.parse_relational_conclusion(x, user_input)
-                x[for_attribute_name] = attr_value
-                print(f"Evaluated expression: {attr_value}")
+
+                def apply_conclusion(x: Case) -> None:
+                    attr_value = self.parse_relational_conclusion(x.obj, user_input)
+                    x[for_attribute_name] = attr_value
+                print(f"Evaluated expression: {apply_conclusion(x)}")
             except SyntaxError as e:
                 print(f"Syntax error: {e}")
-        return attr_value
+        return apply_conclusion
 
     @staticmethod
-    def get_prompt_session_for_case(x: Case) -> PromptSession:
+    def get_prompt_session_for_obj(obj: Any) -> PromptSession:
         """
-        Get a prompt session for the case.
+        Get a prompt session for an object.
 
-        :param x: The case to get the prompt session for.
+        :param obj: The object to get the prompt session for.
         :return: The prompt session.
         """
-        completions = get_completions(x)
+        completions = get_completions(obj)
         completer = WordCompleter(completions)
         session = PromptSession(completer=completer)
         return session
@@ -247,7 +363,6 @@ class Human(Expert):
         # Evaluate expression
         attr = getattr(x, user_attr)
         if user_sub_attr:
-            attr = attr.value if isinstance(attr, Attribute) else attr
             attr = get_attribute_values(attr, user_sub_attr)
         attr = set().union(*attr) if hasattr(attr, "__iter__") and not isinstance(attr, str) else attr
         return attr

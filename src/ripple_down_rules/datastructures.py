@@ -10,7 +10,14 @@ from typing_extensions import Any, Tuple, Optional, List, Dict, Type, Union, Seq
     get_type_hints
 
 from .failures import InvalidOperator
-from .utils import make_set, make_value_or_raise_error
+from .utils import make_set, make_value_or_raise_error, get_property_name
+
+
+class ObjectPropertyTarget:
+    def __init__(self, obj: Any, obj_property: Any, target_value: Any):
+        self.obj = obj
+        self.name = get_property_name(obj, obj_property)
+        self.value = target_value
 
 
 class RDRMode(Enum):
@@ -718,7 +725,7 @@ class Operator(ABC):
         pass
 
     @abstractmethod
-    def __call__(self, x: Any, y: Any) -> bool:
+    def __call__(self, *args) -> bool:
         pass
 
     def __str__(self):
@@ -728,7 +735,103 @@ class Operator(ABC):
         return self.__str__()
 
 
-class In(Operator):
+class UnaryOperator(Operator, ABC):
+    """
+    A unary operator is an operator that compares one value with another value.
+    """
+    @abstractmethod
+    def __call__(self, x: Any) -> bool:
+        pass
+
+
+class Length(UnaryOperator):
+    """
+    The length operator that checks if the length of the first value is equal to the second value.
+    """
+
+    def __call__(self, x: Any) -> int:
+        return len(x)
+
+    @property
+    def name(self) -> str:
+        return "len(.*)"
+
+
+class BinaryOperator(Operator, ABC):
+    """
+    A binary operator is an operator that compares two values.
+    """
+    @abstractmethod
+    def __call__(self, x: Any, y: Any) -> bool:
+        pass
+
+
+class HasAttribute(BinaryOperator):
+    """
+    The has attribute operator that checks if the first value has the second value as an attribute.
+    """
+
+    def __call__(self, x: Any, y: Any) -> bool:
+        return hasattr(x, y)
+
+    @property
+    def name(self) -> str:
+        return "hasattr(.*, .*)"
+
+
+class IsInstance(BinaryOperator):
+    """
+    The is instance operator that checks if the first value is an instance of the second value.
+    """
+
+    def __call__(self, x: Any, y: Any) -> bool:
+        return isinstance(x, y)
+
+    @property
+    def name(self) -> str:
+        return "isinstance(.*, .*)"
+
+
+class IsSubclass(BinaryOperator):
+    """
+    The is subclass operator that checks if the first value is a subclass of the second value.
+    """
+
+    def __call__(self, x: Any, y: Any) -> bool:
+        return issubclass(x, y)
+
+    @property
+    def name(self) -> str:
+        return "issubclass(.*, .*)"
+
+
+class And(BinaryOperator):
+    """
+    The and operator that checks if both values are true.
+    """
+
+    def __call__(self, x: Any, y: Any) -> bool:
+        return x and y
+
+    @property
+    def name(self) -> List[str]:
+        return [" and ", " & "]
+
+
+class Or(BinaryOperator):
+    """
+    The or operator that checks if one of the values is true.
+    """
+
+    def __call__(self, x: Any, y: Any) -> bool:
+        return x or y
+
+    @property
+    def name(self) -> List[str]:
+        return [" or ", " | "]
+
+
+class In(BinaryOperator):
     """
     The in operator that checks if the first value is in the second value.
     """
@@ -741,7 +844,7 @@ class In(Operator):
         return " in "
 
 
-class Equal(Operator):
+class Equal(BinaryOperator):
     """
     An equal operator that checks if two values are equal.
     """
@@ -754,7 +857,7 @@ class Equal(Operator):
         return "=="
 
 
-class Greater(Operator):
+class Greater(BinaryOperator):
     """
     A greater operator that checks if the first value is greater than the second value.
     """
@@ -767,7 +870,7 @@ class Greater(Operator):
         return ">"
 
 
-class GreaterEqual(Operator):
+class GreaterEqual(BinaryOperator):
     """
     A greater or equal operator that checks if the first value is greater or equal to the second value.
     """
@@ -780,7 +883,7 @@ class GreaterEqual(Operator):
         return ">="
 
 
-class Less(Operator):
+class Less(BinaryOperator):
     """
     A less operator that checks if the first value is less than the second value.
     """
@@ -793,7 +896,7 @@ class Less(Operator):
         return "<"
 
 
-class LessEqual(Operator):
+class LessEqual(BinaryOperator):
     """
     A less or equal operator that checks if the first value is less or equal to the second value.
     """
@@ -923,18 +1026,22 @@ class Case:
 
     def __init__(self, id_: str, attributes: List[Attribute],
                  conclusions: Optional[List[Attribute]] = None,
-                 targets: Optional[List[Attribute]] = None):
+                 targets: Optional[List[Attribute]] = None,
+                 obj: Optional[Any] = None):
         """
         Create a case.
 
         :param id_: The id of the case.
         :param attributes: The attributes of the case.
         :param conclusions: The conclusions that has been made about the case.
+        :param targets: The targets of the case.
+        :param obj: The object that the case represents.
         """
         self.attributes = Attributes({a.name: a for a in attributes})
         self.id_ = id_
         self.conclusions: Optional[List[Attribute]] = conclusions
         self.targets: Optional[List[Attribute]] = targets
+        self.obj: Any = obj
 
     @classmethod
     def from_object(cls, obj: Any, attributes: Optional[List[Attribute]] = None,
@@ -951,10 +1058,25 @@ class Case:
         """
         if not attributes:
             attributes = cls.get_attributes_from_object(obj)
-        case = cls(obj.__class__.__name__, attributes, conclusions, targets)
-        for attr_name, attr_value in case.attributes.items():
-            setattr(case, attr_name, attr_value)
-        return case
+        return cls(obj.__class__.__name__, attributes, conclusions, targets, obj=obj)
+
+    def get_property_from_value(self, property_value: Any) -> Type:
+        """
+        Get the property of the object given its value.
+
+        :param property_value: The value of the property.
+        :return: The property.
+        """
+        return self.get_property_from_name(get_property_name(self.obj, property_value))
+
+    def get_property_from_name(self, property_name: str) -> Type:
+        """
+        Get the property of the object given its name.
+
+        :param property_name: The name of the property.
+        :return: The property.
+        """
+        return getattr(self.obj, property_name)
 
     @staticmethod
     def get_attributes_from_object(obj: Any) -> List[Attribute]:
@@ -1036,6 +1158,8 @@ class Case:
 
     def __setitem__(self, attribute_name: str, attribute: Attribute):
         self.attributes[attribute_name] = attribute
+        if self.obj:
+            setattr(self.obj, attribute_name, attribute)
 
     @property
     def attribute_values(self):
@@ -1048,8 +1172,11 @@ class Case:
     def __eq__(self, other):
         return self.attributes == other.attributes
 
-    def __getitem__(self, attribute_or_attribute_name: Union[str, Attribute]) -> Attribute:
-        return self.attributes.get(attribute_or_attribute_name, None)
+    def __getitem__(self, attribute_description: Union[str, Attribute, Any]) -> Attribute:
+        if isinstance(attribute_description, (Attribute, str)):
+            return self.attributes.get(attribute_description, None)
+        else:
+            return self.attributes[get_property_name(self.obj, attribute_description)]
 
     def __sub__(self, other):
         return {k: self.attributes[k] for k in self.attributes
@@ -1192,13 +1319,13 @@ class Case:
         conclusions = conclusions if conclusions else self.conclusions
         return self._get_categories_str(conclusions, ljust_sz)
 
-    def _get_categories_str(self, categories: List[Attribute], ljust_sz: int = 15) -> str:
+    def _get_categories_str(self, categories: List[Union[Attribute, Any]], ljust_sz: int = 15) -> str:
         """
         Get the string representation of the categories of the case.
         """
         if not categories:
             return ""
-        categories_str = [self.ljust(c.value, sz=ljust_sz) for c in categories]
+        categories_str = [self.ljust(c.value if isinstance(c, Attribute) else c, sz=ljust_sz) for c in categories]
         return "".join(categories_str) if len(categories_str) > 1 else categories_str[0]
 
     def __repr__(self):

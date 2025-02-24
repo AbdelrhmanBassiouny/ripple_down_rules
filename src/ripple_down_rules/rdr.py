@@ -5,7 +5,7 @@ from copy import copy
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
-from typing_extensions import List, Optional, Dict, Type, Union
+from typing_extensions import List, Optional, Dict, Type, Union, Any, Callable
 
 from .datastructures import Condition, Case, Stop, MCRDRMode, Attribute, RDRMode
 from .experts import Expert, Human
@@ -137,20 +137,22 @@ class RippleDownRules(ABC):
 
 class SingleClassRDR(RippleDownRules):
 
-    def fit_case(self, x: Case, target: Optional[Attribute] = None,
+    def fit_case(self, x: Case, for_property: Optional[Any] = None, target: Optional[Union[Any, Attribute]] = None,
                  expert: Optional[Expert] = None, **kwargs) -> Attribute:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
 
         :param x: The case to classify.
+        :param for_property: The property of the case to find a value for.
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :return: The category that the case belongs to.
         """
         expert = expert if expert else Human(mode=self.mode)
+        relational_conclusion: Optional[Callable[[Case], None]] = None
         if self.mode == RDRMode.Relational:
-            target = expert.ask_for_relational_conclusion(x, target)
+            relational_conclusion = expert.ask_for_relational_conclusion(x, for_property)
         if not self.start_rule:
             conditions = expert.ask_for_conditions(x, target)
             self.start_rule = SingleClassRule(conditions, target, corner_case=Case(x.id_, x.attributes_list))
