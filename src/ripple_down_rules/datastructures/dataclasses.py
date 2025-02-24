@@ -53,8 +53,8 @@ class Condition:
     def from_attribute(cls, attribute: Attribute, operator: Operator = Equal()) -> Condition:
         return cls(attribute._name, attribute._value, operator)
 
-    def __call__(self, x: Any) -> bool:
-        return self.operator(x, self.value)
+    def __call__(self, x: Case) -> bool:
+        return self.operator(x[self.name]._value, self.value)
 
     def __str__(self):
         return f"{self.name} {self.operator} {self.value}"

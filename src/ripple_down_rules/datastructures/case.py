@@ -28,7 +28,7 @@ class Attributes(UserDict):
         name = name.lower()
         if name in self:
             if (isinstance(value, Attribute) and not value._mutually_exclusive) or hasattr(value, "__iter__"):
-                self[name]._value = type(self[name]._value)(make_set(self[name]._value).union(make_set(value)))
+                self[name]._value.update(make_set(value))
             else:
                 raise ValueError(f"Attribute {name} already exists in the case and is mutually exclusive.")
         else:
@@ -175,13 +175,7 @@ class Case:
             if type(attr_value) == dict:
                 values = list(attr_value.values())
                 iterable_type = DictOf
-            if len(values) == 0:
-                _range = make_set(type(values[0])) if len(values) > 0 else make_set(values)
-                attr_type = Categorical.create_attribute(element_attr_name, False, CategoryValueType.Nominal,
-                                                         _range)
-                print(f"Created categorical attribute {element_attr_name} from iterable {attr_value}"
-                      f" as there are no values.")
-            elif all(Integer.is_possible_value(v) for v in values):
+            if all(Integer.is_possible_value(v) for v in values):
                 attr_type = Integer
             elif all(Continuous.is_possible_value(v) for v in values):
                 attr_type = Continuous
@@ -214,8 +208,9 @@ class Case:
                         if sub_attr.startswith("_") or callable(getattr(attr_value_element, sub_attr)):
                             continue
                         for attr_element in attr_value:
-                            sub_attr_value = sub_attr_value.union(get_attribute_values(attr_element, sub_attr))
-                        setattr(attr_type, sub_attr, Case.get_or_create_matching_attribute(sub_attr_value, sub_attr))
+                            sub_attr_value.update(get_attribute_values(attr_element, sub_attr))
+                        # setattr(attr_type, sub_attr, Case.get_or_create_matching_attribute(sub_attr_value, sub_attr))
+                        setattr(attr_type, sub_attr, sub_attr_value)
             else:
                 attr_type = Categorical.create_attribute(attr_name, False, CategoryValueType.Nominal,
                                                          make_set(type(attr_value)))

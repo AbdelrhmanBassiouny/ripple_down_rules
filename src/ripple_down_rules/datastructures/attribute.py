@@ -54,13 +54,25 @@ class Attribute(ABC):
                 raise ValueError(f"Value type of {name} is different from {cls._registry[name]._value_type}.")
             if not cls._registry[name].is_within_range(range_):
                 if isinstance(cls._registry[name]._range, set):
-                    cls._registry[name]._range.union(range_)
+                    cls._registry[name]._range.update(range_)
                 else:
                     raise ValueError(f"Range of {name} is different from {cls._registry[name]._range}.")
             return cls._registry[name]
         new_attribute_type: Type[Self] = type(name.lower(), (cls,), {}, **kwargs)
         cls.register(new_attribute_type)
         return new_attribute_type
+
+    def __len__(self):
+        if hasattr(self._value, "__len__"):
+            return len(self._value)
+        else:
+            return int(self._value is not None)
+
+    def __contains__(self, item):
+        if hasattr(self._value, "__contains__"):
+            return item in self._value
+        else:
+            return self._value == item
 
     @classmethod
     def register(cls, subclass: Type[Attribute]):

@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence, Callable
 
-from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical
+from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectPropertyTarget
 from .failures import InvalidOperator
 from .utils import get_all_subclasses, get_property_name, VariableVisitor, \
     get_prompt_session_for_obj, parse_relational_conclusion, prompt_user_for_input, get_attribute_values
@@ -129,14 +129,13 @@ class Human(Expert):
         :return: The differentiating features as new rule conditions.
         """
         while True:
+            user_input = None
             if self.use_loaded_answers:
-                return self.all_expert_answers.pop(0)
-            else:
-                # Initialze prompt session and get conditions from user written input
-                return self.prompt_for_relational_conditions(x, targets)
+                user_input = self.all_expert_answers.pop(0)
+            # Initialze prompt session and get conditions from user written input
+            return self.prompt_for_relational_conditions(x, targets, user_input)
 
-    @staticmethod
-    def prompt_for_relational_conditions(x: Case, targets: List[Attribute],
+    def prompt_for_relational_conditions(self, x: Case, targets: List[ObjectPropertyTarget],
                                          user_input: Optional[str] = None) -> Dict[str, Condition]:
         """
         Prompt the user for relational conditions.
@@ -146,23 +145,27 @@ class Human(Expert):
         :param user_input: The user input to parse. If None, the user is prompted for input.
         :return: The differentiating features as new rule conditions.
         """
-        session = get_prompt_session_for_obj(x._obj)
-        rule_conditions: Dict[str, Condition] = None
-        prompt_str = f"Give Conditions for {x._id}.{targets[0].name}"
-        user_input, tree = prompt_user_for_input(prompt_str, session, user_input=user_input)
-        visitor, code = Human.parse_relational_conditions(x, user_input, tree)
-        arg_names = ", ".join(visitor.variables)
-
-        return rule_conditions
+        conditions = {}
+        for target in targets:
+            session = get_prompt_session_for_obj(x._obj)
+            prompt_str = f"Give Conditions for {x._id}.{target.name}"
+            user_input, tree = prompt_user_for_input(prompt_str, session, user_input=user_input)
+            condition = Human.parse_relational_conditions(x, user_input, tree, target)
+            conditions[target.name] = condition
+            if not self.use_loaded_answers:
+                self.all_expert_answers.append(user_input)
+        return conditions
 
     @staticmethod
-    def parse_relational_conditions(obj: Any, user_input: str, tree: ast.AST) -> Callable[[Case], bool]:
+    def parse_relational_conditions(obj: Any, user_input: str, tree: ast.AST,
+                                    target: ObjectPropertyTarget) -> Callable[[Case], bool]:
         """
         Parse the conditions from the user input.
 
         :param obj: The Object to classify.
         :param user_input: The input to parse.
         :param tree: The AST tree of the input.
+        :param target: The target to classify.
         :return: The parsed conditions as a dictionary.
         """
         visitor = VariableVisitor()
@@ -170,23 +173,31 @@ class Human(Expert):
 
         code = compile(tree, filename="<string>", mode="eval")
 
-        def generated_function(case: Any):
-            try:
-                # Pass only the required arguments to eval
-                context = {}
-                for key in visitor.variables:
-                    if key == "case":
-                        context[key] = case
-                    elif key in dir(case):
-                        context[key] = get_attribute_values(case, key)
-                    else:
-                        raise ValueError(f"Attribute {key} not found in the case {case}")
-                context = {key: kwargs[key] for key in visitor.variables if key in kwargs}
-                return eval(code, {"__builtins__": None}, context)
-            except Exception as e:
-                raise ValueError(f"Error during evaluation: {e}")
+        class GeneratedCondition(Condition):
 
-        return generated_function
+            def __init__(self):
+                super().__init__(target.name, target.value, self.__call__)
+
+            def __call__(self, case: Case, **kwargs) -> bool:
+                try:
+                    context = {}
+                    for key in visitor.variables:
+                        if key == "case" or (isinstance(case, Case) and key == case._id):
+                            context[key] = case
+                        elif key in dir(case):
+                            context[key] = get_attribute_values(case, key)
+                        elif get_property_name(obj, case) == key:
+                            context[key] = case
+                        else:
+                            raise ValueError(f"Attribute {key} not found in the case {case}")
+                    return eval(code, {"__builtins__": {"len": len}}, context)
+                except Exception as e:
+                    raise ValueError(f"Error during evaluation: {e}")
+
+            def __str__(self):
+                return user_input
+
+        return GeneratedCondition()
 
     def ask_for_conditions(self, x: Case,
                            targets: Union[Attribute, List[Attribute]],
@@ -257,15 +268,19 @@ class Human(Expert):
         :param for_attribute: The attribute to provide the conclusion for.
         """
         all_names = self.get_and_print_all_names_and_conclusions(x)
-        session = get_prompt_session_for_obj(x)
 
         for_attribute_name = get_property_name(x._obj, for_attribute)
 
         if not hasattr(x, for_attribute_name):
             raise ValueError(f"Attribute {for_attribute_name} not found in the case")
 
-        prompt_str = f"Give Conclusion on {x.__class__.__name__}.{for_attribute_name}"
-        user_input, tree = prompt_user_for_input(prompt_str, session)
+        if not self.use_loaded_answers:
+            prompt_str = f"Give Conclusion on {x.__class__.__name__}.{for_attribute_name}"
+            session = get_prompt_session_for_obj(x)
+            user_input, tree = prompt_user_for_input(prompt_str, session)
+            self.all_expert_answers.append(user_input)
+        else:
+            user_input = self.all_expert_answers.pop(0)
 
         def apply_conclusion(case: Case) -> None:
             attr_value = parse_relational_conclusion(case, user_input)

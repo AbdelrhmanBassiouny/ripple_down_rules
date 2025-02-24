@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Callable
 
-from .datastructures import Condition, Case, Stop, MCRDRMode, Attribute, RDRMode
+from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree
@@ -399,20 +399,22 @@ class MultiClassRDR(RippleDownRules):
                 extra_conclusions.append(conclusion)
         return extra_conclusions
 
-    def add_conclusion(self, evaluated_rule: Rule):
+    def add_conclusion(self, evaluated_rule: Rule) -> None:
         """
         Add the conclusion of the evaluated rule to the list of conclusions.
+
+        :param evaluated_rule: The evaluated rule to add the conclusion of.
         """
         conclusion_types = [type(c) for c in self.conclusions]
         if type(evaluated_rule.conclusion) not in conclusion_types:
             self.conclusions.append(evaluated_rule.conclusion)
         else:
             same_type_conclusions = [c for c in self.conclusions if type(c) == type(evaluated_rule.conclusion)]
-            combined_conclusion = evaluated_rule.conclusion.value if isinstance(evaluated_rule.conclusion.value, set) \
-                else {evaluated_rule.conclusion.value}
+            combined_conclusion = evaluated_rule.conclusion._value if isinstance(evaluated_rule.conclusion._value, set) \
+                else {evaluated_rule.conclusion._value}
             category_type = type(evaluated_rule.conclusion)
             for c in same_type_conclusions:
-                combined_conclusion.union(c._value if isinstance(c._value, set) else {c._value})
+                combined_conclusion.update(c._value if isinstance(c._value, set) else {c._value})
                 self.conclusions.remove(c)
             self.conclusions.append(category_type(combined_conclusion))
 
@@ -512,7 +514,7 @@ class GeneralRDR(RippleDownRules):
             if type(t) not in self.start_rules_dict:
                 conclusions = self.classify(x)
                 x_cp.add_attributes(conclusions)
-                new_rdr = SingleClassRDR() if t.mutually_exclusive else MultiClassRDR()
+                new_rdr = SingleClassRDR() if t._mutually_exclusive else MultiClassRDR()
                 new_conclusions = new_rdr.fit_case(x_cp, t, expert, **kwargs)
                 self.start_rules_dict[type(t)] = new_rdr
                 x_cp.add_attributes(new_conclusions)

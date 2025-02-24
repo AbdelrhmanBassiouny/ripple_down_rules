@@ -58,5 +58,4 @@ class RelationalRDRTestCase(TestCase):
         part_d.contained_objects = {part_e}
         cls.robot: Robot = robot
         cls.case = Case.from_object(robot)
-        target_type = type(cls.case[robot.contained_objects])
         cls.target = ObjectPropertyTarget(robot, robot.contained_objects, {part_b, part_c, part_d, part_e})

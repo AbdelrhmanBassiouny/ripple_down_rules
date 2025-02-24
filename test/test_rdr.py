@@ -236,15 +236,15 @@ class TestRDR(TestCase):
             elif t._value == "bird":
                 all_habs.append(Habitat({"land"}))
                 if x["airborne"]._value == 1:
-                    all_habs[-1].value.update({"air"})
+                    all_habs[-1]._value.update({"air"})
                 if x["aquatic"]._value == 1:
-                    all_habs[-1].value.update({"water"})
+                    all_habs[-1]._value.update({"water"})
             elif t._value == "fish":
                 all_habs.append(Habitat("water"))
             elif t._value == "molusc":
                 all_habs.append(Habitat({"land"}))
                 if x["aquatic"]._value == 1:
-                    all_habs[-1].value.update({"water"})
+                    all_habs[-1]._value.update({"water"})
             return all_habs + [t]
 
         n = 20

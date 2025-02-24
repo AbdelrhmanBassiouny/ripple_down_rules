@@ -110,7 +110,8 @@ def get_property_name(obj: Any, prop: Any) -> str:
     for name in dir(obj):
         if name.startswith("_"):
             continue
-        if getattr(obj, name) is prop:
+        prop_value = getattr(obj, name)
+        if prop_value is prop or (hasattr(prop_value, "_value") and prop_value._value is prop):
             return name
 
 
