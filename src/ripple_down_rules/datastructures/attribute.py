@@ -139,6 +139,8 @@ class Attribute(ABC):
         if cls.value_type == CategoryValueType.Iterable:
             if not hasattr(value, "__iter__") or isinstance(value, str):
                 value = [value]
+        elif not cls.mutually_exclusive:
+            value = make_set(value)
         else:
             value = make_value_or_raise_error(value)
         return cls._make_value(value)
@@ -267,7 +269,7 @@ class Categorical(Attribute, ABC):
         super().__init__(value)
 
     @classmethod
-    def _make_value(cls, value: Union[str, Categorical.Values]) -> Categorical.Values:
+    def _make_value(cls, value: Union[str, Categorical.Values, Set[str]]) -> Union[Set, Categorical.Values]:
         if len(cls._range) == 0:
             if isinstance(value, str):
                 cls.add_new_category(value)
@@ -279,6 +281,8 @@ class Categorical(Attribute, ABC):
         elif isinstance(value, cls.Values) or any(
                 isinstance(v, type) and isinstance(value, v) for v in cls.Values.to_list()):
             return value
+        elif isinstance(value, set):
+            return {cls._make_value(v) for v in value}
         else:
             raise ValueError(f"Value {value} should be a string or a CategoricalValue.")
 
@@ -290,9 +294,9 @@ class Categorical(Attribute, ABC):
             else:
                 cls.add_new_category(type(value))
             return cls.is_possible_value(value)
-        if isinstance(value, str) and len(cls._range) > 0 and type(list(cls._range)[0]) == str:
-            return cls.is_within_range(value.lower())
-        elif isinstance(value, cls.Values) or any(isinstance(value, v) for v in cls.Values.to_list()):
+        if len(cls._range) > 0 and type(list(cls._range)[0]) == str:
+            return cls.is_within_range(value)
+        elif isinstance(value, cls.Values) or any(isinstance(v, type) and isinstance(value, v) for v in cls.Values.to_list()):
             return True
         else:
             return False
@@ -447,12 +451,18 @@ class Bool(Attribute):
 
     @classmethod
     def _make_value(cls, value: Any) -> bool:
-        return bool(value)
+        if isinstance(value, str):
+            if value.lower() in ["true", "1", "1.0"]:
+                return True
+            elif value.lower() in ["false", "0", "0.0"]:
+                return False
+        else:
+            return bool(value)
 
     @classmethod
     def is_possible_value(cls, value: Any) -> bool:
         if isinstance(value, str):
-            return value.lower() in ["true", "false"]
+            return value.lower().strip() in ["true", "false", "1", "0", "1.0", "0.0"]
         if isinstance(value, bool):
             return True
         if isinstance(value, int):

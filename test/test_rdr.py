@@ -9,7 +9,7 @@ from ripple_down_rules.datastructures import Case, Condition, MCRDRMode, Habitat
     Attributes, Operator
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import render_tree
+from ripple_down_rules.utils import render_tree, get_all_subclasses
 
 
 class TestRDR(TestCase):
@@ -24,6 +24,9 @@ class TestRDR(TestCase):
         cls.all_cases, cls.targets = load_zoo_dataset()
         if not os.path.exists(cls.test_results_dir):
             os.makedirs(cls.test_results_dir)
+
+    def tearDown(self):
+        Attribute._registry = {}
 
     def test_setup(self):
         self.assertEqual(len(self.all_cases), 101)
@@ -187,7 +190,7 @@ class TestRDR(TestCase):
         mcrdr.fit(self.all_cases, self.targets,
                   add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
         cats = mcrdr.classify(self.all_cases[50])
-        LivesOnlyOnLand = Attribute.get_subclass("LivesOnlyOnLand")
+        LivesOnlyOnLand = get_all_subclasses(Attribute)["LivesOnlyOnLand".lower()]
         self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_extra")

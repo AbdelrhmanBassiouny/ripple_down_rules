@@ -137,8 +137,8 @@ class RippleDownRules(ABC):
 
 class SingleClassRDR(RippleDownRules):
 
-    def fit_case(self, x: Case, for_property: Optional[Any] = None, target: Optional[Union[Any, Attribute]] = None,
-                 expert: Optional[Expert] = None, **kwargs) -> Attribute:
+    def fit_case(self, x: Case, target: Optional[Union[Any, Attribute]] = None,
+                 expert: Optional[Expert] = None, for_property: Optional[Any] = None, **kwargs) -> Attribute:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.

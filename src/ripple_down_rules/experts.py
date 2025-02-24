@@ -9,7 +9,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence, Callable
 
-from .datastructures import Operator, Condition, Attribute, Case, RDRMode
+from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical
 from .failures import InvalidOperator
 from .utils import get_all_subclasses, get_attribute_values, get_completions, get_property_name
 
@@ -458,7 +458,7 @@ class Human(Expert):
         :param cat_value: The value of the category.
         :return: A new category type.
         """
-        category_type: Type[Attribute] = type(cat_name, (Attribute,), {})
+        category_type: Type[Attribute] = type(cat_name, (Categorical,), {})
         if self.ask_if_category_is_mutually_exclusive(category_type.__name__):
             category_type.mutually_exclusive = True
         Attribute.register(category_type)
@@ -636,7 +636,8 @@ class Human(Expert):
         :return: list of error messages, and the name, value and operator of the rule.
         """
         try:
-            operator = Operator.parse_operators(rule)[0]
+            operator = Operator.parse_operators(rule)
+            operator = operator[0]
             name = operator.arg_names[0]
             value = operator.arg_names[1]
             messages = []

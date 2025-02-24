@@ -54,12 +54,16 @@ class Operator(ABC):
         """
         all_operators: List[cls] = []
         possible_operators = get_all_subclasses(cls)
+        tried_operators = []
         for op in possible_operators.values():
             if not hasattr(op, "name"):
                 continue
+            tried_operators.append(op)
             all_op_instances = re.findall(op.pattern(), rule_str)
             for instance in all_op_instances:
                 all_operators.append(op.from_str(instance))
+        if not all_operators:
+            raise InvalidOperator(rule_str, tried_operators)
         return all_operators if len(all_operators) > 0 else None
 
     @classmethod

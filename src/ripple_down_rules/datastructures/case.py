@@ -100,7 +100,7 @@ class Case:
                 att_types[col_name] = type(col_name, (Continuous,), {})
         all_cases = []
         for _id, row in zip(ids, df.iterrows()):
-            all_att = [att_types[att](row[1][att]) for att in att_names]
+            all_att = [att_types[att](row[1][att].item()) for att in att_names]
             all_cases.append(cls(_id, all_att))
         return all_cases
 
