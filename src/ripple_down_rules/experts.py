@@ -154,8 +154,15 @@ class Human(Expert):
 
         #all_names, max_len = x.get_all_names_and_max_len(all_attributes)
         row_dict = row_to_dict(x)
-        table = tabulate([row_dict.values()], headers=row_dict.keys(), tablefmt='grid')
-        print(table)
+        all_items = list(row_dict.items())
+        # make items a list of n rows such that each row has a max size of 4
+        n = 9
+        all_items = [all_items[i:i + n] for i in range(0, len(all_items), n)]
+        keys = [list(map(lambda i: i[0], row)) for row in all_items]
+        values = [list(map(lambda i: i[1], row)) for row in all_items]
+        for row_keys, row_values in zip(keys, values):
+            table = tabulate([row_values], headers=row_keys, tablefmt='grid')
+            print(table)
 
         if not self.use_loaded_answers:
             # max_len = x.print_all_names(all_names, max_len, target_types=list(map(type, targets)))
