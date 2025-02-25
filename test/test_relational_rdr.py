@@ -12,7 +12,7 @@ from ripple_down_rules.utils import render_tree, prompt_for_relational_condition
 
 def test_classify_scrdr(obj: Any, target_property: Any,
                         target_value: Optional[Any] = None, expert_answers_dir="./test_expert_answers"):
-    use_loaded_answers = True
+    use_loaded_answers = False
     save_answers = False
     filename = expert_answers_dir + "/relational_scrdr_expert_answers_classify"
     expert = Human(use_loaded_answers=use_loaded_answers, mode=RDRMode.Relational)

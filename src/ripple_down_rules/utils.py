@@ -6,15 +6,54 @@ import logging
 import os
 
 import networkx as nx
+import sqlalchemy
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
+from sqlalchemy import BinaryExpression, Engine, select
 from typing_extensions import Callable, Set, Any, Type, Dict, List, Tuple, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ripple_down_rules.datastructures import Case, ObjectPropertyTarget, Condition
+
+
+def row_to_dict(obj):
+    return {
+        col.name: getattr(obj, col.name)
+        for col in obj.__table__.columns
+        if not col.primary_key and not col.foreign_keys
+    }
+
+
+def prompt_for_alchemy_conditions(x: sqlalchemy.orm.DeclarativeBase, target: ObjectPropertyTarget, engine: Engine,
+                                     user_input: Optional[str] = None) -> Tuple[str, BinaryExpression]:
+    """
+    Prompt the user for relational conditions.
+
+    :param x: The case to classify.
+    :param target: The target category to compare the case with.
+    :param engine: The sqlalchemy engine.
+    :param user_input: The user input to parse. If None, the user is prompted for input.
+    :return: The differentiating features as new rule conditions.
+    """
+    session = get_prompt_session_for_obj(x)
+    prompt_str = f"Give Conditions for {x.__tablename__}.{target.name}"
+    user_input, tree = prompt_and_parse_user_for_input(prompt_str, session, user_input=user_input)
+    condition = parse_relational_input(x, user_input, tree, bool)
+    # def condition_evaluator(row):
+    #     # Insert sample data
+    #     with engine.connect() as conn:
+    #         conn.execute(x.__table__.insert(), {"value1": 10, "value2": 20})
+    #
+    #     # Evaluate binary expression without using Session
+    #     with engine.connect() as conn:
+    #         binary_expr = eval(user_input)
+    #         query = select(binary_expr).select_from(x.__table__)
+    #         result = conn.execute(query).fetchall()
+    #     return result
+    return user_input, condition
 
 
 def prompt_for_relational_conditions(x: Case, target: ObjectPropertyTarget,
@@ -27,8 +66,8 @@ def prompt_for_relational_conditions(x: Case, target: ObjectPropertyTarget,
     :param user_input: The user input to parse. If None, the user is prompted for input.
     :return: The differentiating features as new rule conditions.
     """
-    session = get_prompt_session_for_obj(x._obj)
-    prompt_str = f"Give Conditions for {x._id}.{target.name}"
+    session = get_prompt_session_for_obj(x)
+    prompt_str = f"Give Conditions for {x}.{target.name}"
     user_input, tree = prompt_and_parse_user_for_input(prompt_str, session, user_input=user_input)
     condition = parse_relational_input(x, user_input, tree, bool)
     return user_input, condition
@@ -56,8 +95,9 @@ def parse_relational_input(case: Case, user_input: str, tree: ast.AST, conclusio
                 context = get_all_possible_contexts(obj)
                 context.update(get_all_possible_contexts(case))
                 context["case"] = case
-                context[f"{case._id}"] = case
-                context[f"{case._id}".lower()] = case
+                if hasattr(case, "_id"):
+                    context[f"{case._id}"] = case
+                    context[f"{case._id}".lower()] = case
                 for key in visitor.variables:
                     if key not in context:
                         raise ValueError(f"Attribute {key} not found in the case {obj}")
@@ -77,7 +117,7 @@ def parse_relational_input(case: Case, user_input: str, tree: ast.AST, conclusio
     return GeneratedCondition()
 
 
-def get_all_possible_contexts(obj: Any) -> Dict[str, Any]:
+def get_all_possible_contexts(obj: Any, recursion_idx: int = 0) -> Dict[str, Any]:
     """
     Get all possible contexts for an object.
 
@@ -85,11 +125,13 @@ def get_all_possible_contexts(obj: Any) -> Dict[str, Any]:
     :return: A dictionary of all possible contexts.
     """
     all_contexts = {}
+    if recursion_idx > 2:
+        return all_contexts
     for attr in dir(obj):
         if attr.startswith("__") or attr.startswith("_") or callable(getattr(obj, attr)):
             continue
         all_contexts[attr] = get_attribute_values(obj, attr)
-        sub_attr_contexts = get_all_possible_contexts(getattr(obj, attr))
+        sub_attr_contexts = get_all_possible_contexts(getattr(obj, attr), recursion_idx + 1)
         sub_attr_contexts = {f"{attr}.{k}": v for k, v in sub_attr_contexts.items()}
         all_contexts.update(sub_attr_contexts)
     return all_contexts

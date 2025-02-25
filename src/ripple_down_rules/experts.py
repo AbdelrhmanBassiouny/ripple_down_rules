@@ -4,13 +4,14 @@ import ast
 import json
 from abc import ABC, abstractmethod
 
+from tabulate import tabulate
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence, Callable
 
 from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectPropertyTarget
 from .failures import InvalidOperator
 from .utils import get_all_subclasses, get_property_name, VariableVisitor, \
     get_prompt_session_for_obj, parse_relational_conclusion, prompt_and_parse_user_for_input, get_attribute_values, \
-    parse_relational_input, prompt_for_relational_conditions
+    parse_relational_input, prompt_for_relational_conditions, row_to_dict
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -140,7 +141,7 @@ class Human(Expert):
                 self.all_expert_answers.append(user_input)
         return conditions
 
-    def ask_for_conditions(self, x: Case,
+    def ask_for_conditions(self, x: Animal,
                            targets: Union[Attribute, List[Attribute]],
                            last_evaluated_rule: Optional[Rule] = None) \
             -> Dict[str, Condition]:
@@ -149,22 +150,26 @@ class Human(Expert):
             action = "Refinement" if last_evaluated_rule.fired else "Alternative"
             print(f"{action} needed for rule:\n")
 
-        all_attributes = self.get_all_attributes(x, last_evaluated_rule)
+        #all_attributes = self.get_all_attributes(x, last_evaluated_rule)
 
-        all_names, max_len = x.get_all_names_and_max_len(all_attributes)
+        #all_names, max_len = x.get_all_names_and_max_len(all_attributes)
+        row_dict = row_to_dict(x)
+        table = tabulate([row_dict.values()], headers=row_dict.keys(), tablefmt='grid')
+        print(table)
 
         if not self.use_loaded_answers:
-            max_len = x.print_all_names(all_names, max_len, target_types=list(map(type, targets)))
+            # max_len = x.print_all_names(all_names, max_len, target_types=list(map(type, targets)))
 
             if last_evaluated_rule and last_evaluated_rule.fired:
-                last_evaluated_rule.corner_case.print_values(all_names, is_corner_case=True,
-                                                             ljust_sz=max_len)
-            x.print_values(all_names, targets=targets, ljust_sz=max_len)
+                print("Please provide a rule for the corner case:")
+                # last_evaluated_rule.corner_case.print_values(all_names, is_corner_case=True,
+                #                                              ljust_sz=max_len)
+            # x.print_values(all_names, targets=targets, ljust_sz=max_len)
 
         if self.mode == RDRMode.Relational:
             return self._get_relational_conditions(x, targets, conditions_for="differentiating features")
         else:
-            return self._get_conditions(all_names, conditions_for="differentiating features")
+            return self._get_conditions(list(row_dict.keys()), conditions_for="differentiating features")
 
     def get_all_attributes(self, x: Case, last_evaluated_rule: Optional[Rule] = None) -> List[Attribute]:
         """

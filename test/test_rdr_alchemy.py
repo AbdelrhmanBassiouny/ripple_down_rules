@@ -8,49 +8,15 @@ from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column
 from typing_extensions import List
 from ucimlrepo import fetch_ucirepo
 
-from ripple_down_rules.datasets import load_zoo_dataset
-from ripple_down_rules.datastructures import Case, Attributes
+from ripple_down_rules.alchemy_rules import Target, AlchemyRule
+from ripple_down_rules.datasets import load_zoo_dataset, Base, Animal, Species
+from ripple_down_rules.datastructures import Case, Attributes, ObjectPropertyTarget, RDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-
-class Species(str, Enum):
-    mammal = "mammal"
-    bird = "bird"
-    reptile = "reptile"
-    fish = "fish"
-    amphibian = "amphibian"
-    insect = "insect"
-    molusc = "molusc"
+from ripple_down_rules.utils import prompt_for_relational_conditions, prompt_for_alchemy_conditions
 
 
-class Base(sqlalchemy.orm.DeclarativeBase):
-    pass
-
-
-class Animal(MappedAsDataclass, Base):
-    __tablename__ = "Animal"
-
-    id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    hair: Mapped[bool]
-    feathers: Mapped[bool]
-    eggs: Mapped[bool]
-    milk: Mapped[bool]
-    airborne: Mapped[bool]
-    aquatic: Mapped[bool]
-    predator: Mapped[bool]
-    toothed: Mapped[bool]
-    backbone: Mapped[bool]
-    breathes: Mapped[bool]
-    venomous: Mapped[bool]
-    fins: Mapped[bool]
-    legs: Mapped[int]
-    tail: Mapped[bool]
-    domestic: Mapped[bool]
-    catsize: Mapped[bool]
-    species: Mapped[Species]
-
-
-class TestRDR(TestCase):
+class TestRDR:
     session: sqlalchemy.orm.Session
 
     @classmethod
@@ -64,7 +30,7 @@ class TestRDR(TestCase):
 
         category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
         category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
-        X["species"] = [Species(category_id_to_name[i]) for i in y.values.flatten()]
+        X.loc[:, "species"] = [Species(category_id_to_name[i]) for i in y.values.flatten()]
 
         engine = sqlalchemy.create_engine("sqlite:///:memory:")
         Base.metadata.create_all(engine)
@@ -73,24 +39,40 @@ class TestRDR(TestCase):
         session.commit()
         cls.session = session
 
+    def test_alchemy_rules(self):
+        rule1 = AlchemyRule(Animal.hair == True,
+                            Target(Animal.species, Species.mammal))
+        rule2 = AlchemyRule(Animal.feathers == True,
+                            Target(Animal.species, Species.bird), parent=rule1)
+        print(rule2.statement_of_path())
+        query = rule1.statement.where(rule1.target.column != rule1.target.value)
+        result = self.session.execute(query).first()
+        print(result)
+
     def test_setup(self):
         r = self.session.scalars(select(Animal)).all()
-        self.assertEqual(len(r), 101)
+        assert len(r) == 101
 
+        user_input, conditions = prompt_for_alchemy_conditions(Animal, ObjectPropertyTarget(Animal, Animal.species, Species.mammal))
+        print(conditions)
+        print(type(conditions))
 
     def test_classify_scrdr(self):
-        use_loaded_answers = True
-        save_answers = False
-        filename = self.expert_answers_dir + "/scrdr_expert_answers_classify"
-        expert = Human(use_loaded_answers=use_loaded_answers)
-        if use_loaded_answers:
-            expert.load_answers(filename)
 
-        scrdr = SingleClassRDR()
-        cat = scrdr.fit_case(self.all_cases[0], self.targets[0], expert=expert)
-        self.assertEqual(cat, self.targets[0])
+        expert = Human(use_loaded_answers=False, mode=RDRMode.Relational)
 
-        if save_answers:
-            cwd = os.getcwd()
-            file = os.path.join(cwd, filename)
-            expert.save_answers(file)
+        query = select(Animal)
+        result = self.session.scalars(query).all()
+
+
+        scrdr = SingleClassRDR(mode=RDRMode.Relational)
+        scrdr.table = Animal
+        scrdr.target_column = Animal.species
+
+        cat = scrdr.fit_case(result[0], target=result[0].species, expert=expert)
+        assert cat == result[0].species
+
+tests = TestRDR()
+tests.setUpClass()
+# tests.test_alchemy_rules()
+tests.test_classify_scrdr()

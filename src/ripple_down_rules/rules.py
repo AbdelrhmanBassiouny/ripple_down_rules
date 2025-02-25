@@ -21,8 +21,7 @@ class Rule(NodeMixin, ABC):
                  conclusion: Optional[Attribute] = None,
                  parent: Optional[Rule] = None,
                  corner_case: Optional[Case] = None,
-                 weight: Optional[str] = None,
-                 mode: RDRMode = RDRMode.Propositional):
+                 weight: Optional[str] = None):
         """
         A rule in the ripple down rules classifier.
 
@@ -31,7 +30,6 @@ class Rule(NodeMixin, ABC):
         :param parent: The parent rule of this rule.
         :param corner_case: The corner case that this rule is based on/created from.
         :param weight: The weight of the rule, which is the type of edge connecting the rule to its parent.
-        :param mode: The mode of the rule, which is the mode of RDR classifier (Propositional or Relational).
         """
         super(Rule, self).__init__()
         self.conclusion = conclusion
@@ -66,7 +64,7 @@ class Rule(NodeMixin, ABC):
             raise ValueError("Rule has no conditions")
         self.fired = True
         for att_name, condition in self.conditions.items():
-            if att_name not in x._attributes or not condition(x):
+            if not condition(x):
                 self.fired = False
                 break
         return self.evaluate_next_rule(x)

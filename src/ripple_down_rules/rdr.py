@@ -5,6 +5,8 @@ from copy import copy, deepcopy
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
+from sqlalchemy import Column
+from sqlalchemy.orm import DeclarativeBase
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Callable
 
 from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, ObjectPropertyTarget
@@ -137,7 +139,10 @@ class RippleDownRules(ABC):
 
 class SingleClassRDR(RippleDownRules):
 
-    def fit_case(self, x: Case, target: Optional[Union[Any, Attribute]] = None,
+    table: Type[DeclarativeBase]
+    target_column: Column
+
+    def fit_case(self, x: table, target: Optional[Any] = None,
                  expert: Optional[Expert] = None, for_property: Optional[Any] = None, **kwargs) -> Attribute:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
