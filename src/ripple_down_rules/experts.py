@@ -9,7 +9,8 @@ from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, 
 from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectPropertyTarget
 from .failures import InvalidOperator
 from .utils import get_all_subclasses, get_property_name, VariableVisitor, \
-    get_prompt_session_for_obj, parse_relational_conclusion, prompt_user_for_input, get_attribute_values
+    get_prompt_session_for_obj, parse_relational_conclusion, prompt_and_parse_user_for_input, get_attribute_values, \
+    parse_relational_input, prompt_for_relational_conditions
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -128,76 +129,16 @@ class Human(Expert):
         :param conditions_for: A string indicating what the conditions are for.
         :return: The differentiating features as new rule conditions.
         """
-        while True:
+        conditions = {}
+        for target in targets:
             user_input = None
             if self.use_loaded_answers:
                 user_input = self.all_expert_answers.pop(0)
-            # Initialze prompt session and get conditions from user written input
-            return self.prompt_for_relational_conditions(x, targets, user_input)
-
-    def prompt_for_relational_conditions(self, x: Case, targets: List[ObjectPropertyTarget],
-                                         user_input: Optional[str] = None) -> Dict[str, Condition]:
-        """
-        Prompt the user for relational conditions.
-
-        :param x: The case to classify.
-        :param targets: The target categories to compare the case with.
-        :param user_input: The user input to parse. If None, the user is prompted for input.
-        :return: The differentiating features as new rule conditions.
-        """
-        conditions = {}
-        for target in targets:
-            session = get_prompt_session_for_obj(x._obj)
-            prompt_str = f"Give Conditions for {x._id}.{target.name}"
-            user_input, tree = prompt_user_for_input(prompt_str, session, user_input=user_input)
-            condition = Human.parse_relational_conditions(x, user_input, tree, target)
+            user_input, condition = prompt_for_relational_conditions(x, target, user_input)
             conditions[target.name] = condition
             if not self.use_loaded_answers:
                 self.all_expert_answers.append(user_input)
         return conditions
-
-    @staticmethod
-    def parse_relational_conditions(obj: Any, user_input: str, tree: ast.AST,
-                                    target: ObjectPropertyTarget) -> Callable[[Case], bool]:
-        """
-        Parse the conditions from the user input.
-
-        :param obj: The Object to classify.
-        :param user_input: The input to parse.
-        :param tree: The AST tree of the input.
-        :param target: The target to classify.
-        :return: The parsed conditions as a dictionary.
-        """
-        visitor = VariableVisitor()
-        visitor.visit(tree)
-
-        code = compile(tree, filename="<string>", mode="eval")
-
-        class GeneratedCondition(Condition):
-
-            def __init__(self):
-                super().__init__(target.name, target.value, self.__call__)
-
-            def __call__(self, case: Case, **kwargs) -> bool:
-                try:
-                    context = {}
-                    for key in visitor.variables:
-                        if key == "case" or (isinstance(case, Case) and key == case._id):
-                            context[key] = case
-                        elif key in dir(case):
-                            context[key] = get_attribute_values(case, key)
-                        elif get_property_name(obj, case) == key:
-                            context[key] = case
-                        else:
-                            raise ValueError(f"Attribute {key} not found in the case {case}")
-                    return eval(code, {"__builtins__": {"len": len}}, context)
-                except Exception as e:
-                    raise ValueError(f"Error during evaluation: {e}")
-
-            def __str__(self):
-                return user_input
-
-        return GeneratedCondition()
 
     def ask_for_conditions(self, x: Case,
                            targets: Union[Attribute, List[Attribute]],
@@ -274,22 +215,23 @@ class Human(Expert):
         if not hasattr(x, for_attribute_name):
             raise ValueError(f"Attribute {for_attribute_name} not found in the case")
 
-        if not self.use_loaded_answers:
-            prompt_str = f"Give Conclusion on {x.__class__.__name__}.{for_attribute_name}"
-            session = get_prompt_session_for_obj(x)
-            user_input, tree = prompt_user_for_input(prompt_str, session)
-            self.all_expert_answers.append(user_input)
-        else:
+        user_input = None
+        if self.use_loaded_answers:
             user_input = self.all_expert_answers.pop(0)
+        prompt_str = f"Give Conclusion on {x._id}.{for_attribute_name}"
+        session = get_prompt_session_for_obj(x) if not user_input else None
+        user_input, tree = prompt_and_parse_user_for_input(prompt_str, session, user_input)
+        if not self.use_loaded_answers:
+            self.all_expert_answers.append(user_input)
 
-        def apply_conclusion(case: Case) -> None:
-            attr_value = parse_relational_conclusion(case, user_input)
-            case[for_attribute_name] = attr_value
-            return attr_value
+        def apply_conclusion(case: Case) -> type(for_attribute):
+            attr_value = parse_relational_input(case, user_input, tree, type(for_attribute))
+            return attr_value(case)
 
-        print(f"Evaluated expression: {apply_conclusion(x)}")
-
-        return apply_conclusion
+        conclusion = ObjectPropertyTarget(x._obj, for_attribute, apply_conclusion(x),
+                                          relational_representation=user_input)
+        print(f"Evaluated expression: {conclusion}")
+        return conclusion
 
     def ask_for_conclusion(self, x: Case, current_conclusions: Optional[List[Attribute]] = None) -> Optional[Attribute]:
         """

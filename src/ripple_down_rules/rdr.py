@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from copy import copy
+from copy import copy, deepcopy
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Callable
 
-from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode
+from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, ObjectPropertyTarget
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree
@@ -150,12 +150,14 @@ class SingleClassRDR(RippleDownRules):
         :return: The category that the case belongs to.
         """
         expert = expert if expert else Human(mode=self.mode)
-        relational_conclusion: Optional[Callable[[Case], None]] = None
-        if self.mode == RDRMode.Relational:
-            relational_conclusion = expert.ask_for_relational_conclusion(x, for_property)
+        if not target:
+            if self.mode == RDRMode.Relational and for_property is not None:
+                target = expert.ask_for_relational_conclusion(x, for_property)
+            elif self.mode == RDRMode.Propositional:
+                target = expert.ask_for_conclusion(x)
         if not self.start_rule:
             conditions = expert.ask_for_conditions(x, target)
-            self.start_rule = SingleClassRule(conditions, target, corner_case=Case(x._id, x._attributes_list))
+            self.start_rule = SingleClassRule(conditions, target, corner_case=x)
 
         pred = self.evaluate(x)
 

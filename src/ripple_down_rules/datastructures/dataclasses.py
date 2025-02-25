@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import cached_property
 
-from typing_extensions import Union, Sequence, Any, Dict, List, TYPE_CHECKING
+from typing_extensions import Union, Sequence, Any, Dict, List, TYPE_CHECKING, Optional
 
 from ripple_down_rules.datastructures.operator import Operator, Equal
 from ripple_down_rules.utils import get_property_name
@@ -79,15 +79,20 @@ class ObjectPropertyTarget:
     The target value of the property.
     """
 
-    def __init__(self, obj: Any, value: Any, target_value: Any):
+    def __init__(self, obj: Any, value: Any, target_value: Any,
+                 relational_representation: Optional[str] = None):
         self.obj = obj
         self.value = value
         self.name = get_property_name(self.obj, self.value)
         self.__class__.__name__ = self.name
         self.target_value = target_value
+        self.relational_representation = relational_representation
 
     def __str__(self):
-        return f"{self.target_value}"
+        if self.relational_representation:
+            return f"{self.name} |= {self.relational_representation}"
+        else:
+            return f"{self.target_value}"
 
 
 @dataclass
