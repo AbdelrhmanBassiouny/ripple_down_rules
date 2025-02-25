@@ -75,17 +75,20 @@ def prompt_for_alchemy_conditions(x: sqlalchemy.orm.DeclarativeBase, target: Obj
 
 
 def prompt_for_relational_conditions(x: Case, target: ObjectPropertyTarget,
-                                     user_input: Optional[str] = None) -> Tuple[str, Condition]:
+                                     user_input: Optional[str] = None,
+                                     case_name: Optional[str] = None) -> Tuple[str, Condition]:
     """
     Prompt the user for relational conditions.
 
     :param x: The case to classify.
     :param target: The target category to compare the case with.
     :param user_input: The user input to parse. If None, the user is prompted for input.
+    :param case_name: The name of the case.
     :return: The differentiating features as new rule conditions.
     """
     session = get_prompt_session_for_obj(x)
-    prompt_str = f"Give Conditions for {x}.{target.name}"
+    case_name = case_name or x.__class__.__name__
+    prompt_str = f"Give Conditions for {case_name}.{target.name}"
     user_input, tree = prompt_and_parse_user_for_input(prompt_str, session, user_input=user_input)
     condition = parse_relational_input(x, user_input, tree, bool)
     return user_input, condition
