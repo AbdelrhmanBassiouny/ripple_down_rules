@@ -13,10 +13,28 @@ from matplotlib import pyplot as plt
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from sqlalchemy import BinaryExpression, Engine, select
+from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, List, Tuple, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ripple_down_rules.datastructures import Case, ObjectPropertyTarget, Condition
+
+
+def print_table_row(row_dict: Dict[str, Any], columns_per_row: int = 9):
+    """
+    Print a table row.
+
+    :param row_dict: The row to print.
+    :param columns_per_row: The maximum number of columns per row.
+    """
+    all_items = list(row_dict.items())
+    # make items a list of n rows such that each row has a max size of 4
+    all_items = [all_items[i:i + columns_per_row] for i in range(0, len(all_items), columns_per_row)]
+    keys = [list(map(lambda i: i[0], row)) for row in all_items]
+    values = [list(map(lambda i: i[1], row)) for row in all_items]
+    for row_keys, row_values in zip(keys, values):
+        table = tabulate([row_values], headers=row_keys, tablefmt='grid')
+        print(table)
 
 
 def row_to_dict(obj):
