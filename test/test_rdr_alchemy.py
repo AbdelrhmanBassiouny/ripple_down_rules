@@ -9,23 +9,23 @@ from typing_extensions import List
 from ucimlrepo import fetch_ucirepo
 
 from ripple_down_rules.alchemy_rules import Target, AlchemyRule
-from ripple_down_rules.datasets import load_zoo_dataset, Base, Animal, Species
+from ripple_down_rules.datasets import load_zoo_dataset, Base, Animal, Species, get_dataset
 from ripple_down_rules.datastructures import Case, Attributes, ObjectPropertyTarget, RDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.utils import prompt_for_relational_conditions, prompt_for_alchemy_conditions
+from test_rdr import TestRDR
 
-
-class TestRDR:
+class TestAlchemyRDR:
     session: sqlalchemy.orm.Session
 
     @classmethod
     def setUpClass(cls):
-        zoo = fetch_ucirepo(id=111)
+        zoo = get_dataset(111, TestRDR.cache_file)
 
         # data (as pandas dataframes)
-        X = zoo.data.features
-        y = zoo.data.targets
+        X = zoo['features']
+        y = zoo['targets']
         # get ids as list of strings
 
         category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
@@ -72,7 +72,7 @@ class TestRDR:
         cat = scrdr.fit_case(result[0], target=result[0].species, expert=expert)
         assert cat == result[0].species
 
-tests = TestRDR()
+tests = TestAlchemyRDR()
 tests.setUpClass()
 # tests.test_alchemy_rules()
 tests.test_classify_scrdr()
