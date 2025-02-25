@@ -7,7 +7,7 @@ from relational_rdr_test_case import RelationalRDRTestCase
 from ripple_down_rules.datastructures import RDRMode, ObjectPropertyTarget, Case
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import render_tree
+from ripple_down_rules.utils import render_tree, prompt_for_relational_conditions
 
 
 def test_classify_scrdr(obj: Any, target_property: Any,
@@ -36,7 +36,7 @@ def test_classify_scrdr(obj: Any, target_property: Any,
 def test_parse_relational_conditions(case, target):
     user_input = "parts is not None and len(parts) > 0"
     target = RelationalRDRTestCase.target
-    Human.prompt_for_relational_conditions(case, [target], user_input)
+    prompt_for_relational_conditions(case, target, user_input)
 
 
 RelationalRDRTestCase.setUpClass()
