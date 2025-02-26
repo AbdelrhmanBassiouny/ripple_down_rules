@@ -4,17 +4,20 @@ import ast
 import json
 from abc import ABC, abstractmethod
 
+from sqlalchemy.orm import Session, DeclarativeBase
 from tabulate import tabulate
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence, Callable
 
-from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectPropertyTarget
+from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectAttributeTarget
 from .failures import InvalidOperator
 from .utils import get_all_subclasses, get_property_name, VariableVisitor, \
-    get_prompt_session_for_obj, parse_relational_conclusion, prompt_and_parse_user_for_input, get_attribute_values, \
+    get_prompt_session_for_obj, prompt_user_input_and_parse_to_expression, get_attribute_values, \
     parse_relational_input, prompt_for_relational_conditions, row_to_dict, print_table_row
 
 if TYPE_CHECKING:
     from .rdr import Rule
+
+Table: Type[DeclarativeBase]
 
 
 class Expert(ABC):
@@ -197,7 +200,7 @@ class Human(Expert):
             extra_conclusions[category] = self._get_conditions(all_names, conditions_for="extra conclusions")
         return extra_conclusions
 
-    def ask_for_relational_conclusion(self, x: Case, for_attribute: Any) \
+    def ask_for_relational_conclusion(self, x: Union[Case, Table], for_attribute: Any) \
             -> Optional[Callable[[Case], None]]:
         """
         Ask the expert to provide a relational conclusion for the case.
@@ -215,28 +218,37 @@ class Human(Expert):
         user_input = None
         if self.use_loaded_answers:
             user_input = self.all_expert_answers.pop(0)
-        prompt_str = f"Give Conclusion on {x._id}.{for_attribute_name}"
+        prompt_str = f"Give Conclusion on {x.__class__.__name__}.{for_attribute_name}"
         session = get_prompt_session_for_obj(x) if not user_input else None
-        user_input, tree = prompt_and_parse_user_for_input(prompt_str, session, user_input)
+        user_input, tree = prompt_user_input_and_parse_to_expression(prompt_str, session, user_input)
         if not self.use_loaded_answers:
             self.all_expert_answers.append(user_input)
 
-        def apply_conclusion(case: Case) -> type(for_attribute):
-            attr_value = parse_relational_input(case, user_input, tree, type(for_attribute))
+        def apply_conclusion(case: Union[Case, Table]) -> type(for_attribute):
+            if isinstance(case, Case):
+                attr_value = parse_relational_input(case, user_input, tree, type(for_attribute))
+            elif isinstance(case, Table):
+                attr_value = parse_alchemy_input(case, user_input, tree, type(for_attribute))
+            else:
+                raise ValueError(f"Unsupported case type {type(case)}")
             return attr_value(case)
 
-        conclusion = ObjectPropertyTarget(x._obj, for_attribute, apply_conclusion(x),
-                                          relational_representation=user_input)
+        conclusion = ObjectAttributeTarget(x._obj, for_attribute, apply_conclusion(x),
+                                           relational_representation=user_input)
         print(f"Evaluated expression: {conclusion}")
         return conclusion
 
-    def ask_for_conclusion(self, x: Case, current_conclusions: Optional[List[Attribute]] = None) -> Optional[Attribute]:
+    def ask_for_conclusion(self, x: Case, current_conclusions: Optional[List[Attribute]] = None,
+                           for_attribute: Optional[Any] = None) -> Optional[Attribute]:
         """
         Ask the expert to provide a conclusion for the case.
 
         :param x: The case to classify.
         :param current_conclusions: The current conclusions for the case if any.
+        :param for_attribute: The attribute to provide the conclusion for.
         """
+        if self.mode == RDRMode.Relational:
+            return self.ask_for_relational_conclusion(x, for_attribute)
         all_names = self.get_and_print_all_names_and_conclusions(x, current_conclusions)
         while True:
             if not self.use_loaded_answers:

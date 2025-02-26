@@ -54,14 +54,14 @@ class Case:
     or additional attribute values for the case.
     """
 
-    def __init__(self, id_: str, attributes: List[Attribute],
+    def __init__(self, _id: str, attributes: List[Attribute],
                  conclusions: Optional[List[Attribute]] = None,
                  targets: Optional[List[Attribute]] = None,
                  obj: Optional[Any] = None):
         """
         Create a case.
 
-        :param id_: The id of the case.
+        :param _id: The id of the case.
         :param attributes: The attributes of the case.
         :param conclusions: The conclusions that has been made about the case.
         :param targets: The targets of the case.
@@ -70,7 +70,7 @@ class Case:
         self._attributes = Attributes({a._name: a for a in attributes})
         for attribute in attributes:
             setattr(self, attribute._name, attribute)
-        self._id = id_
+        self._id = _id
         self._conclusions: Optional[List[Attribute]] = conclusions
         self._targets: Optional[List[Attribute]] = targets
         self._obj: Any = obj

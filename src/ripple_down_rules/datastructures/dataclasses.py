@@ -64,12 +64,12 @@ class Condition:
 
 
 @dataclass
-class ObjectPropertyTarget:
+class ObjectAttributeTarget:
     obj: Any
     """
     The object that the property belongs to.
     """
-    value: Any
+    attribute: Any
     """
     The value of the property. This has to be the exact property value not a value that is equal to the property value,
     as this is used to get the name of the property.
@@ -78,12 +78,16 @@ class ObjectPropertyTarget:
     """
     The target value of the property.
     """
+    relational_representation: Optional[str] = None
+    """
+    The representation of the target value in relational form.
+    """
 
-    def __init__(self, obj: Any, value: Any, target_value: Any,
+    def __init__(self, obj: Any, attribute: Any, target_value: Any,
                  relational_representation: Optional[str] = None):
         self.obj = obj
-        self.value = value
-        self.name = get_property_name(self.obj, self.value)
+        self.attribute = attribute
+        self.name = get_property_name(self.obj, self.attribute)
         self.__class__.__name__ = self.name
         self.target_value = target_value
         self.relational_representation = relational_representation

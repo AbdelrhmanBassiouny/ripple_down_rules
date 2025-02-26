@@ -5,8 +5,8 @@ from sqlalchemy import Select, BinaryExpression, select
 from anytree import NodeMixin
 from typing_extensions import Optional, Tuple, Any
 
-from .datastructures import ObjectPropertyTarget, Condition
-from .utils import get_prompt_session_for_obj, prompt_and_parse_user_for_input
+from .datastructures import ObjectAttributeTarget, Condition
+from .utils import get_prompt_session_for_obj, prompt_user_input_and_parse_to_expression
 
 
 @dataclass
@@ -15,8 +15,8 @@ class Target:
     value: Any
 
 
-def prompt_for_alchemy_conditions(x: sqlalchemy.orm.DeclarativeBase, target: ObjectPropertyTarget,
-                                     user_input: Optional[str] = None) -> BinaryExpression:
+def prompt_for_alchemy_conditions(x: sqlalchemy.orm.DeclarativeBase, target: ObjectAttributeTarget,
+                                  user_input: Optional[str] = None) -> BinaryExpression:
     """
     Prompt the user for relational conditions.
 
@@ -27,7 +27,7 @@ def prompt_for_alchemy_conditions(x: sqlalchemy.orm.DeclarativeBase, target: Obj
     """
     session = get_prompt_session_for_obj(x)
     prompt_str = f"Give Conditions for {x.__tablename__}.{target.name}"
-    user_input, tree = prompt_and_parse_user_for_input(prompt_str, session, user_input=user_input)
+    user_input, tree = prompt_user_input_and_parse_to_expression(prompt_str, session, user_input=user_input)
     result = eval(user_input)
     return result, target
 

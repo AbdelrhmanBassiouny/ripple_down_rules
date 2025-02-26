@@ -10,7 +10,7 @@ from ucimlrepo import fetch_ucirepo
 
 from ripple_down_rules.alchemy_rules import Target, AlchemyRule
 from ripple_down_rules.datasets import load_zoo_dataset, Base, Animal, Species, get_dataset
-from ripple_down_rules.datastructures import Case, Attributes, ObjectPropertyTarget, RDRMode
+from ripple_down_rules.datastructures import Case, Attributes, ObjectAttributeTarget, RDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.utils import prompt_for_relational_conditions, prompt_for_alchemy_conditions
@@ -53,7 +53,7 @@ class TestAlchemyRDR:
         r = self.session.scalars(select(Animal)).all()
         assert len(r) == 101
 
-        user_input, conditions = prompt_for_alchemy_conditions(Animal, ObjectPropertyTarget(Animal, Animal.species, Species.mammal))
+        user_input, conditions = prompt_for_alchemy_conditions(Animal, ObjectAttributeTarget(Animal, Animal.species, Species.mammal))
         print(conditions)
         print(type(conditions))
 
@@ -69,7 +69,7 @@ class TestAlchemyRDR:
         scrdr.table = Animal
         scrdr.target_column = Animal.species
 
-        cat = scrdr.fit_case(result[0], target=result[0].species, expert=expert)
+        cat = scrdr.fit_case(result[0], target=result[0].species, expert=expert, session=session)
         assert cat == result[0].species
 
 tests = TestAlchemyRDR()

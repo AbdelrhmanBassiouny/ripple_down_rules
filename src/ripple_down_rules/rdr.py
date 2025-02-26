@@ -3,13 +3,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from copy import copy, deepcopy
 
+import sqlalchemy.orm
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy import Column
 from sqlalchemy.orm import DeclarativeBase
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Callable
 
-from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, ObjectPropertyTarget
+from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, ObjectAttributeTarget
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree
@@ -143,23 +144,22 @@ class SingleClassRDR(RippleDownRules):
     target_column: Column
 
     def fit_case(self, x: table, target: Optional[Any] = None,
-                 expert: Optional[Expert] = None, for_property: Optional[Any] = None, **kwargs) -> Attribute:
+                 expert: Optional[Expert] = None, for_attribute: Optional[Any] = None,
+                 **kwargs) -> Attribute:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
 
         :param x: The case to classify.
-        :param for_property: The property of the case to find a value for.
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
+        :param for_attribute: The property of the case to find a value for.
+        :param session: The SQLAlchemy session to use for the database.
         :return: The category that the case belongs to.
         """
         expert = expert if expert else Human(mode=self.mode)
         if not target:
-            if self.mode == RDRMode.Relational and for_property is not None:
-                target = expert.ask_for_relational_conclusion(x, for_property)
-            elif self.mode == RDRMode.Propositional:
-                target = expert.ask_for_conclusion(x)
+            target = expert.ask_for_conclusion(x, for_attribute=for_attribute)
         if not self.start_rule:
             conditions = expert.ask_for_conditions(x, target)
             self.start_rule = SingleClassRule(conditions, target, corner_case=x)

@@ -4,7 +4,7 @@ from typing import Optional
 from typing_extensions import Any
 
 from relational_rdr_test_case import RelationalRDRTestCase
-from ripple_down_rules.datastructures import RDRMode, ObjectPropertyTarget, Case
+from ripple_down_rules.datastructures import RDRMode, ObjectAttributeTarget, Case
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.utils import render_tree, prompt_for_relational_conditions
@@ -21,7 +21,7 @@ def test_classify_scrdr(obj: Any, target_property: Any,
 
     scrdr = SingleClassRDR(mode=RDRMode.Relational)
     case = Case.from_object(obj)
-    cat = scrdr.fit_case(case, for_property=target_property, expert=expert,
+    cat = scrdr.fit_case(case, for_attribute=target_property, expert=expert,
                          mode=RDRMode.Relational)
     render_tree(scrdr.start_rule, use_dot_exporter=True, filename="./test_results/relational_scrdr_classify")
     if target_value:

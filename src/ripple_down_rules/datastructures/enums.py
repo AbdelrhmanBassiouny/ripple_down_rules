@@ -3,6 +3,40 @@ from enum import auto, Enum
 from typing_extensions import List
 
 
+class ExpressionParser(Enum):
+    """
+    Parsers for expressions to evaluate and encapsulate the expression into a callable function.
+    """
+    ASTVisitor: auto()
+    """
+    Generic python Abstract Syntax Tree that detects variables, attributes, binary/boolean expressions , ...etc.
+    """
+    Alchemy: auto()
+    """
+    Specific for SQLAlchemy expressions on ORM Tables.
+    """
+
+
+class PromptFor(Enum):
+    """
+    The reason of the prompt. (e.g. get conditions, or conclusions).
+    """
+    Conditions: str = "conditions"
+    """
+    Prompt for rule conditions about a case.
+    """
+    Conclusion: str = "conclusion"
+    """
+    Prompt for rule conclusion about a case.
+    """
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.__str__()
+
+
 class CategoricalValue(Enum):
     """
     A categorical value is a value that is a category.

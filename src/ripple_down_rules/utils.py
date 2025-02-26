@@ -4,20 +4,23 @@ import ast
 import importlib.util
 import logging
 import os
+from _ast import AST
 
 import networkx as nx
-import sqlalchemy
+from sqlalchemy.orm import DeclarativeBase, Session
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
-from sqlalchemy import BinaryExpression, Engine, select
+from sqlalchemy import BinaryExpression, Engine
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, List, Tuple, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ripple_down_rules.datastructures import Case, ObjectPropertyTarget, Condition
+    from ripple_down_rules.datastructures import Case, ObjectAttributeTarget, Condition, PromptFor, ExpressionParser
+
+Table: Type[DeclarativeBase]
 
 
 def print_table_row(row_dict: Dict[str, Any], columns_per_row: int = 9):
@@ -45,86 +48,106 @@ def row_to_dict(obj):
     }
 
 
-def prompt_for_alchemy_conditions(x: sqlalchemy.orm.DeclarativeBase, target: ObjectPropertyTarget, engine: Engine,
-                                     user_input: Optional[str] = None) -> Tuple[str, BinaryExpression]:
+def prompt_for_alchemy_conditions(x: Table, target: ObjectAttributeTarget, session: Session,
+                                  user_input: Optional[str] = None) -> Tuple[str, BinaryExpression]:
     """
     Prompt the user for relational conditions.
 
     :param x: The case to classify.
     :param target: The target category to compare the case with.
-    :param engine: The sqlalchemy engine.
+    :param session: The SQLAlchemy ORM session to use.
     :param user_input: The user input to parse. If None, the user is prompted for input.
     :return: The differentiating features as new rule conditions.
     """
     session = get_prompt_session_for_obj(x)
     prompt_str = f"Give Conditions for {x.__tablename__}.{target.name}"
-    user_input, tree = prompt_and_parse_user_for_input(prompt_str, session, user_input=user_input)
-    condition = parse_relational_input(x, user_input, tree, bool)
-    # def condition_evaluator(row):
-    #     # Insert sample data
-    #     with engine.connect() as conn:
-    #         conn.execute(x.__table__.insert(), {"value1": 10, "value2": 20})
-    #
-    #     # Evaluate binary expression without using Session
-    #     with engine.connect() as conn:
-    #         binary_expr = eval(user_input)
-    #         query = select(binary_expr).select_from(x.__table__)
-    #         result = conn.execute(query).fetchall()
-    #     return result
+    user_input, tree = prompt_user_input_and_parse_to_expression(prompt_str, session, user_input=user_input)
+    condition = evaluate_alchemy_condition(x, user_input, tree, bool)
     return user_input, condition
 
 
-def prompt_for_relational_conditions(x: Case, target: ObjectPropertyTarget,
-                                     user_input: Optional[str] = None,
-                                     case_name: Optional[str] = None) -> Tuple[str, Condition]:
+def prompt_for_relational_conditions(case: Union[Case, Table], target: ObjectAttributeTarget,
+                                     user_input: Optional[str] = None) -> Tuple[str, Condition]:
     """
     Prompt the user for relational conditions.
 
-    :param x: The case to classify.
+    :param case: The case to classify.
     :param target: The target category to compare the case with.
     :param user_input: The user input to parse. If None, the user is prompted for input.
-    :param case_name: The name of the case.
     :return: The differentiating features as new rule conditions.
     """
-    session = get_prompt_session_for_obj(x)
-    case_name = case_name or x.__class__.__name__
-    prompt_str = f"Give Conditions for {case_name}.{target.name}"
-    user_input, tree = prompt_and_parse_user_for_input(prompt_str, session, user_input=user_input)
-    condition = parse_relational_input(x, user_input, tree, bool)
-    return user_input, condition
+    user_input, expression_tree = prompt_user_about_case(case, PromptFor.Conditions, target)
+    conditions = parse_expression_to_callable(case, expression_tree, user_input=user_input, callable_output_type=bool)
+    return user_input, conditions
 
 
-def parse_relational_input(case: Case, user_input: str, tree: ast.AST, conclusion_type: Type) -> Callable[[Case], bool]:
+def parse_expression_to_callable(case: Union[Case, Table], expression_tree: AST,
+                                 user_input: Optional[str] = None, callable_output_type: Optional[Type] = None,
+                                 expression_parser: ExpressionParser = ExpressionParser.ASTVisitor):
+    if expression_parser == ExpressionParser.ASTVisitor:
+        conditions = parse_relational_input(case, user_input, expression_tree, callable_output_type)
+    elif expression_parser == ExpressionParser.Alchemy:
+        conditions = parse_alchemy_input(case, user_input, expression_tree)
+    else:
+        raise ValueError(f"Incorrect case type {type(case)}, case should be either a Case or an ORM Table")
+    return conditions
+
+
+def prompt_user_about_case(case: Union[Case, Table], prompt_for: PromptFor, target: ObjectAttributeTarget)\
+        -> Tuple[str, str]:
+    """
+    Prompt the user for input.
+
+    :param case: The case to prompt the user on.
+    :param prompt_for: The type of information the user should provide for the given case.
+    :return: The user input, and the executable expression that was parsed from the user input.
+    """
+    prompt_str = f"Give {prompt_for} for {case.__class__.__name__}.{target.name}"
+    session = get_prompt_session_for_obj(case)
+    user_input, expression_tree = prompt_user_input_and_parse_to_expression(prompt_str, session)
+    return user_input, expression_tree
+
+
+def evaluate_alchemy_expression(case: Table, session: Session, expression_tree: AST) -> Any:
+    code = compile_expression_to_code(expression_tree)
+    condition: BinaryExpression = eval(code, {"__builtins__": {"len": len}})
+    table = case.__class__
+    session.add(case)
+    session.commit()
+    result = session.query(table).filter(table.id == case.id, condition).first()
+
+
+def compile_expression_to_code(expression_tree: AST) -> Any:
+    """
+    Compile an expression tree that was parsed from string into code that can be executed using 'eval(code)'
+
+    :param expression_tree: The parsed expression tree.
+    :return: The code that was compiled from the expression tree.
+    """
+    return compile(expression_tree, filename="<string>", mode="eval")
+
+
+def parse_relational_input(corner_case: Case, user_input: str, expression_tree: ast.AST, conclusion_type: Type) -> Callable[[Case], bool]:
     """
     Parse the relational information from the user input.
 
-    :param case: The case to classify.
+    :param corner_case: The case to classify.
     :param user_input: The input to parse.
-    :param tree: The AST tree of the input.
+    :param expression_tree: The AST tree of the input.
     :param conclusion_type: The output type of the evaluation of the parsed input.
     :return: The parsed conditions as a dictionary.
     """
     visitor = VariableVisitor()
-    visitor.visit(tree)
+    visitor.visit(expression_tree)
 
-    code = compile(tree, filename="<string>", mode="eval")
+    code = compile_expression_to_code(expression_tree)
 
-    class GeneratedCondition:
+    class CallableExpression:
 
-        def __call__(self, obj: Any, **kwargs) -> conclusion_type:
+        def __call__(self, case: Any, **kwargs) -> conclusion_type:
             try:
-                context = get_all_possible_contexts(obj)
-                context.update(get_all_possible_contexts(case))
-                context["case"] = case
-                if hasattr(case, "_id"):
-                    context[f"{case._id}"] = case
-                    context[f"{case._id}".lower()] = case
-                for key in visitor.variables:
-                    if key not in context:
-                        raise ValueError(f"Attribute {key} not found in the case {obj}")
-                for key, ast_attr in visitor.attributes.items():
-                    if f"{key.id}.{ast_attr.attr}" not in context:
-                        raise ValueError(f"Attribute {key.id}.{ast_attr.attr} not found in the case {obj}")
+                context = get_all_possible_contexts(case)
+                assert_context_contains_needed_information(case, context, visitor)
                 output = eval(code, {"__builtins__": {"len": len}}, context)
                 assert isinstance(output, conclusion_type), (f"Expected output type {conclusion_type},"
                                                              f" got {type(output)}")
@@ -135,7 +158,20 @@ def parse_relational_input(case: Case, user_input: str, tree: ast.AST, conclusio
         def __str__(self):
             return user_input
 
-    return GeneratedCondition()
+    return CallableExpression()
+
+
+def assert_context_contains_needed_information(case: Union[Case, Table], context: Dict[str, Any],
+                                               visitor: VariableVisitor):
+    """
+    Asserts that the variables mentioned in the expression visited by visitor are all in the given context.
+    """
+    for key in visitor.variables:
+        if key not in context:
+            raise ValueError(f"Attribute {key} not found in the case {case}")
+    for key, ast_attr in visitor.attributes.items():
+        if f"{key.id}.{ast_attr.attr}" not in context:
+            raise ValueError(f"Attribute {key.id}.{ast_attr.attr} not found in the case {case}")
 
 
 def get_all_possible_contexts(obj: Any, recursion_idx: int = 0) -> Dict[str, Any]:
@@ -158,8 +194,8 @@ def get_all_possible_contexts(obj: Any, recursion_idx: int = 0) -> Dict[str, Any
     return all_contexts
 
 
-def prompt_and_parse_user_for_input(prompt: Optional[str] = None, session: Optional[PromptSession] = None,
-                                    user_input: Optional[str] = None) -> Tuple[str, ast.AST]:
+def prompt_user_input_and_parse_to_expression(prompt: Optional[str] = None, session: Optional[PromptSession] = None,
+                                              user_input: Optional[str] = None) -> Tuple[str, ast.AST]:
     """
     Prompt the user for input.
 
@@ -180,23 +216,6 @@ def prompt_and_parse_user_for_input(prompt: Optional[str] = None, session: Optio
             return user_input, tree
         except SyntaxError as e:
             print(f"Syntax error: {e}")
-
-
-def parse_relational_conclusion(obj: Any, conclusion: str) -> Any:
-    """
-    Parse a relational conclusion from a string and get the attribute values equivalent to the conclusion from the case.
-
-    :param obj: The object to get the attribute values from.
-    :param conclusion: The conclusion to parse.
-    """
-    attr_chain = conclusion.split('.')
-    user_attr = attr_chain[0]
-    user_sub_attr = attr_chain[1] if len(attr_chain) > 1 else None
-    # Evaluate expression
-    attr = getattr(obj, user_attr)
-    if user_sub_attr:
-        attr = get_attribute_values(attr, user_sub_attr)
-    return attr
 
 
 def get_prompt_session_for_obj(obj: Any) -> PromptSession:
