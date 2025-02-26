@@ -67,7 +67,7 @@ def load_zoo_dataset(cache_file: str) -> Tuple[List[Case], List[Attribute]]:
     X = zoo['features']
     y = zoo['targets']
     # get ids as list of strings
-    ids = zoo.data.ids.values.flatten()
+    ids = zoo['ids'].values.flatten()
     all_cases = Case.create_cases_from_dataframe(X, ids)
 
     category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]

@@ -209,9 +209,7 @@ class Case:
                             continue
                         for attr_element in attr_value:
                             sub_attr_value.update(get_attribute_values(attr_element, sub_attr))
-                        # setattr(attr_type, sub_attr, Case.get_or_create_matching_attribute(sub_attr_value, sub_attr))
                         setattr(attr_type, sub_attr, sub_attr_value)
-                        #property()
             else:
                 attr_type = Categorical.create_attribute(attr_name, False, CategoryValueType.Nominal,
                                                          make_set(type(attr_value)))

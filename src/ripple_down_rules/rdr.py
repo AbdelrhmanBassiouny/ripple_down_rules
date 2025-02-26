@@ -85,6 +85,7 @@ class RippleDownRules(ABC):
             plt.ion()
         i = 0
         stop_iterating = False
+        num_rules: int = 0
         while not stop_iterating:
             all_pred = 0
             all_recall = []
@@ -107,7 +108,8 @@ class RippleDownRules(ABC):
                 if not match:
                     print(f"Predicted: {pred_cat} but expected: {y}")
                 all_pred += int(match)
-                if animate_tree:
+                if animate_tree and self.start_rule.size > num_rules:
+                    num_rules = self.start_rule.size
                     self.update_figures()
                 i += 1
                 all_predicted = y_batch and all_pred == len(y_batch)

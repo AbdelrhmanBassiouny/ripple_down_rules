@@ -10,6 +10,7 @@ import networkx as nx
 from sqlalchemy.orm import DeclarativeBase, Session
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
+import matplotlib
 from matplotlib import pyplot as plt
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
@@ -38,6 +39,8 @@ def print_table_row(row_dict: Dict[str, Any], columns_per_row: int = 9):
     for row_keys, row_values in zip(keys, values):
         table = tabulate([row_values], headers=row_keys, tablefmt='grid')
         print(table)
+
+matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
 def row_to_dict(obj):
