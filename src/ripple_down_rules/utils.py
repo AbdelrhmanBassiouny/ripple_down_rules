@@ -83,11 +83,12 @@ def prompt_for_relational_conditions(case: Union[Case, Table], target: ObjectAtt
 
 def parse_expression_to_callable(case: Union[Case, Table], expression_tree: AST,
                                  user_input: Optional[str] = None, callable_output_type: Optional[Type] = None,
-                                 expression_parser: ExpressionParser = ExpressionParser.ASTVisitor):
+                                 expression_parser: ExpressionParser = ExpressionParser.ASTVisitor,
+                                 session: Optional[Session] = None):
     if expression_parser == ExpressionParser.ASTVisitor:
         conditions = parse_relational_input(case, user_input, expression_tree, callable_output_type)
     elif expression_parser == ExpressionParser.Alchemy:
-        conditions = parse_alchemy_input(case, user_input, expression_tree)
+        conditions = evaluate_alchemy_expression(case, session, expression_tree)
     else:
         raise ValueError(f"Incorrect case type {type(case)}, case should be either a Case or an ORM Table")
     return conditions
