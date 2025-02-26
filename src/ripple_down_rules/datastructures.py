@@ -5,7 +5,7 @@ from collections import UserDict
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from orderedset import OrderedSet
+from ordered_set import OrderedSet
 from typing_extensions import Any, Tuple, Optional, List, Dict, Type, Union, Sequence
 
 from .failures import InvalidOperator
