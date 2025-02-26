@@ -8,6 +8,7 @@ import os
 import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
+import matplotlib
 from matplotlib import pyplot as plt
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
@@ -15,6 +16,8 @@ from typing_extensions import Callable, Set, Any, Type, Dict, List, Tuple, Optio
 
 if TYPE_CHECKING:
     from ripple_down_rules.datastructures import Case, ObjectPropertyTarget, Condition
+
+matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
 def prompt_for_relational_conditions(x: Case, target: ObjectPropertyTarget,

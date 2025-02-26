@@ -54,7 +54,7 @@ class TestRDR(TestCase):
     def test_fit_scrdr(self):
         use_loaded_answers = True
         save_answers = False
-        draw_tree = False
+        draw_tree = True
         filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
