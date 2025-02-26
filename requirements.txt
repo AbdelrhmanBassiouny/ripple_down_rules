@@ -1,7 +1,7 @@
 anytree>=2.8.0
 pandas>=2.0.3
 networkx>=3.1
-orderedset>=2.0.3
+ordered_set
 pygraphviz>=1.7
 ucimlrepo>=0.0.7
 typing-extensions>=4.12.2
