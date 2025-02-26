@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import ast
 import json
 from abc import ABC, abstractmethod
 
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence, Callable
 
-from .datastructures import str_to_operator_fn, Condition, Case, Attribute, Operator
+from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectPropertyTarget
 from .failures import InvalidOperator
-from .utils import get_all_subclasses
+from .utils import get_all_subclasses, get_property_name, VariableVisitor, \
+    get_prompt_session_for_obj, parse_relational_conclusion, prompt_and_parse_user_for_input, get_attribute_values, \
+    parse_relational_input, prompt_for_relational_conditions
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -32,6 +35,9 @@ class Expert(ABC):
     """
     The known categories (i.e. Attribute types) to use.
     """
+
+    def __init__(self, mode: RDRMode = RDRMode.Propositional):
+        self.mode: RDRMode = mode
 
     @abstractmethod
     def ask_for_conditions(self, x: Case, targets: List[Attribute], last_evaluated_rule: Optional[Rule] = None) \
@@ -74,13 +80,23 @@ class Expert(ABC):
         """
         pass
 
+    def ask_for_relational_conclusion(self, x: Case, for_attribute: Union[str, Attribute, Sequence[Attribute]]) \
+            -> Optional[Attribute]:
+        """
+        Ask the expert to provide a relational conclusion for the case.
+
+        :param x: The case to classify.
+        :param for_attribute: The attribute to provide the conclusion for.
+        """
+
 
 class Human(Expert):
     """
     The Human Expert class, an expert that asks the human to provide differentiating features and conclusions.
     """
 
-    def __init__(self, use_loaded_answers: bool = False):
+    def __init__(self, use_loaded_answers: bool = False, mode: RDRMode = RDRMode.Propositional):
+        super().__init__(mode)
         self.all_expert_answers = []
         self.use_loaded_answers = use_loaded_answers
 
@@ -102,6 +118,28 @@ class Human(Expert):
         with open(path + '.json', "r") as f:
             self.all_expert_answers = json.load(f)
 
+    def _get_relational_conditions(self, x: Case, targets: List[Attribute],
+                                   conditions_for="differentiating features") -> Dict[str, Condition]:
+        """
+        Ask the expert to provide the differentiating features between two cases or unique features for a case
+        that doesn't have a corner case to compare to.
+
+        :param x: The case to classify.
+        :param targets: The target categories to compare the case with.
+        :param conditions_for: A string indicating what the conditions are for.
+        :return: The differentiating features as new rule conditions.
+        """
+        conditions = {}
+        for target in targets:
+            user_input = None
+            if self.use_loaded_answers:
+                user_input = self.all_expert_answers.pop(0)
+            user_input, condition = prompt_for_relational_conditions(x, target, user_input)
+            conditions[target.name] = condition
+            if not self.use_loaded_answers:
+                self.all_expert_answers.append(user_input)
+        return conditions
+
     def ask_for_conditions(self, x: Case,
                            targets: Union[Attribute, List[Attribute]],
                            last_evaluated_rule: Optional[Rule] = None) \
@@ -110,12 +148,8 @@ class Human(Expert):
         if last_evaluated_rule and not self.use_loaded_answers:
             action = "Refinement" if last_evaluated_rule.fired else "Alternative"
             print(f"{action} needed for rule:\n")
-        if last_evaluated_rule and last_evaluated_rule.fired:
-            all_attributes = last_evaluated_rule.corner_case.attributes_list + x.attributes_list
-        else:
-            if not self.use_loaded_answers:
-                print("Please provide a rule for case:")
-            all_attributes = x.attributes_list
+
+        all_attributes = self.get_all_attributes(x, last_evaluated_rule)
 
         all_names, max_len = x.get_all_names_and_max_len(all_attributes)
 
@@ -127,8 +161,25 @@ class Human(Expert):
                                                              ljust_sz=max_len)
             x.print_values(all_names, targets=targets, ljust_sz=max_len)
 
-        # take user input
-        return self._get_conditions(all_names, conditions_for="differentiating features")
+        if self.mode == RDRMode.Relational:
+            return self._get_relational_conditions(x, targets, conditions_for="differentiating features")
+        else:
+            return self._get_conditions(all_names, conditions_for="differentiating features")
+
+    def get_all_attributes(self, x: Case, last_evaluated_rule: Optional[Rule] = None) -> List[Attribute]:
+        """
+        Get all attributes for the case.
+
+        :param x: The case to get the attributes for.
+        :param last_evaluated_rule: The last evaluated rule.
+        """
+        if last_evaluated_rule and last_evaluated_rule.fired:
+            all_attributes = last_evaluated_rule.corner_case._attributes_list + x._attributes_list
+        else:
+            if not self.use_loaded_answers:
+                print("Please provide a rule for case:")
+            all_attributes = x._attributes_list
+        return all_attributes
 
     def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Attribute]) \
             -> Dict[Attribute, Dict[str, Condition]]:
@@ -149,6 +200,39 @@ class Human(Expert):
             extra_conclusions[category] = self._get_conditions(all_names, conditions_for="extra conclusions")
         return extra_conclusions
 
+    def ask_for_relational_conclusion(self, x: Case, for_attribute: Any) \
+            -> Optional[Callable[[Case], None]]:
+        """
+        Ask the expert to provide a relational conclusion for the case.
+
+        :param x: The case to classify.
+        :param for_attribute: The attribute to provide the conclusion for.
+        """
+        all_names = self.get_and_print_all_names_and_conclusions(x)
+
+        for_attribute_name = get_property_name(x._obj, for_attribute)
+
+        if not hasattr(x, for_attribute_name):
+            raise ValueError(f"Attribute {for_attribute_name} not found in the case")
+
+        user_input = None
+        if self.use_loaded_answers:
+            user_input = self.all_expert_answers.pop(0)
+        prompt_str = f"Give Conclusion on {x._id}.{for_attribute_name}"
+        session = get_prompt_session_for_obj(x) if not user_input else None
+        user_input, tree = prompt_and_parse_user_for_input(prompt_str, session, user_input)
+        if not self.use_loaded_answers:
+            self.all_expert_answers.append(user_input)
+
+        def apply_conclusion(case: Case) -> type(for_attribute):
+            attr_value = parse_relational_input(case, user_input, tree, type(for_attribute))
+            return attr_value(case)
+
+        conclusion = ObjectPropertyTarget(x._obj, for_attribute, apply_conclusion(x),
+                                          relational_representation=user_input)
+        print(f"Evaluated expression: {conclusion}")
+        return conclusion
+
     def ask_for_conclusion(self, x: Case, current_conclusions: Optional[List[Attribute]] = None) -> Optional[Attribute]:
         """
         Ask the expert to provide a conclusion for the case.
@@ -156,11 +240,7 @@ class Human(Expert):
         :param x: The case to classify.
         :param current_conclusions: The current conclusions for the case if any.
         """
-        conclusion_types = list(map(type, current_conclusions)) if current_conclusions else None
-        all_names, max_len = x.get_all_names_and_max_len()
-        if not self.use_loaded_answers:
-            max_len = x.print_all_names(all_names, max_len, conclusion_types=conclusion_types)
-            x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
+        all_names = self.get_and_print_all_names_and_conclusions(x, current_conclusions)
         while True:
             if not self.use_loaded_answers:
                 print("Please provide the conclusion as \"name:value\" or \"name\" or press enter to end:")
@@ -176,6 +256,22 @@ class Human(Expert):
                     print(e)
             else:
                 return None
+
+    def get_and_print_all_names_and_conclusions(self, x: Case, current_conclusions: Optional[List[Attribute]] = None) \
+            -> List[str]:
+        """
+        Get and print all names and conclusions for the case.
+
+        :param x: The case to get the names and conclusions for.
+        :param current_conclusions: The current conclusions for the case.
+        :return: The list of all names.
+        """
+        conclusion_types = list(map(type, current_conclusions)) if current_conclusions else None
+        all_names, max_len = x.get_all_names_and_max_len()
+        if not self.use_loaded_answers:
+            max_len = x.print_all_names(all_names, max_len, conclusion_types=conclusion_types)
+            x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
+        return all_names
 
     def parse_conclusion(self, value: str) -> Attribute:
         """
@@ -211,7 +307,7 @@ class Human(Expert):
         """
         category_type = self.get_category_type(cat_name)
         if not category_type:
-            category_type = self.create_new_category_type(cat_name, cat_value)
+            category_type = self.create_new_category_type(cat_name)
         return category_type(cat_value)
 
     def get_category_type(self, cat_name: str) -> Optional[Type[Attribute]]:
@@ -229,17 +325,16 @@ class Human(Expert):
             category_type = self.known_categories[cat_name]
         return category_type
 
-    def create_new_category_type(self, cat_name: str, cat_value: Union[str, int, float, set]) -> Type[Attribute]:
+    def create_new_category_type(self, cat_name: str) -> Type[Attribute]:
         """
         Create a new category type.
 
         :param cat_name: The name of the category.
-        :param cat_value: The value of the category.
         :return: A new category type.
         """
-        category_type: Type[Attribute] = type(cat_name, (Attribute,), {})
+        category_type: Type[Attribute] = type(cat_name, (Categorical,), {})
         if self.ask_if_category_is_mutually_exclusive(category_type.__name__):
-            category_type.mutually_exclusive = True
+            category_type._mutually_exclusive = True
         Attribute.register(category_type)
         return category_type
 
@@ -267,8 +362,8 @@ class Human(Expert):
         if not self.use_loaded_answers:
             targets = targets or []
             targets = targets if isinstance(targets, list) else [targets]
-            x.conclusions = current_conclusions
-            x.targets = targets
+            x._conclusions = current_conclusions
+            x._targets = targets
             question = f"Is the conclusion {conclusion} correct for the case (y/n):" \
                        f"\n{str(x)}"
         return self.ask_yes_no_question(question)
@@ -415,7 +510,10 @@ class Human(Expert):
         :return: list of error messages, and the name, value and operator of the rule.
         """
         try:
-            name, value, operator = str_to_operator_fn(rule)
+            operator = Operator.parse_operators(rule)
+            operator = operator[0]
+            name = operator.arg_names[0]
+            value = operator.arg_names[1]
             messages = []
             if not name:
                 messages.append(f"Name cannot be empty")

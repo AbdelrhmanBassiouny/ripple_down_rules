@@ -1,0 +1,4 @@
+digraph tree {
+    "len(parts) > 0
+=> contained_objects |= parts.contained_objects";
+}

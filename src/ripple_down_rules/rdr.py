@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from copy import copy
+from copy import copy, deepcopy
 
+from anytree import Node
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
-from typing_extensions import List, Optional, Dict, Type, Union
+from typing_extensions import List, Optional, Dict, Type, Union, Any, Callable
 
-from .datastructures import Condition, Case, Stop, MCRDRMode, Attribute
+from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, ObjectPropertyTarget
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree
@@ -26,12 +27,15 @@ class RippleDownRules(ABC):
     The conclusions that the expert has accepted, such that they are not asked again.
     """
 
-    def __init__(self, start_rule: Optional[Rule] = None):
+    def __init__(self, start_rule: Optional[Rule] = None,
+                 mode: RDRMode = RDRMode.Propositional):
         """
         :param start_rule: The starting rule for the classifier.
+        :param mode: The mode of the classifier, either Propositional or Relational.
         """
         self.start_rule = start_rule
         self.fig: Optional[plt.Figure] = None
+        self.mode: RDRMode = mode
 
     def __call__(self, x: Case) -> Attribute:
         return self.classify(x)
@@ -79,6 +83,7 @@ class RippleDownRules(ABC):
             plt.ion()
         i = 0
         stop_iterating = False
+        num_rules: int = 0
         while not stop_iterating:
             all_pred = 0
             all_recall = []
@@ -101,7 +106,8 @@ class RippleDownRules(ABC):
                 if not match:
                     print(f"Predicted: {pred_cat} but expected: {y}")
                 all_pred += int(match)
-                if animate_tree:
+                if animate_tree and self.start_rule.size > num_rules:
+                    num_rules = self.start_rule.size
                     self.update_figures()
                 i += 1
                 all_predicted = y_batch and all_pred == len(y_batch)
@@ -134,21 +140,27 @@ class RippleDownRules(ABC):
 
 class SingleClassRDR(RippleDownRules):
 
-    def fit_case(self, x: Case, target: Optional[Attribute] = None,
-                 expert: Optional[Expert] = None, **kwargs) -> Attribute:
+    def fit_case(self, x: Case, target: Optional[Union[Any, Attribute]] = None,
+                 expert: Optional[Expert] = None, for_property: Optional[Any] = None, **kwargs) -> Attribute:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
 
         :param x: The case to classify.
+        :param for_property: The property of the case to find a value for.
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :return: The category that the case belongs to.
         """
-        expert = expert if expert else Human()
+        expert = expert if expert else Human(mode=self.mode)
+        if not target:
+            if self.mode == RDRMode.Relational and for_property is not None:
+                target = expert.ask_for_relational_conclusion(x, for_property)
+            elif self.mode == RDRMode.Propositional:
+                target = expert.ask_for_conclusion(x)
         if not self.start_rule:
             conditions = expert.ask_for_conditions(x, target)
-            self.start_rule = SingleClassRule(conditions, target, corner_case=Case(x.id_, x.attributes_list))
+            self.start_rule = SingleClassRule(conditions, target, corner_case=x)
 
         pred = self.evaluate(x)
 
@@ -275,7 +287,7 @@ class MultiClassRDR(RippleDownRules):
             conditions = expert.ask_for_conditions(x, target)
             self.start_rule.conditions = conditions
             self.start_rule.conclusion = target
-            self.start_rule.corner_case = Case(x.id_, x.attributes_list)
+            self.start_rule.corner_case = Case(x._id, x._attributes_list)
 
     @property
     def last_top_rule(self) -> Optional[MultiClassTopRule]:
@@ -325,10 +337,10 @@ class MultiClassRDR(RippleDownRules):
         :param target: The target category to compare the conclusion with.
         :return: Whether the conclusion is conflicting with the target category.
         """
-        if conclusion.mutually_exclusive:
+        if conclusion._mutually_exclusive:
             return True
         else:
-            return not conclusion.value.issubset(target.value)
+            return not conclusion._value.issubset(target._value)
 
     @staticmethod
     def is_same_category_type(conclusion: Attribute, target: Attribute) -> bool:
@@ -392,20 +404,22 @@ class MultiClassRDR(RippleDownRules):
                 extra_conclusions.append(conclusion)
         return extra_conclusions
 
-    def add_conclusion(self, evaluated_rule: Rule):
+    def add_conclusion(self, evaluated_rule: Rule) -> None:
         """
         Add the conclusion of the evaluated rule to the list of conclusions.
+
+        :param evaluated_rule: The evaluated rule to add the conclusion of.
         """
         conclusion_types = [type(c) for c in self.conclusions]
         if type(evaluated_rule.conclusion) not in conclusion_types:
             self.conclusions.append(evaluated_rule.conclusion)
         else:
             same_type_conclusions = [c for c in self.conclusions if type(c) == type(evaluated_rule.conclusion)]
-            combined_conclusion = evaluated_rule.conclusion.value if isinstance(evaluated_rule.conclusion.value, set) \
-                else {evaluated_rule.conclusion.value}
+            combined_conclusion = evaluated_rule.conclusion._value if isinstance(evaluated_rule.conclusion._value, set) \
+                else {evaluated_rule.conclusion._value}
             category_type = type(evaluated_rule.conclusion)
             for c in same_type_conclusions:
-                combined_conclusion.union(c.value if isinstance(c.value, set) else {c.value})
+                combined_conclusion.update(c._value if isinstance(c._value, set) else {c._value})
                 self.conclusions.remove(c)
             self.conclusions.append(category_type(combined_conclusion))
 
@@ -505,7 +519,7 @@ class GeneralRDR(RippleDownRules):
             if type(t) not in self.start_rules_dict:
                 conclusions = self.classify(x)
                 x_cp.add_attributes(conclusions)
-                new_rdr = SingleClassRDR() if t.mutually_exclusive else MultiClassRDR()
+                new_rdr = SingleClassRDR() if t._mutually_exclusive else MultiClassRDR()
                 new_conclusions = new_rdr.fit_case(x_cp, t, expert, **kwargs)
                 self.start_rules_dict[type(t)] = new_rdr
                 x_cp.add_attributes(new_conclusions)
