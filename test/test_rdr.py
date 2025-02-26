@@ -17,11 +17,12 @@ class TestRDR(TestCase):
     targets: List[str]
     test_results_dir: str = "./test_results"
     expert_answers_dir: str = "./test_expert_answers"
+    cache_file: str = f"{test_results_dir}/zoo_dataset.pkl"
 
     @classmethod
     def setUpClass(cls):
         # fetch dataset
-        cls.all_cases, cls.targets = load_zoo_dataset()
+        cls.all_cases, cls.targets = load_zoo_dataset(cache_file=cls.cache_file)
         if not os.path.exists(cls.test_results_dir):
             os.makedirs(cls.test_results_dir)
 
