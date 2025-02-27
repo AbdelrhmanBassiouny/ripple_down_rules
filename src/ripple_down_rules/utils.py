@@ -1,151 +1,22 @@
 from __future__ import annotations
 
-import ast
-import importlib.util
 import logging
-import os
-from _ast import AST
 
 import matplotlib
-
-from matplotlib import pyplot as plt
-
 import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
+from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
-from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import WordCompleter
-from sqlalchemy.orm import DeclarativeBase as Table, Session, MappedColumn as Column
+from sqlalchemy.orm import DeclarativeBase as Table, MappedColumn as Column
 from tabulate import tabulate
-from typing_extensions import Callable, Set, Any, Type, Dict, List, Tuple, Optional, Union, TYPE_CHECKING
+from typing_extensions import Callable, Set, Any, Type, Dict, List, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ripple_down_rules.datastructures import Case, PromptFor, Attribute
+    from ripple_down_rules.datastructures import Case, Attribute
     from ripple_down_rules.rules import Rule
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
-
-
-class CallableExpression:
-    """
-    A callable that is constructed from a string statement written by an expert.
-    """
-    conclusion_type: Type
-    """
-    The type of the output of the callable, used for assertion.
-    """
-    expression_tree: AST
-    """
-    The AST tree parsed from the user input.
-    """
-    user_input: str
-    """
-    The input given by the expert.
-    """
-    session: Optional[Session]
-    """
-    The sqlalchemy orm session.
-    """
-    visitor: VariableVisitor
-    """
-    A visitor to extract all variables and comparisons from a python expression represented as an AST tree.
-    """
-    code: Any
-    """
-    The code that was compiled from the expression tree
-    """
-    compares_column_offset: List[int]
-    """
-    The start and end indices of each comparison in the string of user input.
-    """
-
-    def __init__(self, user_input: str, conclusion_type: Type, expression_tree: Optional[AST] = None,
-                 session: Optional[Session] = None):
-        """
-        Create a callable expression.
-
-        :param user_input: The input given by the expert.
-        :param conclusion_type: The type of the output of the callable.
-        :param expression_tree: The AST tree parsed from the user input.
-        :param session: The sqlalchemy orm session.
-        """
-        self.session = session
-        self.user_input: str = user_input
-        self.parsed_user_input = self.parse_user_input(user_input, session)
-        self.conclusion_type = conclusion_type
-        self.update_expression(self.parsed_user_input, expression_tree)
-
-    @staticmethod
-    def parse_user_input(user_input: str, session: Optional[Session] = None) -> str:
-        if ',' in user_input:
-            user_input = user_input.split(',')
-            user_input = [f"({u.strip()})" for u in user_input]
-            user_input = ' & '.join(user_input) if session else ' and '.join(user_input)
-        elif session:
-            user_input = user_input.replace(" and ", " & ")
-            user_input = user_input.replace(" or ", " | ")
-        return user_input
-
-    def update_expression(self, user_input: str, expression_tree: Optional[AST] = None):
-        if not expression_tree:
-            expression_tree = parse_string_to_expression(user_input)
-        self.expression_tree: AST = expression_tree
-        self.visitor = VariableVisitor()
-        self.visitor.visit(expression_tree)
-        self.compares_column_offset = [(c[0].col_offset, c[2].end_col_offset) for c in self.visitor.compares]
-        self.code = compile_expression_to_code(expression_tree)
-
-    def __call__(self, case: Any, **kwargs) -> conclusion_type:
-        try:
-            row = None
-            if self.session:
-                row, case = case, case.__class__
-            context = get_all_possible_contexts(case)
-            context.update({"case": case})
-            context.update({f"case.{k}": v for k, v in context.items()})
-            assert_context_contains_needed_information(case, context, self.visitor)
-            output = eval(self.code, {"__builtins__": {"len": len}}, context)
-            if self.session:
-                output = self.add_row_and_query_expression_result(row, output)
-            assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
-                                                              f" got {type(output)}")
-            return output
-        except Exception as e:
-            raise ValueError(f"Error during evaluation: {e}")
-
-    def add_row_and_query_expression_result(self, case: Table, evaluated_expression: Any) -> Any:
-        """
-        Evaluate a sqlalchemy statement written by an expert, this is done by inserting the case in parent table and
-        querying the data needed for the expert statement from the table using the sqlalchemy orm session.
-
-        :param case: The case about which is input is given.
-        :param evaluated_expression: The statement given by the expert.
-        """
-        table = case.__class__
-        self.session.add(case)
-        self.session.commit()
-        results = self.session.query(table).filter(table.id == case.id, evaluated_expression).first()
-        if self.conclusion_type == bool:
-            results = True if results else False
-        return results
-
-    def __str__(self):
-        """
-        Return the user string where each compare is written in a line using compare column offset start and end.
-        """
-        user_input = self.parsed_user_input
-        binary_ops = sorted(self.visitor.binary_ops, key=lambda x: x.end_col_offset)
-        binary_ops_indices = [b.end_col_offset for b in binary_ops]
-        all_binary_ops = []
-        prev_e = 0
-        for i, e in enumerate(binary_ops_indices):
-            if i == 0:
-                all_binary_ops.append(user_input[:e])
-            else:
-                all_binary_ops.append(user_input[prev_e:e])
-            prev_e = e
-        return "\n".join(all_binary_ops) if len(all_binary_ops) > 0 else user_input
 
 
 def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attribute], List[Column]]] = None,
@@ -218,202 +89,6 @@ def row_to_dict(obj):
     }
 
 
-def prompt_user_for_expression(case: Union[Case, Table], prompt_for: PromptFor, target_name: str,
-                               output_type: Type, session: Optional[Session] = None) -> Tuple[str, CallableExpression]:
-    """
-    Prompt the user for an executable python expression.
-
-    :param case: The case to classify.
-    :param prompt_for: The type of information ask user about.
-    :param target_name: The name of the target attribute to compare the case with.
-    :param output_type: The type of the output of the given statement from the user.
-    :param session: The sqlalchemy orm session.
-    :return: A callable expression that takes a case and executes user expression on it.
-    """
-    user_input, expression_tree = prompt_user_about_case(case, prompt_for, target_name)
-    callable_expression = CallableExpression(user_input, output_type, expression_tree=expression_tree, session=session)
-    return user_input, callable_expression
-
-
-def prompt_user_about_case(case: Union[Case, Table], prompt_for: PromptFor, target_name: str) \
-        -> Tuple[str, AST]:
-    """
-    Prompt the user for input.
-
-    :param case: The case to prompt the user on.
-    :param prompt_for: The type of information the user should provide for the given case.
-    :param target_name: The name of the target property of the case that is queried.
-    :return: The user input, and the executable expression that was parsed from the user input.
-    """
-    prompt_str = f"Give {prompt_for} for {case.__class__.__name__}.{target_name}"
-    session = get_prompt_session_for_obj(case)
-    user_input, expression_tree = prompt_user_input_and_parse_to_expression(prompt_str, session)
-    return user_input, expression_tree
-
-
-def evaluate_alchemy_expression(case: Table, session: Session, expert_input: str,
-                                expression_tree: Optional[AST] = None) -> Callable[Table, Any]:
-    """
-    Evaluate a sqlalchemy statement written by an expert, this is done by inserting the case in parent table and
-    querying the data needed for the expert statement from the table using the sqlalchemy orm session.
-
-    :param case: The case about which is input is given.
-    :param session: The sqlalchemy orm session.
-    :param expert_input: The statement given by the expert.
-    :param expression_tree: The AST tree parsed from the expert input, if not give it will be parsed from user_input.
-    """
-    if not expression_tree:
-        expression_tree = parse_string_to_expression(expert_input)
-    code = compile_expression_to_code(expression_tree)
-    condition: Any = eval(code, {"__builtins__": {"len": len}})
-    table = case.__class__
-    session.add(case)
-    session.commit()
-    return lambda new_case: session.query(table).filter(table.id == new_case.id, condition).first()
-
-
-def compile_expression_to_code(expression_tree: AST) -> Any:
-    """
-    Compile an expression tree that was parsed from string into code that can be executed using 'eval(code)'
-
-    :param expression_tree: The parsed expression tree.
-    :return: The code that was compiled from the expression tree.
-    """
-    return compile(expression_tree, filename="<string>", mode="eval")
-
-
-def assert_context_contains_needed_information(case: Union[Case, Table], context: Dict[str, Any],
-                                               visitor: VariableVisitor):
-    """
-    Asserts that the variables mentioned in the expression visited by visitor are all in the given context.
-    """
-    for key in visitor.variables:
-        if key not in context:
-            raise ValueError(f"Attribute {key} not found in the case {case}")
-    for key, ast_attr in visitor.attributes.items():
-        str_attr = ""
-        while isinstance(key, ast.Attribute):
-            if len(str_attr) > 0:
-                str_attr = f"{key.attr}.{str_attr}"
-            else:
-                str_attr = key.attr
-            key = key.value
-        str_attr = f"{key.id}.{str_attr}" if len(str_attr) > 0 else f"{key.id}.{ast_attr.attr}"
-        if str_attr not in context:
-            raise ValueError(f"Attribute {key.id}.{ast_attr.attr} not found in the case {case}")
-
-
-def get_all_possible_contexts(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 1,
-                              start_with_name: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get all possible contexts for an object.
-
-    :param obj: The object to get the contexts for.
-    :param recursion_idx: The recursion index to prevent infinite recursion.
-    :param max_recursion_idx: The maximum recursion index.
-    :param start_with_name: The starting context.
-    :return: A dictionary of all possible contexts.
-    """
-    all_contexts = {}
-    if recursion_idx > max_recursion_idx:
-        return all_contexts
-    for attr in dir(obj):
-        if attr.startswith("__") or attr.startswith("_") or callable(getattr(obj, attr)):
-            continue
-        chained_name = f"{start_with_name}.{attr}" if start_with_name else attr
-        all_contexts[chained_name] = get_attribute_values(obj, attr)
-        sub_attr_contexts = get_all_possible_contexts(getattr(obj, attr), recursion_idx + 1, start_with_name=chained_name)
-        # sub_attr_contexts = {f"{chained_name}.{k}": v for k, v in sub_attr_contexts.items()}
-        all_contexts.update(sub_attr_contexts)
-    return all_contexts
-
-
-def prompt_user_input_and_parse_to_expression(prompt: Optional[str] = None, session: Optional[PromptSession] = None,
-                                              user_input: Optional[str] = None) -> Tuple[str, ast.AST]:
-    """
-    Prompt the user for input.
-
-    :param prompt: The prompt to display to the user.
-    :param session: The prompt session to use.
-    :param user_input: The user input to use. If given, the user input will be used instead of prompting the user.
-    :return: The user input and the AST tree.
-    """
-    while True:
-        if not user_input:
-            user_input = session.prompt(f"\n{prompt} >>> ")
-        if user_input.lower() in ['exit', 'quit', '']:
-            break
-        try:
-            return user_input, parse_string_to_expression(user_input)
-        except SyntaxError as e:
-            print(f"Syntax error: {e}")
-
-
-def parse_string_to_expression(expression_str: str) -> AST:
-    """
-    Parse a string statement into an AST expression.
-
-    :param expression_str: The string which will be parsed.
-    :return: The parsed expression.
-    """
-    tree = ast.parse(expression_str, mode='eval')
-    logging.debug(f"AST parsed successfully: {ast.dump(tree)}")
-    return tree
-
-
-def get_prompt_session_for_obj(obj: Any) -> PromptSession:
-    """
-    Get a prompt session for an object.
-
-    :param obj: The object to get the prompt session for.
-    :return: The prompt session.
-    """
-    completions = get_completions(obj)
-    completer = WordCompleter(completions)
-    session = PromptSession(completer=completer)
-    return session
-
-
-class VariableVisitor(ast.NodeVisitor):
-    """
-    A visitor to extract all variables and comparisons from a python expression represented as an AST tree.
-    """
-    compares: List[Tuple[Union[ast.Name, ast.Call], ast.cmpop, Union[ast.Name, ast.Call]]]
-    variables: Set[str]
-    all: List[ast.BoolOp]
-
-    def __init__(self):
-        self.variables = set()
-        self.attributes: Dict[ast.Name, ast.Attribute] = {}
-        self.compares = list()
-        self.binary_ops = list()
-        self.all = list()
-
-    def visit_Attribute(self, node):
-        self.all.append(node)
-        self.attributes[node.value] = node
-        self.generic_visit(node)
-
-    def visit_BinOp(self, node):
-        self.binary_ops.append(node)
-        self.all.append(node)
-        self.generic_visit(node)
-
-    def visit_BoolOp(self, node):
-        self.all.append(node)
-        self.generic_visit(node)
-
-    def visit_Compare(self, node):
-        self.all.append(node)
-        self.compares.append([node.left, node.ops[0], node.comparators[0]])
-        self.generic_visit(node)
-
-    def visit_Name(self, node):
-        if f"__{node.id}__" not in dir(__builtins__) and node not in self.attributes:
-            self.variables.add(node.id)
-        self.generic_visit(node)
-
-
 def get_property_name(obj: Any, prop: Any) -> str:
     """
     Get the name of a property from an object.
@@ -427,20 +102,6 @@ def get_property_name(obj: Any, prop: Any) -> str:
         prop_value = getattr(obj, name)
         if prop_value is prop or (hasattr(prop_value, "_value") and prop_value._value is prop):
             return name
-
-
-def get_completions(obj: Any) -> List[str]:
-    """
-    Get all completions for the object. This is used in the python prompt shell to provide completions for the user.
-
-    :param obj: The object to get completions for.
-    :return: A list of completions.
-    """
-    # Define completer with all object attributes and comparison operators
-    completions = ['==', '!=', '>', '<', '>=', '<=', 'in', 'not', 'and', 'or', 'is']
-    completions += ["isinstance(", "issubclass(", "type(", "len(", "hasattr(", "getattr(", "setattr(", "delattr("]
-    completions += list(get_all_possible_contexts(obj).keys())
-    return completions
 
 
 def get_attribute_values(obj: Any, attribute: Any) -> Any:
@@ -491,18 +152,6 @@ def get_all_subclasses(cls: Type) -> Dict[str, Type]:
         all_subclasses[sub_cls.__name__.lower()] = sub_cls
         all_subclasses.update(get_all_subclasses(sub_cls))
     return all_subclasses
-
-
-def import_class(class_name: str, file_path: str = "dynamically_created_attributes.py"):
-    module_name = os.path.splitext(file_path)[0]
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    # Access the class from the module
-    new_class = getattr(module, class_name)
-    print(f"Class {class_name} imported dynamically.")
-    return new_class
 
 
 def make_set(value: Any) -> Set:

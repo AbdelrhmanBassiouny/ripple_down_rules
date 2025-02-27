@@ -6,10 +6,12 @@ from abc import ABC, abstractmethod
 from sqlalchemy.orm import DeclarativeBase, Session, MappedColumn as Column
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Sequence, Any
 
-from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectAttributeTarget, PromptFor
+from .datastructures import (Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectAttributeTarget,
+                             PromptFor, CallableExpression)
 from .failures import InvalidOperator
-from .utils import get_all_subclasses, prompt_user_for_expression, \
-    show_current_and_corner_cases, CallableExpression, evaluate_alchemy_expression, prompt_user_about_case
+from .utils import get_all_subclasses, \
+    show_current_and_corner_cases
+from .prompt import prompt_user_for_expression, prompt_user_about_case
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -143,8 +145,12 @@ class Human(Expert):
         :return: The differentiating features as new rule conditions.
         """
         conditions = {}
+        targets = targets if isinstance(targets, list) else [targets]
         for target in targets:
-            target_name = target.__class__.__name__
+            if isinstance(target, Attribute):
+                target_name = target._name
+            else:
+                target_name = target.__class__.__name__
             user_input = None
             if self.use_loaded_answers:
                 user_input = self.all_expert_answers.pop(0)
@@ -167,13 +173,12 @@ class Human(Expert):
         :param current_conclusions: The current conclusions for the case.
         :return: The extra conclusions for the case.
         """
-        all_names, max_len = x.get_all_names_and_max_len()
         extra_conclusions = {}
         while True:
             category = self.ask_for_conclusion(x, current_conclusions)
             if not category:
                 break
-            extra_conclusions[category] = self._get_conditions(all_names, conditions_for="extra conclusions")
+            extra_conclusions[category] = self._get_relational_conditions(x, category)
         return extra_conclusions
 
     def ask_for_relational_conclusion(self, case: Union[Case, Table], attribute_name: str, attribute_type: Type,

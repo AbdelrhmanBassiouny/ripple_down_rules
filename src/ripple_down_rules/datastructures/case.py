@@ -6,10 +6,10 @@ import pandas as pd
 from ordered_set import OrderedSet
 from typing_extensions import Union, List, Optional, Any, Type, Tuple, Dict
 
-from ripple_down_rules.datastructures.attribute import Attribute, ListOf, DictOf, Categorical, Integer, Continuous, \
+from .attribute import Attribute, ListOf, DictOf, Categorical, Integer, Continuous, \
     Bool, Unary
-from ripple_down_rules.datastructures.enums import CategoryValueType
-from ripple_down_rules.utils import make_set, get_property_name, can_be_a_set, get_attribute_values
+from .enums import CategoryValueType
+from ..utils import make_set, get_property_name, can_be_a_set, get_attribute_values
 
 
 class Attributes(UserDict):
@@ -248,6 +248,7 @@ class Case:
 
     def __setitem__(self, attribute_name: str, attribute: Attribute):
         self._attributes[attribute_name] = attribute
+        setattr(self, attribute_name, attribute)
         if self._obj:
             setattr(self._obj, attribute_name, attribute)
 

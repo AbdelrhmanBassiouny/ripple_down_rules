@@ -1,1 +1,22 @@
-["milk==1", "aquatic==1", "feathers==1", "backbone==0,breathes==0", "backbone==0,fins==0", "milk==1", "feathers==1", "eggs==1,feathers==0,backbone==0,breathes==1,aquatic==0,fins==0", "breathes==1,fins==0", "feathers==1", "milk==1", "feathers==0,milk==0,airborne==0,fins==0,backbone==1,tail==1", "milk==0,feathers==0,airborne==0,backbone==0,fins==0", "fins==0", "backbone==0,tail==0", "feathers==1", "legs==0", "eggs==1", "breathes==1,tail==0", "legs==0"]
+[
+  "milk==1",
+  "aquatic==1",
+  "feathers==1",
+  "backbone==0,breathes==0",
+  "backbone==0,fins==0",
+  "milk==1",
+  "feathers==1",
+  "eggs==1,feathers==0,backbone==0,breathes==1,aquatic==0,fins==0",
+  "breathes==1,fins==0",
+  "feathers==1",
+  "milk==1",
+  "feathers==0,milk==0,airborne==0,fins==0,backbone==1,tail==1",
+  "milk==0,feathers==0,airborne==0,backbone==0,fins==0",
+  "fins==0",
+  "backbone==0,tail==0",
+  "feathers==1",
+  "legs==0",
+  "eggs==1",
+  "breathes==1,tail==0",
+  "legs==0"
+]

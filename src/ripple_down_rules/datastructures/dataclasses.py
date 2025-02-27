@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import cached_property
 
 from typing_extensions import Union, Sequence, Any, Dict, List, TYPE_CHECKING, Optional
 
 from ripple_down_rules.datastructures.operator import Operator, Equal
-from ripple_down_rules.utils import get_property_name
 
 if TYPE_CHECKING:
-    from ripple_down_rules.datastructures.attribute import Attribute
-    from ripple_down_rules.datastructures.case import Case
+    from .attribute import Attribute
+    from .case import Case
 
 
 @dataclass

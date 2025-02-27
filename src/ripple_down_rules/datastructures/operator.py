@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 
 from typing_extensions import Any, List, Optional, deprecated, Tuple
 
-from ripple_down_rules.failures import InvalidOperator
-from ripple_down_rules.utils import get_all_subclasses
+from ..failures import InvalidOperator
+from ..utils import get_all_subclasses
 
 
 @deprecated("This module is deprecated, use Operator.parse_operators instead.")
