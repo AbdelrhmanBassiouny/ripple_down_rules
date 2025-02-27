@@ -7,11 +7,11 @@ class ExpressionParser(Enum):
     """
     Parsers for expressions to evaluate and encapsulate the expression into a callable function.
     """
-    ASTVisitor: auto()
+    ASTVisitor: int = auto()
     """
     Generic python Abstract Syntax Tree that detects variables, attributes, binary/boolean expressions , ...etc.
     """
-    Alchemy: auto()
+    SQLAlchemy: int = auto()
     """
     Specific for SQLAlchemy expressions on ORM Tables.
     """

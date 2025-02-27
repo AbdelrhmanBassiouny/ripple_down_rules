@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from copy import copy, deepcopy
+from copy import copy
 
-import sqlalchemy.orm
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy import Column
-from sqlalchemy.orm import DeclarativeBase
-from typing_extensions import List, Optional, Dict, Type, Union, Any, Callable
+from sqlalchemy.orm import DeclarativeBase, Session, MappedColumn as Column
+from typing_extensions import List, Optional, Dict, Type, Union, Any
 
-from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, ObjectAttributeTarget
+from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
-from .utils import draw_tree
+from .utils import draw_tree, get_property_name
 
 
 class RippleDownRules(ABC):
@@ -141,18 +140,18 @@ class RippleDownRules(ABC):
 
 
 class SingleClassRDR(RippleDownRules):
-
     table: Type[DeclarativeBase]
     target_column: Column
 
-    def fit_case(self, x: table, target: Optional[Any] = None,
+    def fit_case(self, case: Union[table, Case], target: Optional[Union[Attribute, Column]] = None,
                  expert: Optional[Expert] = None, for_attribute: Optional[Any] = None,
+                 session: Optional[Session] = None,
                  **kwargs) -> Attribute:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param for_attribute: The property of the case to find a value for.
@@ -161,18 +160,20 @@ class SingleClassRDR(RippleDownRules):
         """
         expert = expert if expert else Human(mode=self.mode)
         if not target:
-            target = expert.ask_for_conclusion(x, for_attribute=for_attribute)
+            attribute_name = get_property_name(case, for_attribute)
+            target = expert.ask_for_conclusion(case, attribute_name=attribute_name, attribute_type=type(for_attribute),
+                                               session=session)
         if not self.start_rule:
-            conditions = expert.ask_for_conditions(x, target)
-            self.start_rule = SingleClassRule(conditions, target, corner_case=x)
+            conditions = expert.ask_for_conditions(case, [target], session=session)
+            self.start_rule = SingleClassRule(conditions, target, corner_case=case)
 
-        pred = self.evaluate(x)
+        pred = self.evaluate(case)
 
         if pred.conclusion != target:
-            conditions = expert.ask_for_conditions(x, target, pred)
-            pred.fit_rule(x, target, conditions=conditions)
+            conditions = expert.ask_for_conditions(case, [target], pred)
+            pred.fit_rule(case, target, conditions=conditions)
 
-        return self.classify(x)
+        return self.classify(case)
 
     def classify(self, x: Case) -> Optional[Attribute]:
         """

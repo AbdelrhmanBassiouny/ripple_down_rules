@@ -6,22 +6,129 @@ import logging
 import os
 from _ast import AST
 
+import matplotlib
+
+from matplotlib import pyplot as plt
+
 import networkx as nx
-from sqlalchemy.orm import DeclarativeBase, Session
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
-import matplotlib
-from matplotlib import pyplot as plt
+from ordered_set import OrderedSet
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
-from sqlalchemy import BinaryExpression, Engine
+from sqlalchemy.orm import DeclarativeBase as Table, Session, MappedColumn as Column
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, List, Tuple, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ripple_down_rules.datastructures import Case, ObjectAttributeTarget, Condition, PromptFor, ExpressionParser
+    from ripple_down_rules.datastructures import Case, PromptFor, Attribute
+    from ripple_down_rules.rules import Rule
 
-Table: Type[DeclarativeBase]
+matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+class CallableExpression:
+    """
+    A callable that is constructed from a string statement written by an expert.
+    """
+    conclusion_type: Type
+    """
+    The type of the output of the callable, used for assertion.
+    """
+
+    def __init__(self, user_input: str, conclusion_type: Type, expression_tree: Optional[AST] = None,
+                 session: Optional[Session] = None):
+        """
+        Create a callable expression.
+
+        :param user_input: The input given by the expert.
+        :param conclusion_type: The type of the output of the callable.
+        :param expression_tree: The AST tree parsed from the user input.
+        :param session: The sqlalchemy orm session.
+        """
+        self.user_input: str = user_input
+        if not expression_tree:
+            expression_tree = parse_string_to_expression(user_input)
+        self.expression_tree: AST = expression_tree
+        self.conclusion_type = conclusion_type
+        self.session = session
+        self.visitor = VariableVisitor()
+        self.visitor.visit(expression_tree)
+        self.code = compile_expression_to_code(expression_tree)
+
+    def __call__(self, case: Any, **kwargs) -> conclusion_type:
+        try:
+            context = get_all_possible_contexts(case)
+            assert_context_contains_needed_information(case, context, self.visitor)
+            output = eval(self.code, {"__builtins__": {"len": len}}, context)
+            if self.session:
+                output = self.add_row_and_query_expression_result(case, output)
+            assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
+                                                              f" got {type(output)}")
+            return output
+        except Exception as e:
+            raise ValueError(f"Error during evaluation: {e}")
+
+    def add_row_and_query_expression_result(self, case: Table, evaluated_expression: Any) -> Callable[Table, Any]:
+        """
+        Evaluate a sqlalchemy statement written by an expert, this is done by inserting the case in parent table and
+        querying the data needed for the expert statement from the table using the sqlalchemy orm session.
+
+        :param case: The case about which is input is given.
+        :param evaluated_expression: The statement given by the expert.
+        """
+        table = case.__class__
+        self.session.add(case)
+        self.session.commit()
+        return self.session.query(table).filter(table.id == case.id, evaluated_expression).first()
+
+    def __str__(self):
+        return self.user_input
+
+
+def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attribute], List[Column]]] = None,
+                                  current_conclusions: Optional[Union[List[Attribute], List[Column]]] = None,
+                                  last_evaluated_rule: Optional[Rule] = None) -> None:
+    """
+    Show the data of the new case and if last evaluated rule exists also show that of the corner case.
+
+    :param case: The new case.
+    :param targets: The target attribute of the case.
+    :param current_conclusions: The current conclusions of the case.
+    :param last_evaluated_rule: The last evaluated rule in the RDR.
+    """
+    corner_case = None
+    targets = {f"target_{t.__class__.__name__}": t for t in targets} if targets else {}
+    current_conclusions = {c.__class__.__name__: c for c in current_conclusions} if current_conclusions else {}
+    if last_evaluated_rule:
+        action = "Refinement" if last_evaluated_rule.fired else "Alternative"
+        print(f"{action} needed for rule:\n")
+        corner_case = last_evaluated_rule.corner_case
+
+    corner_row_dict = None
+    if isinstance(case, Table):
+        case_dict = row_to_dict(case)
+        if last_evaluated_rule and last_evaluated_rule.fired:
+            corner_row_dict = row_to_dict(last_evaluated_rule.corner_case)
+    else:
+        attributes = case._attributes_list
+        if last_evaluated_rule and last_evaluated_rule.fired:
+            attributes = OrderedSet(attributes + corner_case._attributes_list)
+        names = [att._name for att in attributes]
+        case_values = [case[name]._value if name in case._attributes else "null" for name in names]
+        case_dict = dict(zip(names, case_values))
+        if last_evaluated_rule and last_evaluated_rule.fired:
+            corner_values = [corner_case[name]._value if name in corner_case._attributes else "null" for name in names]
+            corner_row_dict = dict(zip(names, corner_values))
+
+    if corner_row_dict:
+        corner_row_dict.update(targets)
+        corner_row_dict.update(current_conclusions)
+        print_table_row(corner_row_dict)
+
+    case_dict.update(targets)
+    case_dict.update(current_conclusions)
+    print_table_row(case_dict)
 
 
 def print_table_row(row_dict: Dict[str, Any], columns_per_row: int = 9):
@@ -40,8 +147,6 @@ def print_table_row(row_dict: Dict[str, Any], columns_per_row: int = 9):
         table = tabulate([row_values], headers=row_keys, tablefmt='grid')
         print(table)
 
-matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
-
 
 def row_to_dict(obj):
     return {
@@ -51,74 +156,58 @@ def row_to_dict(obj):
     }
 
 
-def prompt_for_alchemy_conditions(x: Table, target: ObjectAttributeTarget, session: Session,
-                                  user_input: Optional[str] = None) -> Tuple[str, BinaryExpression]:
+def prompt_user_for_expression(case: Union[Case, Table], prompt_for: PromptFor, target_name: str,
+                               output_type: Type, session: Optional[Session] = None) -> Tuple[str, CallableExpression]:
     """
-    Prompt the user for relational conditions.
-
-    :param x: The case to classify.
-    :param target: The target category to compare the case with.
-    :param session: The SQLAlchemy ORM session to use.
-    :param user_input: The user input to parse. If None, the user is prompted for input.
-    :return: The differentiating features as new rule conditions.
-    """
-    session = get_prompt_session_for_obj(x)
-    prompt_str = f"Give Conditions for {x.__tablename__}.{target.name}"
-    user_input, tree = prompt_user_input_and_parse_to_expression(prompt_str, session, user_input=user_input)
-    condition = evaluate_alchemy_condition(x, user_input, tree, bool)
-    return user_input, condition
-
-
-def prompt_for_relational_conditions(case: Union[Case, Table], target: ObjectAttributeTarget,
-                                     user_input: Optional[str] = None) -> Tuple[str, Condition]:
-    """
-    Prompt the user for relational conditions.
+    Prompt the user for an executable python expression.
 
     :param case: The case to classify.
-    :param target: The target category to compare the case with.
-    :param user_input: The user input to parse. If None, the user is prompted for input.
-    :return: The differentiating features as new rule conditions.
+    :param prompt_for: The type of information ask user about.
+    :param target_name: The name of the target attribute to compare the case with.
+    :param output_type: The type of the output of the given statement from the user.
+    :param session: The sqlalchemy orm session.
+    :return: A callable expression that takes a case and executes user expression on it.
     """
-    user_input, expression_tree = prompt_user_about_case(case, PromptFor.Conditions, target)
-    conditions = parse_expression_to_callable(case, expression_tree, user_input=user_input, callable_output_type=bool)
-    return user_input, conditions
+    user_input, expression_tree = prompt_user_about_case(case, prompt_for, target_name)
+    callable_expression = CallableExpression(user_input, output_type, expression_tree=expression_tree, session=session)
+    return user_input, callable_expression
 
 
-def parse_expression_to_callable(case: Union[Case, Table], expression_tree: AST,
-                                 user_input: Optional[str] = None, callable_output_type: Optional[Type] = None,
-                                 expression_parser: ExpressionParser = ExpressionParser.ASTVisitor,
-                                 session: Optional[Session] = None):
-    if expression_parser == ExpressionParser.ASTVisitor:
-        conditions = parse_relational_input(case, user_input, expression_tree, callable_output_type)
-    elif expression_parser == ExpressionParser.Alchemy:
-        conditions = evaluate_alchemy_expression(case, session, expression_tree)
-    else:
-        raise ValueError(f"Incorrect case type {type(case)}, case should be either a Case or an ORM Table")
-    return conditions
-
-
-def prompt_user_about_case(case: Union[Case, Table], prompt_for: PromptFor, target: ObjectAttributeTarget)\
+def prompt_user_about_case(case: Union[Case, Table], prompt_for: PromptFor, target_name: str) \
         -> Tuple[str, str]:
     """
     Prompt the user for input.
 
     :param case: The case to prompt the user on.
     :param prompt_for: The type of information the user should provide for the given case.
+    :param target_name: The name of the target property of the case that is queried.
     :return: The user input, and the executable expression that was parsed from the user input.
     """
-    prompt_str = f"Give {prompt_for} for {case.__class__.__name__}.{target.name}"
+    prompt_str = f"Give {prompt_for} for {case.__class__.__name__}.{target_name}"
     session = get_prompt_session_for_obj(case)
     user_input, expression_tree = prompt_user_input_and_parse_to_expression(prompt_str, session)
     return user_input, expression_tree
 
 
-def evaluate_alchemy_expression(case: Table, session: Session, expression_tree: AST) -> Any:
+def evaluate_alchemy_expression(case: Table, session: Session, expert_input: str,
+                                expression_tree: Optional[AST] = None) -> Callable[Table, Any]:
+    """
+    Evaluate a sqlalchemy statement written by an expert, this is done by inserting the case in parent table and
+    querying the data needed for the expert statement from the table using the sqlalchemy orm session.
+
+    :param case: The case about which is input is given.
+    :param session: The sqlalchemy orm session.
+    :param expert_input: The statement given by the expert.
+    :param expression_tree: The AST tree parsed from the expert input, if not give it will be parsed from user_input.
+    """
+    if not expression_tree:
+        expression_tree = parse_string_to_expression(expert_input)
     code = compile_expression_to_code(expression_tree)
-    condition: BinaryExpression = eval(code, {"__builtins__": {"len": len}})
+    condition: Any = eval(code, {"__builtins__": {"len": len}})
     table = case.__class__
     session.add(case)
     session.commit()
-    result = session.query(table).filter(table.id == case.id, condition).first()
+    return lambda new_case: session.query(table).filter(table.id == new_case.id, condition).first()
 
 
 def compile_expression_to_code(expression_tree: AST) -> Any:
@@ -129,40 +218,6 @@ def compile_expression_to_code(expression_tree: AST) -> Any:
     :return: The code that was compiled from the expression tree.
     """
     return compile(expression_tree, filename="<string>", mode="eval")
-
-
-def parse_relational_input(corner_case: Case, user_input: str, expression_tree: ast.AST, conclusion_type: Type) -> Callable[[Case], bool]:
-    """
-    Parse the relational information from the user input.
-
-    :param corner_case: The case to classify.
-    :param user_input: The input to parse.
-    :param expression_tree: The AST tree of the input.
-    :param conclusion_type: The output type of the evaluation of the parsed input.
-    :return: The parsed conditions as a dictionary.
-    """
-    visitor = VariableVisitor()
-    visitor.visit(expression_tree)
-
-    code = compile_expression_to_code(expression_tree)
-
-    class CallableExpression:
-
-        def __call__(self, case: Any, **kwargs) -> conclusion_type:
-            try:
-                context = get_all_possible_contexts(case)
-                assert_context_contains_needed_information(case, context, visitor)
-                output = eval(code, {"__builtins__": {"len": len}}, context)
-                assert isinstance(output, conclusion_type), (f"Expected output type {conclusion_type},"
-                                                             f" got {type(output)}")
-                return output
-            except Exception as e:
-                raise ValueError(f"Error during evaluation: {e}")
-
-        def __str__(self):
-            return user_input
-
-    return CallableExpression()
 
 
 def assert_context_contains_needed_information(case: Union[Case, Table], context: Dict[str, Any],
@@ -178,15 +233,17 @@ def assert_context_contains_needed_information(case: Union[Case, Table], context
             raise ValueError(f"Attribute {key.id}.{ast_attr.attr} not found in the case {case}")
 
 
-def get_all_possible_contexts(obj: Any, recursion_idx: int = 0) -> Dict[str, Any]:
+def get_all_possible_contexts(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 2) -> Dict[str, Any]:
     """
     Get all possible contexts for an object.
 
     :param obj: The object to get the contexts for.
+    :param recursion_idx: The recursion index to prevent infinite recursion.
+    :param max_recursion_idx: The maximum recursion index.
     :return: A dictionary of all possible contexts.
     """
     all_contexts = {}
-    if recursion_idx > 2:
+    if recursion_idx > max_recursion_idx:
         return all_contexts
     for attr in dir(obj):
         if attr.startswith("__") or attr.startswith("_") or callable(getattr(obj, attr)):
@@ -214,12 +271,21 @@ def prompt_user_input_and_parse_to_expression(prompt: Optional[str] = None, sess
         if user_input.lower() in ['exit', 'quit', '']:
             break
         try:
-            # Parse the input into an AST
-            tree = ast.parse(user_input, mode='eval')
-            logging.debug(f"AST parsed successfully: {ast.dump(tree)}")
-            return user_input, tree
+            return user_input, parse_string_to_expression(user_input)
         except SyntaxError as e:
             print(f"Syntax error: {e}")
+
+
+def parse_string_to_expression(expression_str: str) -> AST:
+    """
+    Parse a string statement into an AST expression.
+
+    :param expression_str: The string which will be parsed.
+    :return: The parsed expression.
+    """
+    tree = ast.parse(expression_str, mode='eval')
+    logging.debug(f"AST parsed successfully: {ast.dump(tree)}")
+    return tree
 
 
 def get_prompt_session_for_obj(obj: Any) -> PromptSession:
@@ -336,7 +402,6 @@ def can_be_a_set(value: Any) -> bool:
             return True
     else:
         return False
-
 
 
 def get_all_subclasses(cls: Type) -> Dict[str, Type]:

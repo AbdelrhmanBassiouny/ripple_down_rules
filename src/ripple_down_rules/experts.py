@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import ast
 import json
 from abc import ABC, abstractmethod
 
-from sqlalchemy.orm import Session, DeclarativeBase
-from tabulate import tabulate
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, Sequence, Callable
+from sqlalchemy.orm import DeclarativeBase, Session, MappedColumn as Column
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Sequence, Any
 
-from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectAttributeTarget
+from .datastructures import Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectAttributeTarget, PromptFor
 from .failures import InvalidOperator
-from .utils import get_all_subclasses, get_property_name, VariableVisitor, \
-    get_prompt_session_for_obj, prompt_user_input_and_parse_to_expression, get_attribute_values, \
-    parse_relational_input, prompt_for_relational_conditions, row_to_dict, print_table_row
+from .utils import get_all_subclasses, prompt_user_for_expression, \
+    show_current_and_corner_cases, CallableExpression, evaluate_alchemy_expression, prompt_user_about_case
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -84,13 +81,16 @@ class Expert(ABC):
         """
         pass
 
-    def ask_for_relational_conclusion(self, x: Case, for_attribute: Union[str, Attribute, Sequence[Attribute]]) \
-            -> Optional[Attribute]:
+    def ask_for_relational_conclusion(self, case: Union[Case, Table], attribute_name: str, attribute_type: Type,
+                                      session: Optional[Session] = None) -> Optional[CallableExpression]:
         """
         Ask the expert to provide a relational conclusion for the case.
 
-        :param x: The case to classify.
-        :param for_attribute: The attribute to provide the conclusion for.
+        :param case: The case to classify.
+        :param attribute_name: The name of the attribute to provide the conclusion for.
+        :param attribute_type: The type of the attribute to provide the conclusion for.
+        :param session: The sqlalchemy orm session to use if the case is a Table.
+        :return: A callable expression that can be called with a new case as an argument.
         """
 
 
@@ -122,64 +122,39 @@ class Human(Expert):
         with open(path + '.json', "r") as f:
             self.all_expert_answers = json.load(f)
 
-    def _get_relational_conditions(self, x: Case, targets: List[Attribute],
-                                   conditions_for="differentiating features") -> Dict[str, Condition]:
+    def ask_for_conditions(self, case: Case,
+                           targets: Union[List[Attribute], List[Column]],
+                           last_evaluated_rule: Optional[Rule] = None,
+                           session: Optional[Session] = None) \
+            -> Dict[str, Condition]:
+        show_current_and_corner_cases(case, targets, last_evaluated_rule)
+        return self._get_relational_conditions(case, targets, session=session)
+
+    def _get_relational_conditions(self, case: Case, targets: Union[List[Attribute], List[Column]],
+                                   session: Optional[Session] = None) -> Dict[str, Condition]:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
         that doesn't have a corner case to compare to.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :param targets: The target categories to compare the case with.
-        :param conditions_for: A string indicating what the conditions are for.
+        :param session: The sqlalchemy orm session to use if the case is a Table.
         :return: The differentiating features as new rule conditions.
         """
         conditions = {}
         for target in targets:
+            target_name = target.__class__.__name__
             user_input = None
             if self.use_loaded_answers:
                 user_input = self.all_expert_answers.pop(0)
-            user_input, condition = prompt_for_relational_conditions(x, target, user_input)
-            conditions[target.name] = condition
+            if user_input:
+                condition = CallableExpression(user_input, bool, session=session)
+            else:
+                user_input, condition = prompt_user_for_expression(case, PromptFor.Conditions, target_name, bool)
+            conditions[target_name] = condition
             if not self.use_loaded_answers:
                 self.all_expert_answers.append(user_input)
         return conditions
-
-    def ask_for_conditions(self, x: Case,
-                           targets: Union[Attribute, List[Attribute]],
-                           last_evaluated_rule: Optional[Rule] = None) \
-            -> Dict[str, Condition]:
-        targets = targets if isinstance(targets, list) else [targets]
-        if last_evaluated_rule and not self.use_loaded_answers:
-            action = "Refinement" if last_evaluated_rule.fired else "Alternative"
-            print(f"{action} needed for rule:\n")
-
-        row_dict = row_to_dict(x)
-        print_table_row(row_dict)
-
-        if not self.use_loaded_answers:
-            if last_evaluated_rule and last_evaluated_rule.fired:
-                print("Please provide a rule for the corner case:")
-                print_table_row(row_to_dict(last_evaluated_rule.corner_case))
-
-        if self.mode == RDRMode.Relational:
-            return self._get_relational_conditions(x, targets, conditions_for="differentiating features")
-        else:
-            return self._get_conditions(list(row_dict.keys()), conditions_for="differentiating features")
-
-    def get_all_attributes(self, x: Case, last_evaluated_rule: Optional[Rule] = None) -> List[Attribute]:
-        """
-        Get all attributes for the case.
-
-        :param x: The case to get the attributes for.
-        :param last_evaluated_rule: The last evaluated rule.
-        """
-        if last_evaluated_rule and last_evaluated_rule.fired:
-            all_attributes = last_evaluated_rule.corner_case._attributes_list + x._attributes_list
-        else:
-            if not self.use_loaded_answers:
-                print("Please provide a rule for case:")
-            all_attributes = x._attributes_list
-        return all_attributes
 
     def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Attribute]) \
             -> Dict[Attribute, Dict[str, Condition]]:
@@ -200,71 +175,58 @@ class Human(Expert):
             extra_conclusions[category] = self._get_conditions(all_names, conditions_for="extra conclusions")
         return extra_conclusions
 
-    def ask_for_relational_conclusion(self, x: Union[Case, Table], for_attribute: Any) \
-            -> Optional[Callable[[Case], None]]:
+    def ask_for_relational_conclusion(self, case: Union[Case, Table], attribute_name: str, attribute_type: Type,
+                                      session: Optional[Session] = None) -> Optional[CallableExpression]:
         """
         Ask the expert to provide a relational conclusion for the case.
 
-        :param x: The case to classify.
-        :param for_attribute: The attribute to provide the conclusion for.
+        :param case: The case to classify.
+        :param attribute_name: The name of the attribute to provide the conclusion for.
+        :param attribute_type: The type of the attribute to provide the conclusion for.
+        :param session: The sqlalchemy orm session to use if the case is a Table.
+        :return: A callable expression that can be called with a new case as an argument.
         """
-        all_names = self.get_and_print_all_names_and_conclusions(x)
+        all_names = self.get_and_print_all_names_and_conclusions(case)
 
-        for_attribute_name = get_property_name(x._obj, for_attribute)
+        if not hasattr(case, attribute_name):
+            raise ValueError(f"Attribute {attribute_name} not found in the case")
 
-        if not hasattr(x, for_attribute_name):
-            raise ValueError(f"Attribute {for_attribute_name} not found in the case")
-
-        user_input = None
         if self.use_loaded_answers:
             user_input = self.all_expert_answers.pop(0)
-        prompt_str = f"Give Conclusion on {x.__class__.__name__}.{for_attribute_name}"
-        session = get_prompt_session_for_obj(x) if not user_input else None
-        user_input, tree = prompt_user_input_and_parse_to_expression(prompt_str, session, user_input)
-        if not self.use_loaded_answers:
+            expression_tree = None
+        else:
+            user_input, expression_tree = prompt_user_about_case(case, PromptFor.Conclusion, attribute_name)
             self.all_expert_answers.append(user_input)
 
-        def apply_conclusion(case: Union[Case, Table]) -> type(for_attribute):
-            if isinstance(case, Case):
-                attr_value = parse_relational_input(case, user_input, tree, type(for_attribute))
-            elif isinstance(case, Table):
-                attr_value = parse_alchemy_input(case, user_input, tree, type(for_attribute))
-            else:
-                raise ValueError(f"Unsupported case type {type(case)}")
-            return attr_value(case)
+        get_conclusion = CallableExpression(user_input, attribute_type, expression_tree, session=session)
 
-        conclusion = ObjectAttributeTarget(x._obj, for_attribute, apply_conclusion(x),
+        conclusion = ObjectAttributeTarget(case, attribute_name, get_conclusion,
                                            relational_representation=user_input)
         print(f"Evaluated expression: {conclusion}")
-        return conclusion
+        return get_conclusion
 
-    def ask_for_conclusion(self, x: Case, current_conclusions: Optional[List[Attribute]] = None,
-                           for_attribute: Optional[Any] = None) -> Optional[Attribute]:
+    def ask_for_conclusion(self, case: Case, current_conclusions: Optional[List[Attribute]] = None,
+                           attribute_name: Optional[str] = None, attribute_type: Optional[Type] = None,
+                           session: Optional[Session] = None) -> Optional[Union[CallableExpression, Attribute, Column]]:
         """
         Ask the expert to provide a conclusion for the case.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :param current_conclusions: The current conclusions for the case if any.
-        :param for_attribute: The attribute to provide the conclusion for.
+        :param attribute_name: The name of the attribute to provide the conclusion for.
+        :param attribute_type: The type of the attribute to provide the conclusion for.
+        :param session: The sqlalchemy orm session to use if the case is a Table.
+        :return: The conclusion for the case.
         """
         if self.mode == RDRMode.Relational:
-            return self.ask_for_relational_conclusion(x, for_attribute)
-        all_names = self.get_and_print_all_names_and_conclusions(x, current_conclusions)
-        while True:
-            if not self.use_loaded_answers:
-                print("Please provide the conclusion as \"name:value\" or \"name\" or press enter to end:")
-            if self.use_loaded_answers:
-                value = self.all_expert_answers.pop(0)
-            else:
-                value = input()
-                self.all_expert_answers.append(value)
-            if value:
-                try:
-                    return self.parse_conclusion(value)
-                except ValueError as e:
-                    print(e)
-            else:
-                return None
+            return self.ask_for_relational_conclusion(case, attribute_name, attribute_type, session=session)
+        show_current_and_corner_cases(case, current_conclusions=current_conclusions)
+        if self.use_loaded_answers:
+            expert_input = self.all_expert_answers.pop(0)
+        else:
+            expert_input, _ = prompt_user_about_case(case, PromptFor.Conclusion, attribute_name)
+            self.all_expert_answers.append(expert_input)
+        return CallableExpression(expert_input, attribute_type, session=session)(case)
 
     def get_and_print_all_names_and_conclusions(self, x: Case, current_conclusions: Optional[List[Attribute]] = None) \
             -> List[str]:

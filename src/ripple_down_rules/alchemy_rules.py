@@ -15,22 +15,6 @@ class Target:
     value: Any
 
 
-def prompt_for_alchemy_conditions(x: sqlalchemy.orm.DeclarativeBase, target: ObjectAttributeTarget,
-                                  user_input: Optional[str] = None) -> BinaryExpression:
-    """
-    Prompt the user for relational conditions.
-
-    :param x: The case to classify.
-    :param target: The target category to compare the case with.
-    :param user_input: The user input to parse. If None, the user is prompted for input.
-    :return: The differentiating features as new rule conditions.
-    """
-    session = get_prompt_session_for_obj(x)
-    prompt_str = f"Give Conditions for {x.__tablename__}.{target.name}"
-    user_input, tree = prompt_user_input_and_parse_to_expression(prompt_str, session, user_input=user_input)
-    result = eval(user_input)
-    return result, target
-
 class AlchemyRule(NodeMixin):
     statement: BinaryExpression
     target: Target

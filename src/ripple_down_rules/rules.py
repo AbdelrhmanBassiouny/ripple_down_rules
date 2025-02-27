@@ -3,12 +3,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from anytree import NodeMixin
-from typing_extensions import List, Optional, Self, Dict, Union
+from typing_extensions import List, Optional, Self, Dict, Union, TYPE_CHECKING, Any
 
 from .datastructures.attribute import Attribute, Stop
-from .datastructures.case import Case
 from .datastructures.dataclasses import Condition
-from .datastructures.enums import RDREdge, RDRMode
+from .datastructures.enums import RDREdge
+
+if TYPE_CHECKING:
+    from .datastructures.case import Case
 
 
 class Rule(NodeMixin, ABC):
@@ -18,7 +20,7 @@ class Rule(NodeMixin, ABC):
     """
 
     def __init__(self, conditions: Optional[Dict[str, Condition]] = None,
-                 conclusion: Optional[Attribute] = None,
+                 conclusion: Optional[Dict[str, Any]] = None,
                  parent: Optional[Rule] = None,
                  corner_case: Optional[Case] = None,
                  weight: Optional[str] = None):

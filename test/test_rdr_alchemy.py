@@ -13,7 +13,7 @@ from ripple_down_rules.datasets import load_zoo_dataset, Base, Animal, Species, 
 from ripple_down_rules.datastructures import Case, Attributes, ObjectAttributeTarget, RDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import prompt_for_relational_conditions, prompt_for_alchemy_conditions
+from ripple_down_rules.utils import prompt_for_conditions, prompt_for_alchemy_conditions
 from test_rdr import TestRDR
 
 class TestAlchemyRDR:

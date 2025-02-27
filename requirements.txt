@@ -10,3 +10,4 @@ prompt-toolkit>=3
 sqlalchemy
 pickle
 pyqt5
+tabulate

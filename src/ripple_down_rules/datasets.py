@@ -4,10 +4,10 @@ from enum import Enum
 
 import sqlalchemy
 from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column
-from typing_extensions import Tuple, List
+from typing_extensions import Tuple, List, Dict
 from ucimlrepo import fetch_ucirepo
 
-from ripple_down_rules.datastructures import Case, Attribute, Species
+from ripple_down_rules.datastructures import Case, Attribute, Species as SpeciesAttr
 
 
 def load_cached_dataset(cache_file):
@@ -53,7 +53,7 @@ def get_dataset(dataset_id, cache_file):
     return dataset
 
 
-def load_zoo_dataset(cache_file: str) -> Tuple[List[Case], List[Attribute]]:
+def load_zoo_dataset(cache_file: str) -> Tuple[List[Case], List[SpeciesAttr]]:
     """
     Load the zoo dataset.
 
@@ -72,7 +72,7 @@ def load_zoo_dataset(cache_file: str) -> Tuple[List[Case], List[Attribute]]:
 
     category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
     category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
-    targets = [Species(Species.Values.from_str(category_id_to_name[i])) for i in y.values.flatten()]
+    targets = [SpeciesAttr(SpeciesAttr.Values.from_str(category_id_to_name[i])) for i in y.values.flatten()]
     return all_cases, targets
 
 
