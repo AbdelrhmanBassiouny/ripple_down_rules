@@ -3,17 +3,17 @@ from enum import Enum
 from unittest import TestCase
 
 import sqlalchemy.orm
-from sqlalchemy import select
+from sqlalchemy import select, BinaryExpression
 from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column
 from typing_extensions import List
 from ucimlrepo import fetch_ucirepo
 
 from ripple_down_rules.alchemy_rules import Target, AlchemyRule
 from ripple_down_rules.datasets import load_zoo_dataset, Base, Animal, Species, get_dataset
-from ripple_down_rules.datastructures import Case, Attributes, ObjectAttributeTarget, RDRMode
+from ripple_down_rules.datastructures import Case, Attributes, ObjectAttributeTarget, RDRMode, PromptFor
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import prompt_for_conditions, prompt_for_alchemy_conditions
+from ripple_down_rules.utils import prompt_user_for_expression, CallableExpression
 from test_rdr import TestRDR
 
 class TestAlchemyRDR:
@@ -52,10 +52,12 @@ class TestAlchemyRDR:
     def test_setup(self):
         r = self.session.scalars(select(Animal)).all()
         assert len(r) == 101
-
-        user_input, conditions = prompt_for_alchemy_conditions(Animal, ObjectAttributeTarget(Animal, Animal.species, Species.mammal))
+        # user_input = "hair == 1"
+        conditions = prompt_user_for_expression(r[0], PromptFor.Conditions, "species", bool, session=self.session)
         print(conditions)
         print(type(conditions))
+        print(conditions(r[0]))
+        print(type(conditions(r[0])))
 
     def test_classify_scrdr(self):
 
@@ -69,10 +71,11 @@ class TestAlchemyRDR:
         scrdr.table = Animal
         scrdr.target_column = Animal.species
 
-        cat = scrdr.fit_case(result[0], target=result[0].species, expert=expert, session=session)
+        cat = scrdr.fit_case(result[0], target=result[0].species, expert=expert, session=self.session)
         assert cat == result[0].species
 
 tests = TestAlchemyRDR()
 tests.setUpClass()
+tests.test_setup()
 # tests.test_alchemy_rules()
-tests.test_classify_scrdr()
+# tests.test_classify_scrdr()

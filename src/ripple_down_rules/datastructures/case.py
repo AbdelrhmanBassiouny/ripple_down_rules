@@ -9,7 +9,6 @@ from typing_extensions import Union, List, Optional, Any, Type, Tuple, Dict
 from ripple_down_rules.datastructures.attribute import Attribute, ListOf, DictOf, Categorical, Integer, Continuous, \
     Bool, Unary
 from ripple_down_rules.datastructures.enums import CategoryValueType
-from ripple_down_rules.rules import Rule
 from ripple_down_rules.utils import make_set, get_property_name, can_be_a_set, get_attribute_values
 
 

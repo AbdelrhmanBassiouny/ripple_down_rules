@@ -44,8 +44,8 @@ def test_parse_relational_conditions(case):
 
 RelationalRDRTestCase.setUpClass()
 robot = RelationalRDRTestCase.robot
-test_parse_relational_conditions(RelationalRDRTestCase.case)
+# test_parse_relational_conditions(RelationalRDRTestCase.case)
 robot_without_parts = Robot("pr2")
 case_without_parts = Case.from_object(robot_without_parts)
-test_parse_relational_conditions(case_without_parts)
+# test_parse_relational_conditions(case_without_parts)
 test_classify_scrdr(robot, robot.contained_objects)

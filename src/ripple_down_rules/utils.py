@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
-
 class CallableExpression:
     """
     A callable that is constructed from a string statement written by an expert.
@@ -34,6 +33,26 @@ class CallableExpression:
     conclusion_type: Type
     """
     The type of the output of the callable, used for assertion.
+    """
+    expression_tree: AST
+    """
+    The AST tree parsed from the user input.
+    """
+    user_input: str
+    """
+    The input given by the expert.
+    """
+    session: Optional[Session]
+    """
+    The sqlalchemy orm session.
+    """
+    visitor: VariableVisitor
+    """
+    A visitor to extract all variables and comparisons from a python expression represented as an AST tree.
+    """
+    code: Any
+    """
+    The code that was compiled from the expression tree
     """
 
     def __init__(self, user_input: str, conclusion_type: Type, expression_tree: Optional[AST] = None,
@@ -47,29 +66,37 @@ class CallableExpression:
         :param session: The sqlalchemy orm session.
         """
         self.user_input: str = user_input
+        self.conclusion_type = conclusion_type
+        self.session = session
+        self.update_expression(user_input, expression_tree)
+
+    def update_expression(self, user_input: str, expression_tree: Optional[AST] = None):
         if not expression_tree:
             expression_tree = parse_string_to_expression(user_input)
         self.expression_tree: AST = expression_tree
-        self.conclusion_type = conclusion_type
-        self.session = session
         self.visitor = VariableVisitor()
         self.visitor.visit(expression_tree)
         self.code = compile_expression_to_code(expression_tree)
 
     def __call__(self, case: Any, **kwargs) -> conclusion_type:
         try:
+            row = None
+            if self.session:
+                row, case = case, case.__class__
             context = get_all_possible_contexts(case)
+            context.update({"case": case})
+            context.update({f"case.{k}": v for k, v in context.items()})
             assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)
             if self.session:
-                output = self.add_row_and_query_expression_result(case, output)
+                output = self.add_row_and_query_expression_result(row, output)
             assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
                                                               f" got {type(output)}")
             return output
         except Exception as e:
             raise ValueError(f"Error during evaluation: {e}")
 
-    def add_row_and_query_expression_result(self, case: Table, evaluated_expression: Any) -> Callable[Table, Any]:
+    def add_row_and_query_expression_result(self, case: Table, evaluated_expression: Any) -> Any:
         """
         Evaluate a sqlalchemy statement written by an expert, this is done by inserting the case in parent table and
         querying the data needed for the expert statement from the table using the sqlalchemy orm session.
@@ -80,7 +107,10 @@ class CallableExpression:
         table = case.__class__
         self.session.add(case)
         self.session.commit()
-        return self.session.query(table).filter(table.id == case.id, evaluated_expression).first()
+        results = self.session.query(table).filter(table.id == case.id, evaluated_expression).first()
+        if self.conclusion_type == bool:
+            results = True if results else False
+        return results
 
     def __str__(self):
         return self.user_input
@@ -229,17 +259,27 @@ def assert_context_contains_needed_information(case: Union[Case, Table], context
         if key not in context:
             raise ValueError(f"Attribute {key} not found in the case {case}")
     for key, ast_attr in visitor.attributes.items():
-        if f"{key.id}.{ast_attr.attr}" not in context:
+        str_attr = ""
+        while isinstance(key, ast.Attribute):
+            if len(str_attr) > 0:
+                str_attr = f"{key.attr}.{str_attr}"
+            else:
+                str_attr = key.attr
+            key = key.value
+        str_attr = f"{key.id}.{str_attr}" if len(str_attr) > 0 else f"{key.id}.{ast_attr.attr}"
+        if str_attr not in context:
             raise ValueError(f"Attribute {key.id}.{ast_attr.attr} not found in the case {case}")
 
 
-def get_all_possible_contexts(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 2) -> Dict[str, Any]:
+def get_all_possible_contexts(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 1,
+                              start_with_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Get all possible contexts for an object.
 
     :param obj: The object to get the contexts for.
     :param recursion_idx: The recursion index to prevent infinite recursion.
     :param max_recursion_idx: The maximum recursion index.
+    :param start_with_name: The starting context.
     :return: A dictionary of all possible contexts.
     """
     all_contexts = {}
@@ -248,9 +288,10 @@ def get_all_possible_contexts(obj: Any, recursion_idx: int = 0, max_recursion_id
     for attr in dir(obj):
         if attr.startswith("__") or attr.startswith("_") or callable(getattr(obj, attr)):
             continue
-        all_contexts[attr] = get_attribute_values(obj, attr)
-        sub_attr_contexts = get_all_possible_contexts(getattr(obj, attr), recursion_idx + 1)
-        sub_attr_contexts = {f"{attr}.{k}": v for k, v in sub_attr_contexts.items()}
+        chained_name = f"{start_with_name}.{attr}" if start_with_name else attr
+        all_contexts[chained_name] = get_attribute_values(obj, attr)
+        sub_attr_contexts = get_all_possible_contexts(getattr(obj, attr), recursion_idx + 1, start_with_name=chained_name)
+        # sub_attr_contexts = {f"{chained_name}.{k}": v for k, v in sub_attr_contexts.items()}
         all_contexts.update(sub_attr_contexts)
     return all_contexts
 
