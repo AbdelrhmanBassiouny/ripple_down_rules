@@ -4,6 +4,7 @@ from unittest import TestCase
 from typing_extensions import List, Optional, Set, Any
 
 from ripple_down_rules.datastructures import Case, ObjectAttributeTarget
+from ripple_down_rules.utils import get_property_name
 
 
 class PhysicalObject:
@@ -58,4 +59,5 @@ class RelationalRDRTestCase(TestCase):
         part_d.contained_objects = {part_e}
         cls.robot: Robot = robot
         cls.case = Case.from_object(robot)
-        cls.target = ObjectAttributeTarget(robot, robot.contained_objects, {part_b, part_c, part_d, part_e})
+        attr_name = get_property_name(robot, robot.contained_objects)
+        cls.target = ObjectAttributeTarget(robot, attr_name, {part_b, part_c, part_d, part_e})

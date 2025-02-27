@@ -8,6 +8,5 @@ typing-extensions>=4.12.2
 matplotlib>=3.7.5
 prompt-toolkit>=3
 sqlalchemy
-pickle
 pyqt5
 tabulate

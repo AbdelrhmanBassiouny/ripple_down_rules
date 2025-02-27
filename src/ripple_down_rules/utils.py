@@ -174,7 +174,7 @@ def prompt_user_for_expression(case: Union[Case, Table], prompt_for: PromptFor, 
 
 
 def prompt_user_about_case(case: Union[Case, Table], prompt_for: PromptFor, target_name: str) \
-        -> Tuple[str, str]:
+        -> Tuple[str, AST]:
     """
     Prompt the user for input.
 
@@ -347,7 +347,7 @@ def get_property_name(obj: Any, prop: Any) -> str:
     :param prop: The property to get the name of.
     """
     for name in dir(obj):
-        if name.startswith("_"):
+        if name.startswith("_") or callable(getattr(obj, name)):
             continue
         prop_value = getattr(obj, name)
         if prop_value is prop or (hasattr(prop_value, "_value") and prop_value._value is prop):

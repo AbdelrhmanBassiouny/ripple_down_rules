@@ -124,6 +124,17 @@ class Case:
             attributes = cls.get_attributes_from_object(obj)
         return cls(obj.__class__.__name__, attributes, conclusions, targets, obj=obj)
 
+    def get_property_name(self, property_value: Any) -> str:
+        """
+        Get the property of the object given its value.
+
+        :param property_value: The value of the property.
+        :return: The property.
+        """
+        name = get_property_name(self._obj, property_value)
+        assert name in self._attributes, f"Attribute {name} not found in case."
+        return name
+
     def get_property_from_value(self, property_value: Any) -> Type:
         """
         Get the property of the object given its value.
@@ -132,6 +143,12 @@ class Case:
         :return: The property.
         """
         return self.get_property_from_name(get_property_name(self._obj, property_value))
+
+    def __getattr__(self, name):
+        """Custom getattr logic."""
+        if name.startswith("_") and not name.startswith("__"):
+            return object.__getattribute__(self, name)  # Get from self
+        return getattr(self._obj, name)  # Get from wrapped object
 
     def get_property_from_name(self, property_name: str) -> Type:
         """

@@ -2,12 +2,13 @@ import os
 from typing import Optional
 
 from typing_extensions import Any
+from sqlalchemy.orm import DeclarativeBase as Table
 
-from relational_rdr_test_case import RelationalRDRTestCase
-from ripple_down_rules.datastructures import RDRMode, ObjectAttributeTarget, Case
+from relational_rdr_test_case import RelationalRDRTestCase, Robot
+from ripple_down_rules.datastructures import RDRMode, Case
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import render_tree, prompt_for_conditions
+from ripple_down_rules.utils import render_tree, CallableExpression
 
 
 def test_classify_scrdr(obj: Any, target_property: Any,
@@ -20,7 +21,7 @@ def test_classify_scrdr(obj: Any, target_property: Any,
         expert.load_answers(filename)
 
     scrdr = SingleClassRDR(mode=RDRMode.Relational)
-    case = Case.from_object(obj)
+    case = Case.from_object(obj) if not isinstance(obj, (Case, Table)) else obj
     cat = scrdr.fit_case(case, for_attribute=target_property, expert=expert,
                          mode=RDRMode.Relational)
     render_tree(scrdr.start_rule, use_dot_exporter=True, filename="./test_results/relational_scrdr_classify")
@@ -33,14 +34,18 @@ def test_classify_scrdr(obj: Any, target_property: Any,
         expert.save_answers(file)
 
 
-def test_parse_relational_conditions(case, target):
+def test_parse_relational_conditions(case):
     user_input = "parts is not None and len(parts) > 0"
-    target = RelationalRDRTestCase.target
-    prompt_for_conditions(case, target, user_input)
+    conditions = CallableExpression(user_input, bool)
+    print(conditions)
+    print(conditions(case))
+    assert conditions(case) == (case.parts is not None and len(case.parts) > 0)
 
 
 RelationalRDRTestCase.setUpClass()
 robot = RelationalRDRTestCase.robot
-
-# test_parse_relational_conditions(RelationalRDRTestCase.case, RelationalRDRTestCase.target)
+test_parse_relational_conditions(RelationalRDRTestCase.case)
+robot_without_parts = Robot("pr2")
+case_without_parts = Case.from_object(robot_without_parts)
+test_parse_relational_conditions(case_without_parts)
 test_classify_scrdr(robot, robot.contained_objects)

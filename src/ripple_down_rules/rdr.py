@@ -160,7 +160,9 @@ class SingleClassRDR(RippleDownRules):
         """
         expert = expert if expert else Human(mode=self.mode)
         if not target:
-            attribute_name = get_property_name(case, for_attribute)
+            if isinstance(case, Case):
+                for_attribute = case[case.get_property_name(for_attribute)]
+            attribute_name = for_attribute.__class__.__name__
             target = expert.ask_for_conclusion(case, attribute_name=attribute_name, attribute_type=type(for_attribute),
                                                session=session)
         if not self.start_rule:
