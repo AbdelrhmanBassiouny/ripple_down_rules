@@ -1,20 +1,13 @@
-import os
-from enum import Enum
-from unittest import TestCase
-
 import sqlalchemy.orm
-from sqlalchemy import select, BinaryExpression
-from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column
-from typing_extensions import List
-from ucimlrepo import fetch_ucirepo
+from sqlalchemy import select
 
-from ripple_down_rules.alchemy_rules import Target, AlchemyRule
-from ripple_down_rules.datasets import load_zoo_dataset, Base, Animal, Species, get_dataset
-from ripple_down_rules.datastructures import Case, Attributes, ObjectAttributeTarget, RDRMode, PromptFor
+from ripple_down_rules.datasets import Base, Animal, Species, get_dataset
+from ripple_down_rules.datastructures import RDRMode, PromptFor
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import prompt_user_for_expression, CallableExpression, render_tree
+from ripple_down_rules.utils import prompt_user_for_expression
 from test_rdr import TestRDR
+
 
 class TestAlchemyRDR:
     session: sqlalchemy.orm.Session
@@ -39,16 +32,6 @@ class TestAlchemyRDR:
         session.commit()
         cls.session = session
 
-    def test_alchemy_rules(self):
-        rule1 = AlchemyRule(Animal.hair == True,
-                            Target(Animal.species, Species.mammal))
-        rule2 = AlchemyRule(Animal.feathers == True,
-                            Target(Animal.species, Species.bird), parent=rule1)
-        print(rule2.statement_of_path())
-        query = rule1.statement.where(rule1.target.column != rule1.target.value)
-        result = self.session.execute(query).first()
-        print(result)
-
     def test_setup(self):
         r = self.session.scalars(select(Animal)).all()
         assert len(r) == 101
@@ -60,7 +43,6 @@ class TestAlchemyRDR:
         print(type(conditions(r[0])))
 
     def test_classify_scrdr(self):
-
         expert = Human(use_loaded_answers=False, mode=RDRMode.Relational)
 
         query = select(Animal)
@@ -86,12 +68,12 @@ class TestAlchemyRDR:
         scrdr = SingleClassRDR(mode=RDRMode.Relational)
         scrdr.table = Animal
         scrdr.target_column = Animal.species
-        scrdr.fit(result, [r.species for r in result], expert=expert,
-                  animate_tree=True, mode=RDRMode.Relational, session=self.session)
+        targets = [r.species for r in result]
+        scrdr.fit(result, targets, expert=expert,
+                  animate_tree=draw_tree, mode=RDRMode.Relational, session=self.session)
 
-        cat = scrdr.classify(self.all_cases[50])
-        self.assertEqual(cat, self.targets[50])
-
+        cat = scrdr.classify(result[50])
+        assert cat, targets[50]
 
 
 tests = TestAlchemyRDR()

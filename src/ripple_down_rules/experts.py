@@ -127,7 +127,8 @@ class Human(Expert):
                            last_evaluated_rule: Optional[Rule] = None,
                            session: Optional[Session] = None) \
             -> Dict[str, Condition]:
-        show_current_and_corner_cases(case, targets, last_evaluated_rule=last_evaluated_rule)
+        if not self.use_loaded_answers:
+            show_current_and_corner_cases(case, targets, last_evaluated_rule=last_evaluated_rule)
         return self._get_relational_conditions(case, targets, session=session)
 
     def _get_relational_conditions(self, case: Case, targets: Union[List[Attribute], List[Column]],
@@ -220,10 +221,10 @@ class Human(Expert):
         """
         if self.mode == RDRMode.Relational:
             return self.ask_for_relational_conclusion(case, attribute_name, attribute_type, session=session)
-        show_current_and_corner_cases(case, current_conclusions=current_conclusions)
         if self.use_loaded_answers:
             expert_input = self.all_expert_answers.pop(0)
         else:
+            show_current_and_corner_cases(case, current_conclusions=current_conclusions)
             expert_input, _ = prompt_user_about_case(case, PromptFor.Conclusion, attribute_name)
             self.all_expert_answers.append(expert_input)
         return CallableExpression(expert_input, attribute_type, session=session)(case)

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
+
 class CallableExpression:
     """
     A callable that is constructed from a string statement written by an expert.
@@ -54,6 +55,10 @@ class CallableExpression:
     """
     The code that was compiled from the expression tree
     """
+    compares_column_offset: List[int]
+    """
+    The start and end indices of each comparison in the string of user input.
+    """
 
     def __init__(self, user_input: str, conclusion_type: Type, expression_tree: Optional[AST] = None,
                  session: Optional[Session] = None):
@@ -65,14 +70,22 @@ class CallableExpression:
         :param expression_tree: The AST tree parsed from the user input.
         :param session: The sqlalchemy orm session.
         """
+        self.session = session
+        self.user_input: str = user_input
+        self.parsed_user_input = self.parse_user_input(user_input, session)
+        self.conclusion_type = conclusion_type
+        self.update_expression(self.parsed_user_input, expression_tree)
+
+    @staticmethod
+    def parse_user_input(user_input: str, session: Optional[Session] = None) -> str:
         if ',' in user_input:
             user_input = user_input.split(',')
-            user_input = [u.strip() for u in user_input]
-            user_input = ' and '.join(user_input)
-        self.user_input: str = user_input
-        self.conclusion_type = conclusion_type
-        self.session = session
-        self.update_expression(user_input, expression_tree)
+            user_input = [f"({u.strip()})" for u in user_input]
+            user_input = ' & '.join(user_input) if session else ' and '.join(user_input)
+        elif session:
+            user_input = user_input.replace(" and ", " & ")
+            user_input = user_input.replace(" or ", " | ")
+        return user_input
 
     def update_expression(self, user_input: str, expression_tree: Optional[AST] = None):
         if not expression_tree:
@@ -80,6 +93,7 @@ class CallableExpression:
         self.expression_tree: AST = expression_tree
         self.visitor = VariableVisitor()
         self.visitor.visit(expression_tree)
+        self.compares_column_offset = [(c[0].col_offset, c[2].end_col_offset) for c in self.visitor.compares]
         self.code = compile_expression_to_code(expression_tree)
 
     def __call__(self, case: Any, **kwargs) -> conclusion_type:
@@ -117,7 +131,21 @@ class CallableExpression:
         return results
 
     def __str__(self):
-        return self.user_input
+        """
+        Return the user string where each compare is written in a line using compare column offset start and end.
+        """
+        user_input = self.parsed_user_input
+        binary_ops = sorted(self.visitor.binary_ops, key=lambda x: x.end_col_offset)
+        binary_ops_indices = [b.end_col_offset for b in binary_ops]
+        all_binary_ops = []
+        prev_e = 0
+        for i, e in enumerate(binary_ops_indices):
+            if i == 0:
+                all_binary_ops.append(user_input[:e])
+            else:
+                all_binary_ops.append(user_input[prev_e:e])
+            prev_e = e
+        return "\n".join(all_binary_ops) if len(all_binary_ops) > 0 else user_input
 
 
 def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attribute], List[Column]]] = None,
@@ -358,6 +386,7 @@ class VariableVisitor(ast.NodeVisitor):
         self.variables = set()
         self.attributes: Dict[ast.Name, ast.Attribute] = {}
         self.compares = list()
+        self.binary_ops = list()
         self.all = list()
 
     def visit_Attribute(self, node):
@@ -366,6 +395,7 @@ class VariableVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_BinOp(self, node):
+        self.binary_ops.append(node)
         self.all.append(node)
         self.generic_visit(node)
 
