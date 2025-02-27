@@ -65,6 +65,10 @@ class CallableExpression:
         :param expression_tree: The AST tree parsed from the user input.
         :param session: The sqlalchemy orm session.
         """
+        if ',' in user_input:
+            user_input = user_input.split(',')
+            user_input = [u.strip() for u in user_input]
+            user_input = ' and '.join(user_input)
         self.user_input: str = user_input
         self.conclusion_type = conclusion_type
         self.session = session

@@ -172,7 +172,7 @@ class SingleClassRDR(RippleDownRules):
         pred = self.evaluate(case)
 
         if pred.conclusion != target:
-            conditions = expert.ask_for_conditions(case, [target], pred)
+            conditions = expert.ask_for_conditions(case, [target], pred, session=session)
             pred.fit_rule(case, target, conditions=conditions)
 
         return self.classify(case)

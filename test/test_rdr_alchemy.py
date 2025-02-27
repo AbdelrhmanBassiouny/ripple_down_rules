@@ -13,7 +13,7 @@ from ripple_down_rules.datasets import load_zoo_dataset, Base, Animal, Species, 
 from ripple_down_rules.datastructures import Case, Attributes, ObjectAttributeTarget, RDRMode, PromptFor
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import prompt_user_for_expression, CallableExpression
+from ripple_down_rules.utils import prompt_user_for_expression, CallableExpression, render_tree
 from test_rdr import TestRDR
 
 class TestAlchemyRDR:
@@ -65,8 +65,6 @@ class TestAlchemyRDR:
 
         query = select(Animal)
         result = self.session.scalars(query).all()
-
-
         scrdr = SingleClassRDR(mode=RDRMode.Relational)
         scrdr.table = Animal
         scrdr.target_column = Animal.species
@@ -74,8 +72,31 @@ class TestAlchemyRDR:
         cat = scrdr.fit_case(result[0], target=result[0].species, expert=expert, session=self.session)
         assert cat == result[0].species
 
+    def test_fit_scrdr(self):
+        use_loaded_answers = True
+        save_answers = False
+        draw_tree = False
+        filename = "./test_expert_answers" + "/scrdr_expert_answers_fit"
+        expert = Human(use_loaded_answers=use_loaded_answers, mode=RDRMode.Relational)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+
+        query = select(Animal)
+        result = self.session.scalars(query).all()
+        scrdr = SingleClassRDR(mode=RDRMode.Relational)
+        scrdr.table = Animal
+        scrdr.target_column = Animal.species
+        scrdr.fit(result, [r.species for r in result], expert=expert,
+                  animate_tree=True, mode=RDRMode.Relational, session=self.session)
+
+        cat = scrdr.classify(self.all_cases[50])
+        self.assertEqual(cat, self.targets[50])
+
+
+
 tests = TestAlchemyRDR()
 tests.setUpClass()
-tests.test_setup()
+# tests.test_setup()
 # tests.test_alchemy_rules()
 # tests.test_classify_scrdr()
+tests.test_fit_scrdr()

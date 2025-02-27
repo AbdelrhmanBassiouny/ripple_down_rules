@@ -127,7 +127,7 @@ class Human(Expert):
                            last_evaluated_rule: Optional[Rule] = None,
                            session: Optional[Session] = None) \
             -> Dict[str, Condition]:
-        show_current_and_corner_cases(case, targets, last_evaluated_rule)
+        show_current_and_corner_cases(case, targets, last_evaluated_rule=last_evaluated_rule)
         return self._get_relational_conditions(case, targets, session=session)
 
     def _get_relational_conditions(self, case: Case, targets: Union[List[Attribute], List[Column]],
