@@ -86,12 +86,6 @@ class Rule(NodeMixin, ABC):
         """
         return self.__str__()
 
-    def __eq__(self, other):
-        return self.name == other.name
-
-    def __hash__(self):
-        return hash(self.name)
-
     def __str__(self, sep="\n"):
         """
         Get the string representation of the rule, which is the conditions and the conclusion.
