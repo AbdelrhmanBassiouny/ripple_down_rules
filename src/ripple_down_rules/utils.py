@@ -31,6 +31,8 @@ def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attri
     :param last_evaluated_rule: The last evaluated rule in the RDR.
     """
     corner_case = None
+    targets = targets if isinstance(targets, list) else []
+    current_conclusions = current_conclusions if isinstance(current_conclusions, list) else []
     targets = {f"target_{t.__class__.__name__}": t for t in targets} if targets else {}
     current_conclusions = {c.__class__.__name__: c for c in current_conclusions} if current_conclusions else {}
     if last_evaluated_rule:

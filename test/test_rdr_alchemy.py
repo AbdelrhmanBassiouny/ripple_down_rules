@@ -5,7 +5,7 @@ from ripple_down_rules.datasets import Base, Animal, Species, get_dataset
 from ripple_down_rules.datastructures import RDRMode, PromptFor
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import prompt_user_for_expression
+from ripple_down_rules.prompt import prompt_user_for_expression
 from test_rdr import TestRDR
 
 
@@ -57,7 +57,7 @@ class TestAlchemyRDR:
     def test_fit_scrdr(self):
         use_loaded_answers = True
         save_answers = False
-        draw_tree = False
+        draw_tree = True
         filename = "./test_expert_answers" + "/scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers, mode=RDRMode.Relational)
         if use_loaded_answers:

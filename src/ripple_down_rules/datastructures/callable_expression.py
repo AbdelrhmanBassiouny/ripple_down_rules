@@ -120,41 +120,19 @@ class CallableExpression:
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            row = None
-            if self.session:
-                row, case = case, case.__class__
-            context = get_all_possible_contexts(case, max_recursion_idx=3)
+            context = get_all_possible_contexts(case, max_recursion_idx=2)
             if isinstance(case, Case):
                 context = {k: v._value for k, v in context.items()}
-
             context.update({f"case.{k}": v for k, v in context.items()})
             context.update({"case": case})
             assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)
-            if self.session:
-                output = self.add_row_and_query_expression_result(row, output)
             if self.conclusion_type:
                 assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
                                                                   f" got {type(output)}")
             return output
         except Exception as e:
             raise ValueError(f"Error during evaluation: {e}")
-
-    def add_row_and_query_expression_result(self, case: Table, evaluated_expression: Any) -> Any:
-        """
-        Evaluate a sqlalchemy statement written by an expert, this is done by inserting the case in parent table and
-        querying the data needed for the expert statement from the table using the sqlalchemy orm session.
-
-        :param case: The case about which is input is given.
-        :param evaluated_expression: The statement given by the expert.
-        """
-        table = case.__class__
-        self.session.add(case)
-        self.session.commit()
-        results = self.session.query(table).filter(table.id == case.id, evaluated_expression).first()
-        if self.conclusion_type == bool:
-            results = True if results else False
-        return results
 
     def __str__(self):
         """
