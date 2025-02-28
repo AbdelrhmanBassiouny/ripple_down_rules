@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from anytree import NodeMixin
 from typing_extensions import List, Optional, Self, Dict, Union, TYPE_CHECKING, Any
 
+from .datastructures import CallableExpression
 from .datastructures.attribute import Attribute, Stop
 from .datastructures.dataclasses import Condition
 from .datastructures.enums import RDREdge
@@ -19,7 +20,7 @@ class Rule(NodeMixin, ABC):
     Whether the rule has fired or not.
     """
 
-    def __init__(self, conditions: Optional[Dict[str, Condition]] = None,
+    def __init__(self, conditions: Optional[CallableExpression] = None,
                  conclusion: Optional[Dict[str, Any]] = None,
                  parent: Optional[Rule] = None,
                  corner_case: Optional[Case] = None,
@@ -38,7 +39,7 @@ class Rule(NodeMixin, ABC):
         self.corner_case = corner_case
         self.parent = parent
         self.weight: Optional[str] = weight
-        self.conditions = conditions if conditions else {}
+        self.conditions = conditions if conditions else None
 
     def _post_detach(self, parent):
         """
@@ -51,9 +52,6 @@ class Rule(NodeMixin, ABC):
     def __call__(self, x: Case) -> Self:
         return self.evaluate(x)
 
-    def __getitem__(self, attribute_name):
-        return self.conditions.get(attribute_name, None)
-
     def evaluate(self, x: Case) -> Rule:
         """
         Check if the rule or its refinement or its alternative match the case,
@@ -64,11 +62,7 @@ class Rule(NodeMixin, ABC):
         """
         if not self.conditions:
             raise ValueError("Rule has no conditions")
-        self.fired = True
-        for att_name, condition in self.conditions.items():
-            if not condition(x):
-                self.fired = False
-                break
+        self.fired = self.conditions(x)
         return self.evaluate_next_rule(x)
 
     @abstractmethod
@@ -92,14 +86,17 @@ class Rule(NodeMixin, ABC):
         """
         return self.__str__()
 
+    def __eq__(self, other):
+        return self.name == other.name
+
+    def __hash__(self):
+        return hash(self.name)
+
     def __str__(self, sep="\n"):
         """
         Get the string representation of the rule, which is the conditions and the conclusion.
         """
-        conditions = f"^{sep}".join([str(c) for c in list(self.conditions.values())])
-        if self.conclusion:
-            conditions += f"{sep}=> {self.conclusion}"
-        return conditions
+        return f"{self.conditions}{sep}=> {self.conclusion}"
 
     def __repr__(self):
         return self.__str__()
@@ -116,6 +113,10 @@ class HasAlternativeRule:
     furthest_alternative: Optional[List[Rule]] = None
     """
     The furthest alternative rule of the rule, which is the last alternative rule in the chain of alternative rules.
+    """
+    all_alternatives: Optional[List[Rule]] = None
+    """
+    All alternative rules of the rule, which is all the alternative rules in the chain of alternative rules.
     """
 
     @property

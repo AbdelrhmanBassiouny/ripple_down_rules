@@ -112,6 +112,9 @@ class Attribute(ABC):
         """
         self._value = value
 
+    def as_dict(self):
+        return {self._name: self._value}
+
     @property
     def _value(self):
         return self._value_

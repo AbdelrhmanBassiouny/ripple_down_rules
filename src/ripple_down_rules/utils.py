@@ -31,13 +31,15 @@ def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attri
     :param last_evaluated_rule: The last evaluated rule in the RDR.
     """
     corner_case = None
-    targets = targets if isinstance(targets, list) else []
-    current_conclusions = current_conclusions if isinstance(current_conclusions, list) else []
+    if targets:
+        targets = targets if isinstance(targets, list) else [targets]
+    if current_conclusions:
+        current_conclusions = current_conclusions if isinstance(current_conclusions, list) else [current_conclusions]
     targets = {f"target_{t.__class__.__name__}": t for t in targets} if targets else {}
     current_conclusions = {c.__class__.__name__: c for c in current_conclusions} if current_conclusions else {}
     if last_evaluated_rule:
         action = "Refinement" if last_evaluated_rule.fired else "Alternative"
-        print(f"{action} needed for rule:\n")
+        print(f"{action} needed for rule: {last_evaluated_rule}\n")
         corner_case = last_evaluated_rule.corner_case
 
     corner_row_dict = None
@@ -57,10 +59,10 @@ def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attri
             corner_row_dict = dict(zip(names, corner_values))
 
     if corner_row_dict:
-        corner_row_dict.update(targets)
-        corner_row_dict.update(current_conclusions)
+        corner_conclusion = last_evaluated_rule.conclusion
+        corner_row_dict.update({corner_conclusion.__class__.__name__: corner_conclusion})
         print_table_row(corner_row_dict)
-
+    print("=" * 50)
     case_dict.update(targets)
     case_dict.update(current_conclusions)
     print_table_row(case_dict)
@@ -79,7 +81,7 @@ def print_table_row(row_dict: Dict[str, Any], columns_per_row: int = 9):
     keys = [list(map(lambda i: i[0], row)) for row in all_items]
     values = [list(map(lambda i: i[1], row)) for row in all_items]
     for row_keys, row_values in zip(keys, values):
-        table = tabulate([row_values], headers=row_keys, tablefmt='grid')
+        table = tabulate([row_values], headers=row_keys, tablefmt='plain')
         print(table)
 
 

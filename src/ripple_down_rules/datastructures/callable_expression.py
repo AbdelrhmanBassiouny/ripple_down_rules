@@ -134,6 +134,13 @@ class CallableExpression:
         except Exception as e:
             raise ValueError(f"Error during evaluation: {e}")
 
+    def combine_with(self, other: 'CallableExpression') -> 'CallableExpression':
+        """
+        Combine this callable expression with another callable expression using the 'and' operator.
+        """
+        new_user_input = f"({self.parsed_user_input}) and ({other.parsed_user_input})"
+        return CallableExpression(new_user_input, conclusion_type=self.conclusion_type, session=self.session)
+
     def __str__(self):
         """
         Return the user string where each compare is written in a line using compare column offset start and end.

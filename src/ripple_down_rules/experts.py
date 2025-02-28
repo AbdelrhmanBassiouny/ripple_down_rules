@@ -44,7 +44,7 @@ class Expert(ABC):
 
     @abstractmethod
     def ask_for_conditions(self, x: Case, targets: List[Attribute], last_evaluated_rule: Optional[Rule] = None) \
-            -> Dict[str, Condition]:
+            -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
         that doesn't have a corner case to compare to.
@@ -128,13 +128,13 @@ class Human(Expert):
                            targets: Union[List[Attribute], List[Column]],
                            last_evaluated_rule: Optional[Rule] = None,
                            session: Optional[Session] = None) \
-            -> Dict[str, Condition]:
+            -> CallableExpression:
         if not self.use_loaded_answers:
             show_current_and_corner_cases(case, targets, last_evaluated_rule=last_evaluated_rule)
         return self._get_relational_conditions(case, targets, session=session)
 
     def _get_relational_conditions(self, case: Case, targets: Union[List[Attribute], List[Column]],
-                                   session: Optional[Session] = None) -> Dict[str, Condition]:
+                                   session: Optional[Session] = None) -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
         that doesn't have a corner case to compare to.
@@ -144,8 +144,8 @@ class Human(Expert):
         :param session: The sqlalchemy orm session to use if the case is a Table.
         :return: The differentiating features as new rule conditions.
         """
-        conditions = {}
         targets = targets if isinstance(targets, list) else [targets]
+        condition = None
         for target in targets:
             if isinstance(target, Attribute):
                 target_name = target._name
@@ -158,10 +158,9 @@ class Human(Expert):
                 condition = CallableExpression(user_input, bool, session=session)
             else:
                 user_input, condition = prompt_user_for_expression(case, PromptFor.Conditions, target_name, bool)
-            conditions[target_name] = condition
             if not self.use_loaded_answers:
                 self.all_expert_answers.append(user_input)
-        return conditions
+        return condition
 
     def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Attribute]) \
             -> Dict[Attribute, Dict[str, Condition]]:

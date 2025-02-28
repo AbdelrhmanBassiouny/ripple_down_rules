@@ -9,7 +9,7 @@ from sqlalchemy import Column
 from sqlalchemy.orm import DeclarativeBase, Session, MappedColumn as Column
 from typing_extensions import List, Optional, Dict, Type, Union, Any
 
-from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode
+from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, CallableExpression
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree, get_property_name
@@ -206,7 +206,7 @@ class MultiClassRDR(RippleDownRules):
     """
     The conclusions that the case belongs to.
     """
-    stop_rule_conditions: Optional[Dict[str, Condition]] = None
+    stop_rule_conditions: Optional[CallableExpression] = None
     """
     The conditions of the stopping rule if needed.
     """
@@ -332,7 +332,7 @@ class MultiClassRDR(RippleDownRules):
         if self.mode == MCRDRMode.StopPlusRule:
             self.stop_rule_conditions = conditions
         if self.mode == MCRDRMode.StopPlusRuleCombined:
-            new_top_rule_conditions = {**evaluated_rule.conditions, **conditions}
+            new_top_rule_conditions = conditions.combine_with(evaluated_rule.conditions)
             self.add_top_rule(new_top_rule_conditions, target, x)
 
     @staticmethod

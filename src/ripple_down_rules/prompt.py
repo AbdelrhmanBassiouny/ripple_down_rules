@@ -74,8 +74,11 @@ def prompt_user_input_and_parse_to_expression(prompt: Optional[str] = None, sess
             break
         try:
             return user_input, parse_string_to_expression(user_input)
-        except SyntaxError as e:
-            print(f"Syntax error: {e}")
+        except Exception as e:
+            msg = f"Error parsing expression: {e}"
+            logging.error(msg)
+            print(msg)
+            user_input = None
 
 
 def get_prompt_session_for_obj(obj: Any) -> PromptSession:

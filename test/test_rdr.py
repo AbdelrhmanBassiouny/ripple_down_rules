@@ -115,7 +115,7 @@ class TestRDR(TestCase):
 
     def test_fit_mcrdr_stop_plus_rule(self):
         use_loaded_answers = True
-        draw_tree = False
+        draw_tree = True
         save_answers = False
         filename = self.expert_answers_dir + "/mcrdr_stop_plus_rule_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
@@ -135,9 +135,9 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def test_fit_mcrdr_stop_plus_rule_combined(self):
-        use_loaded_answers = False
-        save_answers = True
-        draw_tree = True
+        use_loaded_answers = True
+        save_answers = False
+        draw_tree = False
         filename = self.expert_answers_dir + "/mcrdr_stop_plus_rule_combined_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
