@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from copy import copy
+from copy import copy, deepcopy
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy import Column
-from sqlalchemy.orm import DeclarativeBase, Session, MappedColumn as Column
+from sqlalchemy.orm import DeclarativeBase as Table, Session, MappedColumn as Column
 from typing_extensions import List, Optional, Dict, Type, Union, Any
 
 from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, CallableExpression
@@ -28,15 +28,14 @@ class RippleDownRules(ABC):
     The conclusions that the expert has accepted, such that they are not asked again.
     """
 
-    def __init__(self, start_rule: Optional[Rule] = None,
-                 mode: RDRMode = RDRMode.Propositional):
+    def __init__(self, start_rule: Optional[Rule] = None, session: Optional[Session] = None):
         """
         :param start_rule: The starting rule for the classifier.
-        :param mode: The mode of the classifier, either Propositional or Relational.
+        :param session: The sqlalchemy orm session.
         """
         self.start_rule = start_rule
+        self.session = session
         self.fig: Optional[plt.Figure] = None
-        self.mode: RDRMode = mode
 
     def __call__(self, x: Case) -> Attribute:
         return self.classify(x)
@@ -140,12 +139,11 @@ class RippleDownRules(ABC):
 
 
 class SingleClassRDR(RippleDownRules):
-    table: Type[DeclarativeBase]
+    table: Type[Table]
     target_column: Column
 
     def fit_case(self, case: Union[table, Case], target: Optional[Union[Attribute, Column]] = None,
                  expert: Optional[Expert] = None, for_attribute: Optional[Any] = None,
-                 session: Optional[Session] = None,
                  **kwargs) -> Attribute:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
@@ -155,24 +153,22 @@ class SingleClassRDR(RippleDownRules):
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param for_attribute: The property of the case to find a value for.
-        :param session: The SQLAlchemy session to use for the database.
         :return: The category that the case belongs to.
         """
-        expert = expert if expert else Human(mode=self.mode)
+        expert = expert if expert else Human(session=self.session)
         if not target:
             if isinstance(case, Case):
                 for_attribute = case[case.get_property_name(for_attribute)]
             attribute_name = for_attribute.__class__.__name__
-            target = expert.ask_for_conclusion(case, attribute_name=attribute_name, attribute_type=type(for_attribute),
-                                               session=session)
+            target = expert.ask_for_conclusion(case, attribute_name=attribute_name, attribute_type=type(for_attribute))
         if not self.start_rule:
-            conditions = expert.ask_for_conditions(case, [target], session=session)
+            conditions = expert.ask_for_conditions(case, [target])
             self.start_rule = SingleClassRule(conditions, target, corner_case=case)
 
         pred = self.evaluate(case)
 
         if pred.conclusion != target:
-            conditions = expert.ask_for_conditions(case, [target], pred, session=session)
+            conditions = expert.ask_for_conditions(case, [target], pred)
             pred.fit_rule(case, target, conditions=conditions)
 
         return self.classify(case)
@@ -212,15 +208,16 @@ class MultiClassRDR(RippleDownRules):
     """
 
     def __init__(self, start_rules: Optional[List[Rule]] = None,
-                 mode: MCRDRMode = MCRDRMode.StopOnly):
+                 mode: MCRDRMode = MCRDRMode.StopOnly, session: Optional[Session] = None):
         """
         :param start_rules: The starting rules for the classifier, these are the rules that are at the top of the tree
         and are always checked, in contrast to the refinement and alternative rules which are only checked if the
         starting rules fire or not.
         :param mode: The mode of the classifier, either StopOnly or StopPlusRule, or StopPlusRuleCombined.
+        :param session: The sqlalchemy orm session.
         """
         self.start_rules = [MultiClassTopRule()] if not start_rules else start_rules
-        super(MultiClassRDR, self).__init__(self.start_rules[0])
+        super(MultiClassRDR, self).__init__(self.start_rules[0], session=session)
         self.mode: MCRDRMode = mode
 
     def classify(self, x: Case) -> List[Attribute]:
@@ -245,7 +242,7 @@ class MultiClassRDR(RippleDownRules):
         :param add_extra_conclusions: Whether to add extra conclusions after classification is done.
         :return: The conclusions that the case belongs to.
         """
-        expert = expert if expert else Human()
+        expert = expert if expert else Human(session=self.session)
         targets = targets if isinstance(targets, list) else [targets]
         self.expert_accepted_conclusions = []
         user_conclusions = []
@@ -260,7 +257,7 @@ class MultiClassRDR(RippleDownRules):
 
                 if evaluated_rule.fired:
                     if target and evaluated_rule.conclusion not in good_conclusions:
-                        if evaluated_rule.conclusion not in x:
+                        if self.case_has_conclusion(x, evaluated_rule.conclusion):
                             # Rule fired and conclusion is different from target
                             self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule,
                                                                    add_extra_conclusions)
@@ -282,6 +279,19 @@ class MultiClassRDR(RippleDownRules):
                 evaluated_rule = next_rule
         return list(OrderedSet(self.conclusions))
 
+    @staticmethod
+    def case_has_conclusion(x: Union[Case, Table], conclusion: Union[Attribute, Column]) -> bool:
+        """
+        Check if the case has a conclusion.
+
+        :param x: The case to check.
+        :param conclusion: The target category to compare the case with.
+        :return: Whether the case has a conclusion or not.
+        """
+        if isinstance(x, Table):
+            return get_property_name(x, conclusion) is not None
+        return conclusion in x
+
     def update_start_rule(self, x: Case, target: Attribute, expert: Expert):
         """
         Update the starting rule of the classifier.
@@ -294,7 +304,7 @@ class MultiClassRDR(RippleDownRules):
             conditions = expert.ask_for_conditions(x, target)
             self.start_rule.conditions = conditions
             self.start_rule.conclusion = target
-            self.start_rule.corner_case = Case(x._id, x._attributes_list)
+            self.start_rule.corner_case = x
 
     @property
     def last_top_rule(self) -> Optional[MultiClassTopRule]:
@@ -344,10 +354,10 @@ class MultiClassRDR(RippleDownRules):
         :param target: The target category to compare the conclusion with.
         :return: Whether the conclusion is conflicting with the target category.
         """
-        if conclusion._mutually_exclusive:
+        if conclusion.mutually_exclusive:
             return True
         else:
-            return not conclusion._value.issubset(target._value)
+            return not conclusion.value.issubset(target.value)
 
     @staticmethod
     def is_same_category_type(conclusion: Attribute, target: Attribute) -> bool:
@@ -426,7 +436,7 @@ class MultiClassRDR(RippleDownRules):
                 else {evaluated_rule.conclusion._value}
             category_type = type(evaluated_rule.conclusion)
             for c in same_type_conclusions:
-                combined_conclusion.update(c._value if isinstance(c._value, set) else {c._value})
+                combined_conclusion.update(c.value if isinstance(c.value, set) else {c.value})
                 self.conclusions.remove(c)
             self.conclusions.append(category_type(combined_conclusion))
 

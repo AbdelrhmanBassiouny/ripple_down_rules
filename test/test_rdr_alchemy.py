@@ -4,8 +4,9 @@ from sqlalchemy import select
 from ripple_down_rules.datasets import Base, Animal, Species, get_dataset
 from ripple_down_rules.datastructures import RDRMode, PromptFor
 from ripple_down_rules.experts import Human
-from ripple_down_rules.rdr import SingleClassRDR
+from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR
 from ripple_down_rules.prompt import prompt_user_for_expression
+from ripple_down_rules.utils import render_tree
 from test_rdr import TestRDR
 
 
@@ -56,24 +57,43 @@ class TestAlchemyRDR:
 
     def test_fit_scrdr(self):
         use_loaded_answers = True
-        save_answers = False
         draw_tree = True
         filename = "./test_expert_answers" + "/scrdr_expert_answers_fit"
-        expert = Human(use_loaded_answers=use_loaded_answers, mode=RDRMode.Relational)
+        expert = Human(use_loaded_answers=use_loaded_answers, session=self.session)
         if use_loaded_answers:
             expert.load_answers(filename)
 
         query = select(Animal)
         result = self.session.scalars(query).all()
-        scrdr = SingleClassRDR(mode=RDRMode.Relational)
+        scrdr = SingleClassRDR(session=self.session)
         scrdr.table = Animal
         scrdr.target_column = Animal.species
         targets = [r.species for r in result]
         scrdr.fit(result, targets, expert=expert,
-                  animate_tree=draw_tree, mode=RDRMode.Relational, session=self.session)
+                  animate_tree=draw_tree, session=self.session)
 
         cat = scrdr.classify(result[50])
-        assert cat, targets[50]
+        assert cat == targets[50]
+
+    def test_fit_mcrdr_stop_only(self):
+        use_loaded_answers = True
+        draw_tree = False
+        filename = "./test_expert_answers" + "/scrdr_expert_answers_fit"
+        expert = Human(use_loaded_answers=use_loaded_answers, session=self.session)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+
+        query = select(Animal)
+        result = self.session.scalars(query).all()
+        mcrdr = MultiClassRDR(session=self.session)
+        mcrdr.table = Animal
+        mcrdr.target_column = Animal.species
+        targets = [r.species for r in result]
+        mcrdr.fit(result, targets, expert=expert, animate_tree=draw_tree)
+
+        cats = mcrdr.classify(result[50])
+        assert cats[0] == result[50]
+        assert len(cats) == 1
 
 
 tests = TestAlchemyRDR()
@@ -81,4 +101,4 @@ tests.setUpClass()
 # tests.test_setup()
 # tests.test_alchemy_rules()
 # tests.test_classify_scrdr()
-tests.test_fit_scrdr()
+# tests.test_fit_scrdr()

@@ -41,18 +41,18 @@ class Condition:
 
     @classmethod
     def from_case(cls, case: Case, operator: Operator = Equal()) -> Dict[str, Condition]:
-        return cls.from_attributes(case._attributes_list, operator)
+        return cls.from_attributes(case.attributes_list, operator)
 
     @classmethod
     def from_attributes(cls, attributes: List[Attribute], operator: Operator = Equal()) -> Dict[str, Condition]:
-        return {a._name: cls.from_attribute(a, operator) for a in attributes}
+        return {a.name: cls.from_attribute(a, operator) for a in attributes}
 
     @classmethod
     def from_attribute(cls, attribute: Attribute, operator: Operator = Equal()) -> Condition:
-        return cls(attribute._name, attribute._value, operator)
+        return cls(attribute.name, attribute.value, operator)
 
     def __call__(self, x: Case) -> bool:
-        return self.operator(x[self.name]._value, self.value)
+        return self.operator(x[self.name].value, self.value)
 
     def __str__(self):
         return f"{self.name} {self.operator} {self.value}"

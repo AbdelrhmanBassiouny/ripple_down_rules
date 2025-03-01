@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from unittest import TestCase
 
@@ -8,16 +10,16 @@ from ripple_down_rules.utils import get_property_name
 
 
 class PhysicalObject:
-    def __init__(self, name: str):
-        self.name = name
-        self._contained_objects: Set[PhysicalObject] = set()
+    def __init__(self, name: str, contained_objects: Optional[List[PhysicalObject]] = None):
+        self.name: str = name
+        self._contained_objects: List[PhysicalObject] = contained_objects or []
 
     @property
-    def contained_objects(self):
+    def contained_objects(self) -> List[PhysicalObject]:
         return self._contained_objects
 
     @contained_objects.setter
-    def contained_objects(self, value):
+    def contained_objects(self, value: List[PhysicalObject]):
         self._contained_objects = value
 
     def __str__(self):
@@ -34,7 +36,7 @@ class Part(PhysicalObject):
 class Robot(PhysicalObject):
     def __init__(self, name: str, parts: Optional[List[Part]] = None):
         super().__init__(name)
-        self.parts = parts or []
+        self.parts: List[Part] = parts if parts else []
 
 
 class RelationalRDRTestCase(TestCase):

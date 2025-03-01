@@ -39,9 +39,6 @@ class Expert(ABC):
     The known categories (i.e. Attribute types) to use.
     """
 
-    def __init__(self, mode: RDRMode = RDRMode.Propositional):
-        self.mode: RDRMode = mode
-
     @abstractmethod
     def ask_for_conditions(self, x: Case, targets: List[Attribute], last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
@@ -101,10 +98,10 @@ class Human(Expert):
     The Human Expert class, an expert that asks the human to provide differentiating features and conclusions.
     """
 
-    def __init__(self, use_loaded_answers: bool = False, mode: RDRMode = RDRMode.Propositional):
-        super().__init__(mode)
+    def __init__(self, use_loaded_answers: bool = False, session: Optional[Session] = None):
         self.all_expert_answers = []
         self.use_loaded_answers = use_loaded_answers
+        self.session = session
 
     def save_answers(self, path: str):
         """
@@ -126,36 +123,34 @@ class Human(Expert):
 
     def ask_for_conditions(self, case: Case,
                            targets: Union[List[Attribute], List[Column]],
-                           last_evaluated_rule: Optional[Rule] = None,
-                           session: Optional[Session] = None) \
+                           last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         if not self.use_loaded_answers:
             show_current_and_corner_cases(case, targets, last_evaluated_rule=last_evaluated_rule)
-        return self._get_relational_conditions(case, targets, session=session)
+        return self._get_relational_conditions(case, targets)
 
-    def _get_relational_conditions(self, case: Case, targets: Union[List[Attribute], List[Column]],
-                                   session: Optional[Session] = None) -> CallableExpression:
+    def _get_relational_conditions(self, case: Case, targets: Union[List[Attribute], List[Column]]) \
+            -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
         that doesn't have a corner case to compare to.
 
         :param case: The case to classify.
         :param targets: The target categories to compare the case with.
-        :param session: The sqlalchemy orm session to use if the case is a Table.
         :return: The differentiating features as new rule conditions.
         """
         targets = targets if isinstance(targets, list) else [targets]
         condition = None
         for target in targets:
             if isinstance(target, Attribute):
-                target_name = target._name
+                target_name = target.name
             else:
                 target_name = target.__class__.__name__
             user_input = None
             if self.use_loaded_answers:
                 user_input = self.all_expert_answers.pop(0)
             if user_input:
-                condition = CallableExpression(user_input, bool, session=session)
+                condition = CallableExpression(user_input, bool, session=self.session)
             else:
                 user_input, condition = prompt_user_for_expression(case, PromptFor.Conditions, target_name, bool)
             if not self.use_loaded_answers:
@@ -180,39 +175,9 @@ class Human(Expert):
             extra_conclusions[category] = self._get_relational_conditions(x, category)
         return extra_conclusions
 
-    def ask_for_relational_conclusion(self, case: Union[Case, Table], attribute_name: str, attribute_type: Type,
-                                      session: Optional[Session] = None) -> Optional[CallableExpression]:
-        """
-        Ask the expert to provide a relational conclusion for the case.
-
-        :param case: The case to classify.
-        :param attribute_name: The name of the attribute to provide the conclusion for.
-        :param attribute_type: The type of the attribute to provide the conclusion for.
-        :param session: The sqlalchemy orm session to use if the case is a Table.
-        :return: A callable expression that can be called with a new case as an argument.
-        """
-        all_names = self.get_and_print_all_names_and_conclusions(case)
-
-        if not hasattr(case, attribute_name):
-            raise ValueError(f"Attribute {attribute_name} not found in the case")
-
-        if self.use_loaded_answers:
-            user_input = self.all_expert_answers.pop(0)
-            expression_tree = None
-        else:
-            user_input, expression_tree = prompt_user_about_case(case, PromptFor.Conclusion, attribute_name)
-            self.all_expert_answers.append(user_input)
-
-        get_conclusion = CallableExpression(user_input, attribute_type, expression_tree, session=session)
-
-        conclusion = ObjectAttributeTarget(case, attribute_name, get_conclusion,
-                                           relational_representation=user_input)
-        print(f"Evaluated expression: {conclusion}")
-        return get_conclusion
-
     def ask_for_conclusion(self, case: Case, current_conclusions: Optional[List[Attribute]] = None,
-                           attribute_name: Optional[str] = None, attribute_type: Optional[Type] = None,
-                           session: Optional[Session] = None) -> Optional[Union[CallableExpression, Attribute, Column]]:
+                           attribute_name: Optional[str] = None, attribute_type: Optional[Type] = None
+                           ) -> Optional[Union[CallableExpression, Attribute, Column]]:
         """
         Ask the expert to provide a conclusion for the case.
 
@@ -220,34 +185,15 @@ class Human(Expert):
         :param current_conclusions: The current conclusions for the case if any.
         :param attribute_name: The name of the attribute to provide the conclusion for.
         :param attribute_type: The type of the attribute to provide the conclusion for.
-        :param session: The sqlalchemy orm session to use if the case is a Table.
         :return: The conclusion for the case.
         """
-        if self.mode == RDRMode.Relational:
-            return self.ask_for_relational_conclusion(case, attribute_name, attribute_type, session=session)
         if self.use_loaded_answers:
             expert_input = self.all_expert_answers.pop(0)
         else:
             show_current_and_corner_cases(case, current_conclusions=current_conclusions)
             expert_input, _ = prompt_user_about_case(case, PromptFor.Conclusion, attribute_name)
             self.all_expert_answers.append(expert_input)
-        return CallableExpression(expert_input, attribute_type, session=session)(case)
-
-    def get_and_print_all_names_and_conclusions(self, x: Case, current_conclusions: Optional[List[Attribute]] = None) \
-            -> List[str]:
-        """
-        Get and print all names and conclusions for the case.
-
-        :param x: The case to get the names and conclusions for.
-        :param current_conclusions: The current conclusions for the case.
-        :return: The list of all names.
-        """
-        conclusion_types = list(map(type, current_conclusions)) if current_conclusions else None
-        all_names, max_len = x.get_all_names_and_max_len()
-        if not self.use_loaded_answers:
-            max_len = x.print_all_names(all_names, max_len, conclusion_types=conclusion_types)
-            x.print_values(all_names, conclusions=current_conclusions, ljust_sz=max_len)
-        return all_names
+        return CallableExpression(expert_input, attribute_type, session=self.session)(case)
 
     def parse_conclusion(self, value: str) -> Attribute:
         """
@@ -295,7 +241,7 @@ class Human(Expert):
         """
         cat_name = cat_name.lower()
         self.known_categories = get_all_subclasses(Attribute) if not self.known_categories else self.known_categories
-        self.known_categories.update(Attribute._registry)
+        self.known_categories.update(Attribute.registry)
         category_type = None
         if cat_name in self.known_categories:
             category_type = self.known_categories[cat_name]
@@ -310,7 +256,7 @@ class Human(Expert):
         """
         category_type: Type[Attribute] = type(cat_name, (Categorical,), {})
         if self.ask_if_category_is_mutually_exclusive(category_type.__name__):
-            category_type._mutually_exclusive = True
+            category_type.mutually_exclusive = True
         Attribute.register(category_type)
         return category_type
 
@@ -338,8 +284,8 @@ class Human(Expert):
         if not self.use_loaded_answers:
             targets = targets or []
             targets = targets if isinstance(targets, list) else [targets]
-            x._conclusions = current_conclusions
-            x._targets = targets
+            x.conclusions = current_conclusions
+            x.targets = targets
             question = f"Is the conclusion {conclusion} correct for the case (y/n):" \
                        f"\n{str(x)}"
         return self.ask_yes_no_question(question)

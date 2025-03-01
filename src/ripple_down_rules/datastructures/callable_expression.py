@@ -122,7 +122,7 @@ class CallableExpression:
         try:
             context = get_all_possible_contexts(case, max_recursion_idx=2)
             if isinstance(case, Case):
-                context = {k: v._value for k, v in context.items()}
+                context = {k: v.value for k, v in context.items()}
             context.update({f"case.{k}": v for k, v in context.items()})
             context.update({"case": case})
             assert_context_contains_needed_information(case, context, self.visitor)

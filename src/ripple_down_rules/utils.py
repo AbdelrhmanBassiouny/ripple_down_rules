@@ -48,27 +48,27 @@ def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attri
         if last_evaluated_rule and last_evaluated_rule.fired:
             corner_row_dict = row_to_dict(last_evaluated_rule.corner_case)
     else:
-        attributes = case._attributes_list
+        attributes = case.attributes_list
         if last_evaluated_rule and last_evaluated_rule.fired:
             attributes = OrderedSet(attributes + corner_case._attributes_list)
-        names = [att._name for att in attributes]
-        case_values = [case[name]._value if name in case._attributes else "null" for name in names]
+        names = [att.name for att in attributes]
+        case_values = [case[name].value if name in case.attributes else "null" for name in names]
         case_dict = dict(zip(names, case_values))
         if last_evaluated_rule and last_evaluated_rule.fired:
-            corner_values = [corner_case[name]._value if name in corner_case._attributes else "null" for name in names]
+            corner_values = [corner_case[name].value if name in corner_case._attributes else "null" for name in names]
             corner_row_dict = dict(zip(names, corner_values))
 
     if corner_row_dict:
         corner_conclusion = last_evaluated_rule.conclusion
         corner_row_dict.update({corner_conclusion.__class__.__name__: corner_conclusion})
-        print_table_row(corner_row_dict)
+        print(table_rows_as_str(corner_row_dict))
     print("=" * 50)
     case_dict.update(targets)
     case_dict.update(current_conclusions)
-    print_table_row(case_dict)
+    print(table_rows_as_str(case_dict))
 
 
-def print_table_row(row_dict: Dict[str, Any], columns_per_row: int = 9):
+def table_rows_as_str(row_dict: Dict[str, Any], columns_per_row: int = 9):
     """
     Print a table row.
 
@@ -80,9 +80,11 @@ def print_table_row(row_dict: Dict[str, Any], columns_per_row: int = 9):
     all_items = [all_items[i:i + columns_per_row] for i in range(0, len(all_items), columns_per_row)]
     keys = [list(map(lambda i: i[0], row)) for row in all_items]
     values = [list(map(lambda i: i[1], row)) for row in all_items]
+    all_table_rows = []
     for row_keys, row_values in zip(keys, values):
         table = tabulate([row_values], headers=row_keys, tablefmt='plain')
-        print(table)
+        all_table_rows.append(table)
+    return "\n".join(all_table_rows)
 
 
 def row_to_dict(obj):
@@ -104,7 +106,7 @@ def get_property_name(obj: Any, prop: Any) -> str:
         if name.startswith("_") or callable(getattr(obj, name)):
             continue
         prop_value = getattr(obj, name)
-        if prop_value is prop or (hasattr(prop_value, "_value") and prop_value._value is prop):
+        if prop_value is prop or (hasattr(prop_value, "_value") and prop_value.value is prop):
             return name
 
 
@@ -132,11 +134,7 @@ def can_be_a_set(value: Any) -> bool:
     :param value: The value to check.
     """
     if hasattr(value, "__iter__") and not isinstance(value, str):
-        if isinstance(value, set):
-            return True
-        if len(value) == 0:
-            return True
-        elif any(isinstance(v, (int, float, str, bool)) for v in value):
+        if len(value) > 0 and all(isinstance(v, (int, float, str, bool)) for v in value):
             return False
         else:
             return True

@@ -27,12 +27,12 @@ class TestRDR(TestCase):
             os.makedirs(cls.test_results_dir)
 
     def tearDown(self):
-        Attribute._registry = {}
+        Attribute.registry = {}
 
     def test_setup(self):
         self.assertEqual(len(self.all_cases), 101)
-        self.assertTrue(all([len(c._attributes) == 16 for c in self.all_cases]))
-        self.assertTrue(all([isinstance(c._attributes, Attributes) for c in self.all_cases]))
+        self.assertTrue(all([len(c.attributes) == 16 for c in self.all_cases]))
+        self.assertTrue(all([isinstance(c.attributes, Attributes) for c in self.all_cases]))
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -234,19 +234,19 @@ class TestRDR(TestCase):
 
         def get_habitat(x: Case, t: Attribute):
             all_habs = []
-            if t._value == "mammal" and x["aquatic"]._value == 0:
+            if t.value == "mammal" and x["aquatic"].value == 0:
                 all_habs.append(Habitat("land"))
-            elif t._value == "bird":
+            elif t.value == "bird":
                 all_habs.append(Habitat({"land"}))
-                if x["airborne"]._value == 1:
+                if x["airborne"].value == 1:
                     all_habs[-1]._value.update({"air"})
-                if x["aquatic"]._value == 1:
+                if x["aquatic"].value == 1:
                     all_habs[-1]._value.update({"water"})
-            elif t._value == "fish":
+            elif t.value == "fish":
                 all_habs.append(Habitat("water"))
-            elif t._value == "molusc":
+            elif t.value == "molusc":
                 all_habs.append(Habitat({"land"}))
-                if x["aquatic"]._value == 1:
+                if x["aquatic"].value == 1:
                     all_habs[-1]._value.update({"water"})
             return all_habs + [t]
 

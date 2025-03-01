@@ -8,7 +8,8 @@ from relational_rdr_test_case import RelationalRDRTestCase, Robot
 from ripple_down_rules.datastructures import RDRMode, Case
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import render_tree, CallableExpression
+from ripple_down_rules.utils import render_tree
+from ripple_down_rules.datastructures.callable_expression import CallableExpression
 
 
 def test_classify_scrdr(obj: Any, target_property: Any,

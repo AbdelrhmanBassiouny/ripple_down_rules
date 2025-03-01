@@ -117,7 +117,7 @@ class RDREdge(Enum):
     """
 
 
-class CategoryValueType(Enum):
+class ValueType(Enum):
     Unary = auto()
     """
     Unary value type (eg. null).
