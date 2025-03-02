@@ -1,12 +1,13 @@
 import ast
 import logging
 from _ast import AST
+from collections import UserDict
 
 from sqlalchemy.orm import Session, DeclarativeBase as Table
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
-from . import Case
-from ..utils import get_attribute_values
+from . import Case, Attribute
+from ..utils import get_attribute_values, get_all_possible_contexts
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -122,7 +123,7 @@ class CallableExpression:
         try:
             context = get_all_possible_contexts(case, max_recursion_idx=2)
             if isinstance(case, Case):
-                context = {k: v.value for k, v in context.items()}
+                context = {k: v.value if isinstance(v, Attribute) else v for k, v in context.items()}
             context.update({f"case.{k}": v for k, v in context.items()})
             context.update({"case": case})
             assert_context_contains_needed_information(case, context, self.visitor)
@@ -188,32 +189,6 @@ def assert_context_contains_needed_information(case: Union[Case, Table], context
         str_attr = f"{key.id}.{str_attr}" if len(str_attr) > 0 else f"{key.id}.{ast_attr.attr}"
         if str_attr not in context:
             raise ValueError(f"Attribute {key.id}.{ast_attr.attr} not found in the case {case}")
-
-
-def get_all_possible_contexts(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 1,
-                              start_with_name: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get all possible contexts for an object.
-
-    :param obj: The object to get the contexts for.
-    :param recursion_idx: The recursion index to prevent infinite recursion.
-    :param max_recursion_idx: The maximum recursion index.
-    :param start_with_name: The starting context.
-    :return: A dictionary of all possible contexts.
-    """
-    all_contexts = {}
-    if recursion_idx > max_recursion_idx:
-        return all_contexts
-    for attr in dir(obj):
-        if attr.startswith("__") or attr.startswith("_") or callable(getattr(obj, attr)):
-            continue
-        chained_name = f"{start_with_name}.{attr}" if start_with_name else attr
-        all_contexts[chained_name] = get_attribute_values(obj, attr)
-        sub_attr_contexts = get_all_possible_contexts(getattr(obj, attr), recursion_idx=recursion_idx + 1,
-                                                      max_recursion_idx=max_recursion_idx,
-                                                      start_with_name=chained_name)
-        all_contexts.update(sub_attr_contexts)
-    return all_contexts
 
 
 def parse_string_to_expression(expression_str: str) -> AST:

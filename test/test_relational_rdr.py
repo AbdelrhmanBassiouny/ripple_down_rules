@@ -17,14 +17,13 @@ def test_classify_scrdr(obj: Any, target_property: Any,
     use_loaded_answers = False
     save_answers = False
     filename = expert_answers_dir + "/relational_scrdr_expert_answers_classify"
-    expert = Human(use_loaded_answers=use_loaded_answers, mode=RDRMode.Relational)
+    expert = Human(use_loaded_answers=use_loaded_answers)
     if use_loaded_answers:
         expert.load_answers(filename)
 
-    scrdr = SingleClassRDR(mode=RDRMode.Relational)
+    scrdr = SingleClassRDR()
     case = Case.from_object(obj) if not isinstance(obj, (Case, Table)) else obj
-    cat = scrdr.fit_case(case, for_attribute=target_property, expert=expert,
-                         mode=RDRMode.Relational)
+    cat = scrdr.fit_case(obj, for_attribute=target_property, expert=expert)
     render_tree(scrdr.start_rule, use_dot_exporter=True, filename="./test_results/relational_scrdr_classify")
     if target_value:
         assert cat == target_value
@@ -45,8 +44,8 @@ def test_parse_relational_conditions(case):
 
 RelationalRDRTestCase.setUpClass()
 robot = RelationalRDRTestCase.robot
-# test_parse_relational_conditions(RelationalRDRTestCase.case)
+test_parse_relational_conditions(RelationalRDRTestCase.robot)
 robot_without_parts = Robot("pr2")
 case_without_parts = Case.from_object(robot_without_parts)
-# test_parse_relational_conditions(case_without_parts)
+test_parse_relational_conditions(robot_without_parts)
 test_classify_scrdr(robot, robot.contained_objects)

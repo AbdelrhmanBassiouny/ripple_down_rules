@@ -34,6 +34,10 @@ class Part(PhysicalObject):
 
 
 class Robot(PhysicalObject):
+    parts: List[Part] = None
+    """
+    The robot parts.
+    """
     def __init__(self, name: str, parts: Optional[List[Part]] = None):
         super().__init__(name)
         self.parts: List[Part] = parts if parts else []
