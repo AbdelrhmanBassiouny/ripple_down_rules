@@ -7,43 +7,7 @@ from typing_extensions import Union, List, Optional, Any, Type, Dict
 
 from .attribute import Attribute, Categorical, Integer, Continuous, \
     Bool, Unary, get_attributes_from_object
-from ..utils import make_set, get_property_name, table_rows_as_str
-
-
-class Attributes(UserDict):
-    """
-    A collection of attributes that represents a set of constraints on a case. This is a dictionary where the keys are
-    the names of the attributes and the values are the attributes. All are stored in lower case.
-    """
-
-    def __getitem__(self, item: Union[str, Attribute]) -> Attribute:
-        if isinstance(item, Attribute):
-            return self[item.name]
-        else:
-            return super().__getitem__(item.lower())
-
-    def __setitem__(self, name: str, value: Attribute):
-        name = name.lower()
-        if name in self:
-            if (isinstance(value, Attribute) and not value.mutually_exclusive) or hasattr(value, "__iter__"):
-                self[name].value.update(make_set(value))
-            else:
-                raise ValueError(f"Attribute {name} already exists in the case and is mutually exclusive.")
-        else:
-            super().__setitem__(name, value)
-
-    def __contains__(self, item):
-        return super().__contains__(item.lower())
-
-    def __delitem__(self, key):
-        super().__delitem__(key.lower())
-
-    def __eq__(self, other):
-        if not isinstance(other, (Attributes, dict)):
-            return False
-        elif isinstance(other, dict):
-            return super().__eq__(Attributes(other))
-        return super().__eq__(other)
+from ..utils import make_set, get_property_name, table_rows_as_str, get_attribute_values_transitively
 
 
 class Case:

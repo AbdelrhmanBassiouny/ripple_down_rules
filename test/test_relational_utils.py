@@ -1,4 +1,4 @@
-from relational_rdr_test_case import PhysicalObject, Part, Robot, RelationalRDRTestCase
+from test_relational_rdr import PhysicalObject, Part, Robot, RelationalRDRTestCase
 from ripple_down_rules.utils import get_property_name
 
 

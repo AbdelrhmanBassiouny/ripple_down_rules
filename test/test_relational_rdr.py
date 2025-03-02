@@ -1,51 +1,111 @@
-import os
-from typing import Optional
+from __future__ import annotations
 
-from typing_extensions import Any
+import os
+from unittest import TestCase
+
+from typing_extensions import List, Optional, Set, Any
 from sqlalchemy.orm import DeclarativeBase as Table
 
-from relational_rdr_test_case import RelationalRDRTestCase, Robot
-from ripple_down_rules.datastructures import RDRMode, Case
+from ripple_down_rules.datastructures import Case, ObjectAttributeTarget, CallableExpression
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import render_tree
-from ripple_down_rules.datastructures.callable_expression import CallableExpression
+from ripple_down_rules.utils import get_property_name, render_tree
 
 
-def test_classify_scrdr(obj: Any, target_property: Any,
-                        target_value: Optional[Any] = None, expert_answers_dir="./test_expert_answers"):
-    use_loaded_answers = False
-    save_answers = False
-    filename = expert_answers_dir + "/relational_scrdr_expert_answers_classify"
-    expert = Human(use_loaded_answers=use_loaded_answers)
-    if use_loaded_answers:
-        expert.load_answers(filename)
+class PhysicalObject:
+    def __init__(self, name: str, contained_objects: Optional[List[PhysicalObject]] = None):
+        self.name: str = name
+        self._contained_objects: List[PhysicalObject] = contained_objects or []
 
-    scrdr = SingleClassRDR()
-    case = Case.from_object(obj) if not isinstance(obj, (Case, Table)) else obj
-    cat = scrdr.fit_case(obj, for_attribute=target_property, expert=expert)
-    render_tree(scrdr.start_rule, use_dot_exporter=True, filename="./test_results/relational_scrdr_classify")
-    if target_value:
-        assert cat == target_value
+    @property
+    def contained_objects(self) -> List[PhysicalObject]:
+        return self._contained_objects
 
-    if save_answers:
-        cwd = os.getcwd()
-        file = os.path.join(cwd, filename)
-        expert.save_answers(file)
+    @contained_objects.setter
+    def contained_objects(self, value: List[PhysicalObject]):
+        self._contained_objects = value
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.name
 
 
-def test_parse_relational_conditions(case):
-    user_input = "parts is not None and len(parts) > 0"
-    conditions = CallableExpression(user_input, bool)
-    print(conditions)
-    print(conditions(case))
-    assert conditions(case) == (case.parts is not None and len(case.parts) > 0)
+class Part(PhysicalObject):
+    ...
 
 
-RelationalRDRTestCase.setUpClass()
-robot = RelationalRDRTestCase.robot
-test_parse_relational_conditions(RelationalRDRTestCase.robot)
-robot_without_parts = Robot("pr2")
-case_without_parts = Case.from_object(robot_without_parts)
-test_parse_relational_conditions(robot_without_parts)
-test_classify_scrdr(robot, robot.contained_objects)
+class Robot(PhysicalObject):
+    parts: List[Part] = None
+    """
+    The robot parts.
+    """
+    def __init__(self, name: str, parts: Optional[List[Part]] = None):
+        super().__init__(name)
+        self.parts: List[Part] = parts if parts else []
+
+
+class RelationalRDRTestCase(TestCase):
+    case: Any
+    target: Any
+    test_results_dir: str = "./test_results"
+    expert_answers_dir: str = "./test_expert_answers"
+    robot: Robot
+    part_a: Part
+    part_b: Part
+    part_c: Part
+    part_d: Part
+    part_e: Part
+
+    @classmethod
+    def setUpClass(cls):
+        if not os.path.exists(cls.test_results_dir):
+            os.makedirs(cls.test_results_dir)
+        cls.part_a = Part(name="A")
+        cls.part_b = Part(name="B")
+        cls.part_c = Part(name="C")
+        cls.part_d = Part(name="D")
+        cls.part_e = Part(name="E")
+        robot = Robot("pr2", parts=[cls.part_a, cls.part_b, cls.part_c, cls.part_d])
+        cls.part_a.contained_objects = {cls.part_b, cls.part_c}
+        cls.part_c.contained_objects = {cls.part_d}
+        cls.part_d.contained_objects = {cls.part_e}
+        cls.robot: Robot = robot
+        attr_name = get_property_name(robot, robot.contained_objects)
+        cls.target = ObjectAttributeTarget(robot, attr_name, {cls.part_b, cls.part_c, cls.part_d, cls.part_e})
+
+    def test_classify_scrdr(self, obj: Any, target_property: Any,
+                            target_value: Optional[Any] = None, expert_answers_dir="./test_expert_answers"):
+        use_loaded_answers = False
+        save_answers = False
+        filename = self.expert_answers_dir + "/relational_scrdr_expert_answers_classify"
+        expert = Human(use_loaded_answers=use_loaded_answers)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+
+        scrdr = SingleClassRDR()
+        cat = scrdr.fit_case(obj, for_attribute=target_property, expert=expert)
+        render_tree(scrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + "/relational_scrdr_classify")
+        if target_value:
+            assert cat == target_value
+
+        if save_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, filename)
+            expert.save_answers(file)
+
+    def test_parse_relational_conditions(self):
+        user_input = "parts is not None and len(parts) > 0"
+        conditions = CallableExpression(user_input, bool)
+        print(conditions)
+        print(conditions(self.robot))
+        assert conditions(self.robot) == (self.robot.parts is not None and len(self.robot.parts) > 0)
+
+    def test_parse_relational_conclusions(self):
+        user_input = "parts.contained_objects"
+        conclusion = CallableExpression(user_input, set)
+        print(conclusion)
+        print(conclusion(self.robot))
+        assert conclusion(self.robot) == self.target.target_value

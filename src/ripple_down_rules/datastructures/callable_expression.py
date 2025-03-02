@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session, DeclarativeBase as Table
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from . import Case, Attribute
-from ..utils import get_attribute_values, get_all_possible_contexts
+from ..utils import get_attribute_values_transitively
+from .attributes import get_all_possible_contexts
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -121,12 +122,12 @@ class CallableExpression:
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            context = get_all_possible_contexts(case, max_recursion_idx=2)
+            context = get_all_possible_contexts(case, max_recursion_idx=1)
             if isinstance(case, Case):
                 context = {k: v.value if isinstance(v, Attribute) else v for k, v in context.items()}
             context.update({f"case.{k}": v for k, v in context.items()})
             context.update({"case": case})
-            assert_context_contains_needed_information(case, context, self.visitor)
+            found_vars, found_attributes = assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)
             if self.conclusion_type:
                 assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
@@ -170,14 +171,23 @@ def compile_expression_to_code(expression_tree: AST) -> Any:
     return compile(expression_tree, filename="<string>", mode="eval")
 
 
-def assert_context_contains_needed_information(case: Union[Case, Table], context: Dict[str, Any],
-                                               visitor: VariableVisitor):
+def assert_context_contains_needed_information(case: Any, context: Dict[str, Any],
+                                               visitor: VariableVisitor) -> Tuple[Set[str], Set[str]]:
     """
     Asserts that the variables mentioned in the expression visited by visitor are all in the given context.
+
+    :param case: The case to check the context for.
+    :param context: The context to check.
+    :param visitor: The visitor that visited the expression.
+    :return: The found variables and attributes.
     """
+    found_variables = set()
     for key in visitor.variables:
         if key not in context:
             raise ValueError(f"Attribute {key} not found in the case {case}")
+        found_variables.add(key)
+
+    found_attributes = set()
     for key, ast_attr in visitor.attributes.items():
         str_attr = ""
         while isinstance(key, ast.Attribute):
@@ -189,6 +199,9 @@ def assert_context_contains_needed_information(case: Union[Case, Table], context
         str_attr = f"{key.id}.{str_attr}" if len(str_attr) > 0 else f"{key.id}.{ast_attr.attr}"
         if str_attr not in context:
             raise ValueError(f"Attribute {key.id}.{ast_attr.attr} not found in the case {case}")
+        found_attributes.add(str_attr)
+    return found_variables, found_attributes
+
 
 
 def parse_string_to_expression(expression_str: str) -> AST:

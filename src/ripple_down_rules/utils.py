@@ -100,36 +100,6 @@ def row_to_dict(obj):
     }
 
 
-def get_all_possible_contexts(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 1,
-                              start_with_name: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get all possible contexts for an object.
-
-    :param obj: The object to get the contexts for.
-    :param recursion_idx: The recursion index to prevent infinite recursion.
-    :param max_recursion_idx: The maximum recursion index.
-    :param start_with_name: The starting context.
-    :return: A dictionary of all possible contexts.
-    """
-    all_contexts = {}
-    if recursion_idx > max_recursion_idx:
-        return all_contexts
-    for attr in dir(obj):
-        if attr.startswith("__") or attr.startswith("_") or callable(getattr(obj, attr)):
-            continue
-        attr_value = get_attribute_values(obj, attr)
-        chained_name = f"{start_with_name}.{attr}" if start_with_name else attr
-        all_contexts[chained_name] = attr_value
-        if isinstance(attr_value, (dict, UserDict)):
-            dict_chained_name = chained_name.replace(attr, '').strip('.')
-            all_contexts.update({f"{dict_chained_name}{k}": v for k, v in attr_value.items()})
-        sub_attr_contexts = get_all_possible_contexts(getattr(obj, attr), recursion_idx=recursion_idx + 1,
-                                                      max_recursion_idx=max_recursion_idx,
-                                                      start_with_name=chained_name)
-        all_contexts.update(sub_attr_contexts)
-    return all_contexts
-
-
 def get_property_name(obj: Any, prop: Any) -> str:
     """
     Get the name of a property from an object.
@@ -145,7 +115,7 @@ def get_property_name(obj: Any, prop: Any) -> str:
             return name
 
 
-def get_attribute_values(obj: Any, attribute: Any) -> Any:
+def get_attribute_values_transitively(obj: Any, attribute: Any) -> Any:
     """
     Get an attribute from a python object, if it is iterable, get the attribute values from all elements and unpack them
     into a list.
@@ -155,10 +125,10 @@ def get_attribute_values(obj: Any, attribute: Any) -> Any:
     """
     if hasattr(obj, "__iter__") and not isinstance(obj, str):
         if isinstance(obj, (dict, UserDict)):
-            all_values = [get_attribute_values(v, attribute) for v in obj.values()
+            all_values = [get_attribute_values_transitively(v, attribute) for v in obj.values()
                           if not isinstance(v, (str, type)) and hasattr(v, attribute)]
         else:
-            all_values = [get_attribute_values(a, attribute) for a in obj
+            all_values = [get_attribute_values_transitively(a, attribute) for a in obj
                           if not isinstance(a, (str, type)) and hasattr(a, attribute)]
         if can_be_a_set(all_values):
             return set().union(*all_values)
@@ -174,7 +144,7 @@ def can_be_a_set(value: Any) -> bool:
     :param value: The value to check.
     """
     if hasattr(value, "__iter__") and not isinstance(value, str):
-        if len(value) > 0 and all(isinstance(v, (int, float, str, bool)) for v in value):
+        if len(value) > 0 and any(hasattr(v, "__iter__") and not isinstance(v, str) for v in value):
             return False
         else:
             return True

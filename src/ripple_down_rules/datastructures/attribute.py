@@ -2,12 +2,86 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from typing_extensions import Union, Dict, Type, Self, Any, Set, List, Optional, Tuple, get_type_hints, get_origin,\
+from typing_extensions import Union, Dict, Type, Self, Any, Set, List, Optional, Tuple, get_type_hints, get_origin, \
     get_args
 
 from ripple_down_rules.datastructures.dataclasses import Range
 from ripple_down_rules.datastructures.enums import ValueType, CategoricalValue
 from ripple_down_rules.utils import make_set, make_value_or_raise_error, can_be_a_set
+
+
+class CustomSet(set):
+    """
+    A custom set class that is used to add other attributes to the set. This is similar to a table where the set is the
+    table, the attributes are the columns, and the values are the rows.
+    """
+    value_range: Union[set, Range]
+    """
+    The range of the attribute, this can be a set of possible values or a range of numeric values (int, float).
+    """
+    registry: Dict[str, Type[CustomSet]] = {}
+    """
+    A dictionary of all dynamically created subclasses of the CustomSet class.
+    """
+
+    @classmethod
+    def create(cls, name: str, range_: Union[set, Range], **kwargs) -> Type[CustomSet]:
+        """
+        Create a new custom set subclass.
+
+        :param name: The name of the attribute.
+        :param range_: The range of the attribute.
+        :return: The new attribute subclass.
+        """
+        kwargs.update(value_range=range_)
+        if name in cls.registry:
+            if not cls.registry[name].is_within_range(range_):
+                if isinstance(cls.registry[name].value_range, set):
+                    cls.registry[name].value_range.update(range_)
+                else:
+                    raise ValueError(f"Range of {name} is different from {cls.registry[name].value_range}.")
+            return cls.registry[name]
+        new_attribute_type: Type[Self] = type(name.lower(), (cls,), {}, **kwargs)
+        cls.register(new_attribute_type)
+        return new_attribute_type
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        Initialize the custom set subclass.
+        """
+        super().__init_subclass__()
+
+        value_range = kwargs.get("value_range", None)
+        cls.value_range = value_range if value_range is not None else set()
+
+    @classmethod
+    def register(cls, subclass: Type[CustomSet]):
+        """
+        Register a subclass of the attribute class, this is used to be able to dynamically create Attribute subclasses.
+
+        :param subclass: The subclass to register.
+        """
+        if not issubclass(subclass, CustomSet):
+            raise ValueError(f"{subclass} is not a subclass of CustomSet.")
+        if subclass not in cls.registry:
+            cls.registry[subclass.__name__.lower()] = subclass
+        else:
+            raise ValueError(f"{subclass} is already registered.")
+
+    @classmethod
+    def is_within_range(cls, value: Any) -> bool:
+        """
+        Check if a value is within the range of the custom set.
+
+        :param value: The value to check.
+        :return: Boolean indicating whether the value is within the range or not.
+        """
+        if hasattr(value, "__iter__") and not isinstance(value, str):
+            return set(value).issubset(cls.value_range)
+        elif isinstance(value, str):
+            return value.lower() in cls.value_range
+        else:
+            return value in cls.value_range
 
 
 class AbstractAttribute(ABC):
@@ -27,6 +101,7 @@ class AbstractAttribute(ABC):
     """
     A dictionary of all sub attributes of the attribute class.
     """
+
     @property
     @abstractmethod
     def name(self) -> str:
@@ -91,7 +166,6 @@ class Attribute(AbstractAttribute):
     """
     The range of the attribute, this can be a set of possible values or a range of numeric values (int, float).
     """
-
     registry: Dict[str, Type[Self]] = {}
     """
     A dictionary of all dynamically created subclasses of the attribute class.
@@ -100,7 +174,7 @@ class Attribute(AbstractAttribute):
     @classmethod
     def create_attribute(cls, name: str, mutually_exclusive: bool, value_type: ValueType,
                          range_: Union[set, Range], **kwargs) \
-            -> Type[Self]:
+            -> Type[Attribute]:
         """
         Create a new attribute subclass.
 
@@ -354,7 +428,8 @@ class Categorical(Attribute, ABC):
             raise ValueError(f"Attribute {cls.__name__} has no possible values.")
         elif len(cls.value_range) > 0 and type(list(cls.value_range)[0]) == str:
             return cls.is_within_range(value)
-        elif isinstance(value, cls.Values) or any(isinstance(v, type) and isinstance(value, v) for v in cls.Values.to_list()):
+        elif isinstance(value, cls.Values) or any(
+                isinstance(v, type) and isinstance(value, v) for v in cls.Values.to_list()):
             return True
         elif isinstance(value, set):
             return all(cls.is_possible_value(v) for v in value)
@@ -712,7 +787,8 @@ def _get_or_create_attribute_from_iterable(attr_name: str, attr_value: Optional[
     return iterable_type.create_attribute(attr_name, attr_type)
 
 
-def _get_or_create_attribute_from_set(attr_name: str, attr_value: Any, obj: Any) -> Tuple[Type[Attribute], Set[Attribute]]:
+def _get_or_create_attribute_from_set(attr_name: str, attr_value: Any, obj: Any) -> Tuple[
+    Type[Attribute], Set[Attribute]]:
     """
     Get the attribute type and value for a set attribute.
 
