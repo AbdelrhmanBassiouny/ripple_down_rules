@@ -6,7 +6,7 @@ from typing_extensions import List, Optional
 
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import Case, Condition, MCRDRMode, Habitat, Attribute, \
-    Attributes, Operator
+    Row, Operator
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree, get_all_subclasses
@@ -32,7 +32,7 @@ class TestRDR(TestCase):
     def test_setup(self):
         self.assertEqual(len(self.all_cases), 101)
         self.assertTrue(all([len(c.attributes) == 16 for c in self.all_cases]))
-        self.assertTrue(all([isinstance(c.attributes, Attributes) for c in self.all_cases]))
+        self.assertTrue(all([isinstance(c.attributes, Row) for c in self.all_cases]))
 
     def test_classify_scrdr(self):
         use_loaded_answers = True

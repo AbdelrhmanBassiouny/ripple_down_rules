@@ -3,12 +3,12 @@ import logging
 from _ast import AST
 from collections import UserDict
 
-from sqlalchemy.orm import Session, DeclarativeBase as Table
+from sqlalchemy.orm import Session, DeclarativeBase as SQLTable
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from . import Case, Attribute
 from ..utils import get_attribute_values_transitively
-from .attributes import get_all_possible_contexts
+from .table import create_table
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -122,11 +122,9 @@ class CallableExpression:
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            context = get_all_possible_contexts(case, max_recursion_idx=1)
+            context = create_table(case, max_recursion_idx=3)
             if isinstance(case, Case):
                 context = {k: v.value if isinstance(v, Attribute) else v for k, v in context.items()}
-            context.update({f"case.{k}": v for k, v in context.items()})
-            context.update({"case": case})
             found_vars, found_attributes = assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)
             if self.conclusion_type:

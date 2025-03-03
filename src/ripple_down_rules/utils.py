@@ -9,7 +9,7 @@ from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
-from sqlalchemy.orm import DeclarativeBase as Table, MappedColumn as Column
+from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, List, Optional, Union, TYPE_CHECKING
 
@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
-def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attribute], List[Column]]] = None,
-                                  current_conclusions: Optional[Union[List[Attribute], List[Column]]] = None,
+def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attribute], List[SQLColumn]]] = None,
+                                  current_conclusions: Optional[Union[List[Attribute], List[SQLColumn]]] = None,
                                   last_evaluated_rule: Optional[Rule] = None) -> None:
     """
     Show the data of the new case and if last evaluated rule exists also show that of the corner case.
@@ -44,7 +44,7 @@ def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attri
         corner_case = last_evaluated_rule.corner_case
 
     corner_row_dict = None
-    if isinstance(case, Table):
+    if isinstance(case, SQLTable):
         case_dict = row_to_dict(case)
         if last_evaluated_rule and last_evaluated_rule.fired:
             corner_row_dict = row_to_dict(last_evaluated_rule.corner_case)

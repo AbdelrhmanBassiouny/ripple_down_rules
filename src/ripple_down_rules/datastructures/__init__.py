@@ -4,4 +4,4 @@ from .case import *
 from .dataclasses import *
 from .operator import *
 from .callable_expression import *
-from .attributes import *
+from .table import *

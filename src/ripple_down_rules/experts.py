@@ -16,7 +16,7 @@ from .prompt import prompt_user_for_expression, prompt_user_about_case
 if TYPE_CHECKING:
     from .rdr import Rule
 
-Table: Type[DeclarativeBase]
+SQLTable: Type[DeclarativeBase]
 
 
 class Expert(ABC):
@@ -80,7 +80,7 @@ class Expert(ABC):
         """
         pass
 
-    def ask_for_relational_conclusion(self, case: Union[Case, Table], attribute_name: str, attribute_type: Type,
+    def ask_for_relational_conclusion(self, case: Union[Case, SQLTable], attribute_name: str, attribute_type: Type,
                                       session: Optional[Session] = None) -> Optional[CallableExpression]:
         """
         Ask the expert to provide a relational conclusion for the case.

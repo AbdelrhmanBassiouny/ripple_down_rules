@@ -4,13 +4,13 @@ from _ast import AST
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
-from sqlalchemy.orm import DeclarativeBase as Table, Session
+from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
 from typing_extensions import Any, List, Optional, Tuple, Dict, Union, Type
 
-from .datastructures import Case, PromptFor, CallableExpression, get_all_possible_contexts, parse_string_to_expression
+from .datastructures import Case, PromptFor, CallableExpression, create_table, parse_string_to_expression
 
 
-def prompt_user_for_expression(case: Union[Case, Table], prompt_for: PromptFor, target_name: str,
+def prompt_user_for_expression(case: Union[Case, SQLTable], prompt_for: PromptFor, target_name: str,
                                output_type: Type, session: Optional[Session] = None) -> Tuple[str, CallableExpression]:
     """
     Prompt the user for an executable python expression.
@@ -27,7 +27,7 @@ def prompt_user_for_expression(case: Union[Case, Table], prompt_for: PromptFor, 
     return user_input, callable_expression
 
 
-def prompt_user_about_case(case: Union[Case, Table], prompt_for: PromptFor, target_name: str) \
+def prompt_user_about_case(case: Union[Case, SQLTable], prompt_for: PromptFor, target_name: str) \
         -> Tuple[str, AST]:
     """
     Prompt the user for input.
@@ -53,7 +53,7 @@ def get_completions(obj: Any) -> List[str]:
     # Define completer with all object attributes and comparison operators
     completions = ['==', '!=', '>', '<', '>=', '<=', 'in', 'not', 'and', 'or', 'is']
     completions += ["isinstance(", "issubclass(", "type(", "len(", "hasattr(", "getattr(", "setattr(", "delattr("]
-    completions += list(get_all_possible_contexts(obj).keys())
+    completions += list(create_table(obj).keys())
     return completions
 
 

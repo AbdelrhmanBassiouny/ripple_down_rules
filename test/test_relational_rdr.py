@@ -4,7 +4,7 @@ import os
 from unittest import TestCase
 
 from typing_extensions import List, Optional, Set, Any
-from sqlalchemy.orm import DeclarativeBase as Table
+from sqlalchemy.orm import DeclarativeBase as SQLTable
 
 from ripple_down_rules.datastructures import Case, ObjectAttributeTarget, CallableExpression
 from ripple_down_rules.experts import Human

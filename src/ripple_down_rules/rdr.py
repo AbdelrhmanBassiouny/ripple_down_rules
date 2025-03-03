@@ -6,7 +6,7 @@ from copy import copy, deepcopy
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy import Column
-from sqlalchemy.orm import DeclarativeBase as Table, Session, MappedColumn as Column
+from sqlalchemy.orm import DeclarativeBase as SQLTable, Session, MappedColumn as Column
 from typing_extensions import List, Optional, Dict, Type, Union, Any
 
 from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, CallableExpression
@@ -139,7 +139,7 @@ class RippleDownRules(ABC):
 
 
 class SingleClassRDR(RippleDownRules):
-    table: Type[Table]
+    table: Type[SQLTable]
     target_column: Column
 
     def fit_case(self, case: Union[table, Case], target: Optional[Union[Attribute, Column]] = None,
@@ -280,7 +280,7 @@ class MultiClassRDR(RippleDownRules):
         return list(OrderedSet(self.conclusions))
 
     @staticmethod
-    def case_has_conclusion(x: Union[Case, Table], conclusion: Union[Attribute, Column]) -> bool:
+    def case_has_conclusion(x: Union[Case, SQLTable], conclusion: Union[Attribute, Column]) -> bool:
         """
         Check if the case has a conclusion.
 
@@ -288,7 +288,7 @@ class MultiClassRDR(RippleDownRules):
         :param conclusion: The target category to compare the case with.
         :return: Whether the case has a conclusion or not.
         """
-        if isinstance(x, Table):
+        if isinstance(x, SQLTable):
             return get_property_name(x, conclusion) is not None
         return conclusion in x
 
