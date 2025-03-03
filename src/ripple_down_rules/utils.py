@@ -14,63 +14,10 @@ from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, List, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ripple_down_rules.datastructures import Case, Attribute
+    from ripple_down_rules.datastructures import Case, Attribute, create_table
     from ripple_down_rules.rules import Rule
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
-
-
-def show_current_and_corner_cases(case: Case, targets: Optional[Union[List[Attribute], List[SQLColumn]]] = None,
-                                  current_conclusions: Optional[Union[List[Attribute], List[SQLColumn]]] = None,
-                                  last_evaluated_rule: Optional[Rule] = None) -> None:
-    """
-    Show the data of the new case and if last evaluated rule exists also show that of the corner case.
-
-    :param case: The new case.
-    :param targets: The target attribute of the case.
-    :param current_conclusions: The current conclusions of the case.
-    :param last_evaluated_rule: The last evaluated rule in the RDR.
-    """
-    corner_case = None
-    if targets:
-        targets = targets if isinstance(targets, list) else [targets]
-    if current_conclusions:
-        current_conclusions = current_conclusions if isinstance(current_conclusions, list) else [current_conclusions]
-    targets = {f"target_{t.__class__.__name__}": t for t in targets} if targets else {}
-    current_conclusions = {c.__class__.__name__: c for c in current_conclusions} if current_conclusions else {}
-    if last_evaluated_rule:
-        action = "Refinement" if last_evaluated_rule.fired else "Alternative"
-        print(f"{action} needed for rule: {last_evaluated_rule}\n")
-        corner_case = last_evaluated_rule.corner_case
-
-    corner_row_dict = None
-    if isinstance(case, SQLTable):
-        case_dict = row_to_dict(case)
-        if last_evaluated_rule and last_evaluated_rule.fired:
-            corner_row_dict = row_to_dict(last_evaluated_rule.corner_case)
-    elif False:
-        attributes = case.attributes_list
-        if last_evaluated_rule and last_evaluated_rule.fired:
-            attributes = OrderedSet(attributes + corner_case._attributes_list)
-        names = [att.name for att in attributes]
-        case_values = [case[name].value if name in case.attributes else "null" for name in names]
-        case_dict = dict(zip(names, case_values))
-        if last_evaluated_rule and last_evaluated_rule.fired:
-            corner_values = [corner_case[name].value if name in corner_case._attributes else "null" for name in names]
-            corner_row_dict = dict(zip(names, corner_values))
-    else:
-        case_dict = get_all_possible_contexts(case, max_recursion_idx=0)
-        if last_evaluated_rule and last_evaluated_rule.fired:
-            corner_row_dict = get_all_possible_contexts(corner_case, max_recursion_idx=0)
-
-    if corner_row_dict:
-        corner_conclusion = last_evaluated_rule.conclusion
-        corner_row_dict.update({corner_conclusion.__class__.__name__: corner_conclusion})
-        print(table_rows_as_str(corner_row_dict))
-    print("=" * 50)
-    case_dict.update(targets)
-    case_dict.update(current_conclusions)
-    print(table_rows_as_str(case_dict))
 
 
 def table_rows_as_str(row_dict: Dict[str, Any], columns_per_row: int = 9):

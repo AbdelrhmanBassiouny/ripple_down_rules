@@ -9,9 +9,9 @@ from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, 
 from .datastructures import (Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectAttributeTarget,
                              PromptFor, CallableExpression)
 from .failures import InvalidOperator
-from .utils import get_all_subclasses, \
-    show_current_and_corner_cases
+from .utils import get_all_subclasses
 from .prompt import prompt_user_for_expression, prompt_user_about_case
+from .datastructures.table import show_current_and_corner_cases
 
 if TYPE_CHECKING:
     from .rdr import Rule

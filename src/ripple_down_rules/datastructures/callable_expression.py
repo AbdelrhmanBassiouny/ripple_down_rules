@@ -123,13 +123,11 @@ class CallableExpression:
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
             context = create_table(case, max_recursion_idx=3)
-            if isinstance(case, Case):
-                context = {k: v.value if isinstance(v, Attribute) else v for k, v in context.items()}
-            found_vars, found_attributes = assert_context_contains_needed_information(case, context, self.visitor)
+            assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)
-            if self.conclusion_type:
-                assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
-                                                                  f" got {type(output)}")
+            # if self.conclusion_type:
+            #     assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
+            #                                                       f" got {type(output)}")
             return output
         except Exception as e:
             raise ValueError(f"Error during evaluation: {e}")

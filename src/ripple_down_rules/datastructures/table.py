@@ -3,10 +3,14 @@ from __future__ import annotations
 from collections import UserDict
 from dataclasses import dataclass
 
-from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Tuple
+from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn
+from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Tuple, Union, List, TYPE_CHECKING
 
 from ripple_down_rules.datastructures import get_value_type_from_type_hint
-from ripple_down_rules.utils import make_set
+from ripple_down_rules.utils import make_set, row_to_dict, table_rows_as_str
+
+if TYPE_CHECKING:
+    from ripple_down_rules.rules import Rule
 
 
 class Row(UserDict):
@@ -195,6 +199,15 @@ class Column(set, ColumnMixin):
         self.id_value_map[id(value)] = value
         super().add(value.value)
 
+    def __eq__(self, other):
+        return super().__eq__(other)
+
+    def __hash__(self):
+        return hash(tuple(self.id_value_map.values()))
+
+    def __str__(self):
+        return str({v for v in self})
+
 
 class Table(Row, ColumnMixin):
     """
@@ -221,9 +234,12 @@ class Table(Row, ColumnMixin):
         for row in rows:
             if len(row) == 0:
                 continue
-            self.assert_is_new_row(row)
-            self.assert_row_has_required_columns(row)
-            self.id_row_map[row.id] = row
+            if isinstance(row, Row):
+                self.assert_is_new_row(row)
+                self.assert_row_has_required_columns(row)
+                self.id_row_map[row.id] = row
+            else:
+                row = create_table(row)
             super().update(row)
 
     def assert_is_new_row(self, row: Row):
@@ -261,7 +277,7 @@ class Table(Row, ColumnMixin):
         """
         return {column_name: self[column_name] for column_name in self.column_names}
 
-    def create_and_add_column(self, name: str, range_: set, values: Set[Tuple[Hashable, Any]]):
+    def create_and_add_column(self, name: str, range_: set, values: Set[ColumnValue]):
         """
         Add a new column to the table.
 
@@ -280,13 +296,22 @@ class Table(Row, ColumnMixin):
         """
         if 0 < len(self) != len(column):
             raise ValueError(f"Column length {len(column)} does not match the number of rows {len(self)}.")
-        for row in self.id_row_map.values():
-            row[column.__class__.__name__] = column[row.id]
+        if len(self) == 0:
+            self[column.__class__.__name__] = column
+        else:
+            for row in self.id_row_map.values():
+                row[column.__class__.__name__] = column[row.id]
 
     def __eq__(self, other):
         if not isinstance(other, Table):
             return False
-        return Column.__eq__(self, other)
+        return Row.__eq__(self, other)
+
+    def __hash__(self):
+        return self.id
+
+    def __str__(self):
+        return Row.__str__(self)
 
 
 def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 1,
@@ -300,6 +325,18 @@ def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 1,
     :param obj_name: The name of the object.
     :return: The table of the object.
     """
+    if hasattr(obj, "__iter__") and not isinstance(obj, str):
+        obj_name = obj_name or obj.__class__.__name__
+        values = list(obj.values()) if isinstance(obj, (dict, UserDict)) else obj
+        table = Table.create(obj_name, make_set(type(values[0])))(id_=id(obj))
+        if isinstance(obj, (dict, UserDict)):
+            for k, v in obj.items():
+                table.create_and_add_column(k, make_set(type(v)), {ColumnValue(id(obj), v)})
+        else:
+            for v in values:
+                table.update(create_table(v, recursion_idx=recursion_idx + 1,
+                                          max_recursion_idx=max_recursion_idx, obj_name=obj_name))
+        return table
     table = Table.create(obj.__class__.__name__, make_set(obj.__class__))(id_=id(obj))
     if recursion_idx > max_recursion_idx:
         return table
@@ -384,3 +421,46 @@ def get_table_from_iterable_attribute(attr_value: Any, name: str, obj: Any, obj_
                                  obj_name=obj_name)
         values_table.update(val_table)
     return column, values_table
+
+
+def show_current_and_corner_cases(case: Any, targets: Optional[Union[List[Column], List[SQLColumn]]] = None,
+                                  current_conclusions: Optional[Union[List[Column], List[SQLColumn]]] = None,
+                                  last_evaluated_rule: Optional[Rule] = None) -> None:
+    """
+    Show the data of the new case and if last evaluated rule exists also show that of the corner case.
+
+    :param case: The new case.
+    :param targets: The target attribute of the case.
+    :param current_conclusions: The current conclusions of the case.
+    :param last_evaluated_rule: The last evaluated rule in the RDR.
+    """
+    corner_case = None
+    if targets:
+        targets = targets if isinstance(targets, list) else [targets]
+    if current_conclusions:
+        current_conclusions = current_conclusions if isinstance(current_conclusions, list) else [current_conclusions]
+    targets = {f"target_{t.__class__.__name__}": t for t in targets} if targets else {}
+    current_conclusions = {c.__class__.__name__: c for c in current_conclusions} if current_conclusions else {}
+    if last_evaluated_rule:
+        action = "Refinement" if last_evaluated_rule.fired else "Alternative"
+        print(f"{action} needed for rule: {last_evaluated_rule}\n")
+        corner_case = last_evaluated_rule.corner_case
+
+    corner_row_dict = None
+    if isinstance(case, SQLTable):
+        case_dict = row_to_dict(case)
+        if last_evaluated_rule and last_evaluated_rule.fired:
+            corner_row_dict = row_to_dict(last_evaluated_rule.corner_case)
+    else:
+        case_dict = create_table(case, max_recursion_idx=0)
+        if last_evaluated_rule and last_evaluated_rule.fired:
+            corner_row_dict = create_table(corner_case, max_recursion_idx=0)
+
+    if corner_row_dict:
+        corner_conclusion = last_evaluated_rule.conclusion
+        corner_row_dict.update({corner_conclusion.__class__.__name__: corner_conclusion})
+        print(table_rows_as_str(corner_row_dict))
+    print("=" * 50)
+    case_dict.update(targets)
+    case_dict.update(current_conclusions)
+    print(table_rows_as_str(case_dict))
