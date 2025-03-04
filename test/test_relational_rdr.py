@@ -6,7 +6,7 @@ from unittest import TestCase
 from typing_extensions import List, Optional, Set, Any
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 
-from ripple_down_rules.datastructures import Case, ObjectAttributeTarget, CallableExpression, create_row
+from ripple_down_rules.datastructures import Case, ObjectAttributeTarget, CallableExpression, create_row, Row
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.utils import get_property_name, render_tree
@@ -76,7 +76,7 @@ class RelationalRDRTestCase(TestCase):
         cls.target = ObjectAttributeTarget(robot, attr_name, {cls.part_b, cls.part_c, cls.part_d, cls.part_e})
 
     def test_classify_scrdr(self):
-        use_loaded_answers = False
+        use_loaded_answers = True
         save_answers = False
         filename = self.expert_answers_dir + "/relational_scrdr_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)
@@ -84,8 +84,8 @@ class RelationalRDRTestCase(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        table = create_row(self.robot)
-        cat = scrdr.fit_case(self.robot, for_attribute=table.parts.contained_objects, expert=expert)
+        table = Row.from_obj(self.robot)
+        cat = scrdr.fit_case(table, for_attribute=table.parts.contained_objects, expert=expert)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + "/relational_scrdr_classify")
         assert cat == self.target.target_value

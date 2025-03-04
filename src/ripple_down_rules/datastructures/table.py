@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import UserDict
 from dataclasses import dataclass
+from enum import Enum
 
 from pandas import DataFrame
 from sqlalchemy import MetaData
@@ -105,6 +106,27 @@ class Row(UserDict, SubClassFactory):
     A collection of attributes that represents a set of constraints on a case. This is a dictionary where the keys are
     the names of the attributes and the values are the attributes. All are stored in lower case.
     """
+    def __init__(self, id_: Optional[Hashable] = None, **kwargs):
+        """
+        Create a new row.
+
+        :param id_: The id of the row.
+        :param kwargs: The attributes of the row.
+        """
+        super().__init__(kwargs)
+        self.id = id_
+
+    @classmethod
+    def from_obj(cls, obj: Any, obj_name: Optional[str] = None, max_recursion_idx: int = 3) -> Row:
+        """
+        Create a row from an object.
+
+        :param obj: The object to create a row from.
+        :param max_recursion_idx: The maximum recursion index to prevent infinite recursion.
+        :param obj_name: The name of the object.
+        :return: The row of the object.
+        """
+        return create_row(obj, max_recursion_idx=max_recursion_idx, obj_name=obj_name)
 
     def __getitem__(self, item: str) -> Any:
         return super().__getitem__(item.lower())
@@ -121,6 +143,8 @@ class Row(UserDict, SubClassFactory):
             super().__setitem__(name, value)
 
     def __contains__(self, item):
+        if isinstance(item, (type, Enum)):
+            item = item.__name__
         return super().__contains__(item.lower())
 
     def __delitem__(self, key):
@@ -207,7 +231,7 @@ class Column(set, SubClassFactory):
         return isinstance(instance, (set, self.__class__)) or super().__instancecheck__(instance)
 
 
-def create_row_from_dataframe(df: DataFrame, name: Optional[str] = None) -> Row:
+def create_rows_from_dataframe(df: DataFrame, name: Optional[str] = None) -> List[Row]:
     """
     Create a row from a pandas DataFrame.
 
@@ -215,11 +239,13 @@ def create_row_from_dataframe(df: DataFrame, name: Optional[str] = None) -> Row:
     :param name: The name of the DataFrame.
     :return: The row of the DataFrame.
     """
-    row = Row()
-    for col in df.columns:
-        range_ = {type(list(df[col].iterrows())[0])} if len(df[col].iterrows()) > 0 else set()
-        row[col] = Column.create(col, range_)(list(df[col].iterrows()))
-    return row
+    rows = []
+    col_names = list(df.columns)
+    for row_id, row in df.iterrows():
+        row = {col_name: row[col_name].item() for col_name in col_names}
+        row = Row.create(name or df.__class__.__name__, make_set(type(df)))(id_=row_id, **row)
+        rows.append(row)
+    return rows
 
 
 def create_row(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
@@ -234,7 +260,9 @@ def create_row(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
     :param parent_is_iterable: Boolean indicating whether the parent object is iterable or not.
     :return: The table of the object.
     """
-    row = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)))()
+    if isinstance(obj, Row):
+        return obj
+    row = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)))(id_=id(obj))
     if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
             or (obj.__class__ in [MetaData, registry])):
         return row
@@ -265,7 +293,7 @@ def create_or_update_row_from_attribute(attr_value: Any, name: str, obj: Any, ob
     :param row: The row to update.
     :return: A reference column and its table.
     """
-    row = row if row is not None else Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)))()
+    row = row if row is not None else Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)))(id_=id(obj))
     if isinstance(attr_value, (dict, UserDict)):
         row.update({f"{obj_name}.{k}": v for k, v in attr_value.items()})
     if hasattr(attr_value, "__iter__") and not isinstance(attr_value, str):
@@ -302,7 +330,7 @@ def create_column_and_row_from_iterable_attribute(attr_value: Any, name: str, ob
         range_ = make_set(get_value_type_from_type_hint(name, obj))
     if not range_:
         raise ValueError(f"Could not determine the range of {name} in {obj}.")
-    attr_row = Row.create(name or list(range_)[0].__name__, range_)()
+    attr_row = Row.create(name or list(range_)[0].__name__, range_)(id_=id(attr_value))
     column = Column.create(name, range_).from_obj(obj, values)
     for idx, val in enumerate(values):
         sub_attr_row = create_row(val, recursion_idx=recursion_idx,
@@ -343,9 +371,9 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Union[List[Column
         if last_evaluated_rule and last_evaluated_rule.fired:
             corner_row_dict = row_to_dict(last_evaluated_rule.corner_case)
     else:
-        case_dict = create_row(case, max_recursion_idx=0)
+        case_dict = case
         if last_evaluated_rule and last_evaluated_rule.fired:
-            corner_row_dict = create_row(corner_case, max_recursion_idx=0)
+            corner_row_dict = corner_case
 
     if corner_row_dict:
         corner_conclusion = last_evaluated_rule.conclusion

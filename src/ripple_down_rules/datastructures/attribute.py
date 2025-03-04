@@ -577,6 +577,10 @@ class Habitat(Categorical):
     def __init__(self, habitat: Union[Habitat.Values, str]):
         super().__init__(habitat)
 
+    @property
+    def as_dict(self):
+        return {self.name: self.value}
+
 
 def get_attributes_from_object(obj: Any) -> List[Attribute]:
     """

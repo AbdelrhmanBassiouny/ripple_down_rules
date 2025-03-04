@@ -7,7 +7,7 @@ from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column
 from typing_extensions import Tuple, List, Dict
 from ucimlrepo import fetch_ucirepo
 
-from .datastructures import Case, Attribute, Species as SpeciesAttr
+from .datastructures import Case, Attribute, Species as SpeciesAttr, Row, create_rows_from_dataframe
 
 
 def load_cached_dataset(cache_file):
@@ -68,11 +68,11 @@ def load_zoo_dataset(cache_file: str) -> Tuple[List[Case], List[SpeciesAttr]]:
     y = zoo['targets']
     # get ids as list of strings
     ids = zoo['ids'].values.flatten()
-    all_cases = Case.create_cases_from_dataframe(X, ids)
+    all_cases = create_rows_from_dataframe(X, "Animal")
 
     category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
     category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
-    targets = [SpeciesAttr(SpeciesAttr.Values.from_str(category_id_to_name[i])) for i in y.values.flatten()]
+    targets = [Species.from_str(category_id_to_name[i]) for i in y.values.flatten()]
     return all_cases, targets
 
 
@@ -85,6 +85,17 @@ class Species(str, Enum):
     insect = "insect"
     molusc = "molusc"
 
+    @property
+    def mutually_exclusive(self):
+        return True
+
+    @classmethod
+    def from_str(cls, value: str) -> "Species":
+        return getattr(cls, value)
+
+    @property
+    def as_dict(self):
+        return {"species": self.value}
 
 class Base(sqlalchemy.orm.DeclarativeBase):
     pass

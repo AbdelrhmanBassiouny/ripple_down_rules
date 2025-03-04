@@ -9,7 +9,7 @@ from sqlalchemy import Column
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session, MappedColumn as Column
 from typing_extensions import List, Optional, Dict, Type, Union, Any
 
-from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, CallableExpression
+from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, CallableExpression, Row
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree, get_property_name, make_set
@@ -490,7 +490,7 @@ class GeneralRDR(RippleDownRules):
     def start_rules(self) -> List[Union[SingleClassRule, MultiClassTopRule]]:
         return [rdr.start_rule for rdr in self.start_rules_dict.values()]
 
-    def classify(self, x: Case) -> Optional[List[Attribute]]:
+    def classify(self, x: Row) -> Optional[List[Attribute]]:
         """
         Classify a case by going through all RDRs and adding the categories that are classified, and then restarting
         the classification until no more categories can be added.
@@ -510,13 +510,13 @@ class GeneralRDR(RippleDownRules):
                     pred_atts = pred_atts if isinstance(pred_atts, list) else [pred_atts]
                     added_attributes = True
                     for pred_att in pred_atts:
-                        x_cp.add_attribute(pred_att)
+                        x_cp.update(pred_att.as_dict)
                         conclusions.append(pred_att)
             if not added_attributes:
                 break
         return list(OrderedSet(conclusions))
 
-    def fit_case(self, x: Case, targets: Optional[Union[Attribute, List[Attribute]]] = None,
+    def fit_case(self, x: Row, targets: Optional[Union[Attribute, List[Attribute]]] = None,
                  expert: Optional[Expert] = None,
                  **kwargs) -> List[Attribute]:
         """
@@ -535,18 +535,18 @@ class GeneralRDR(RippleDownRules):
             x_cp = copy(x)
             if type(t) not in self.start_rules_dict:
                 conclusions = self.classify(x)
-                x_cp.add_attributes(conclusions)
+                x_cp.update(*[c.as_dict for c in make_set(conclusions)])
                 new_rdr = SingleClassRDR() if t.mutually_exclusive else MultiClassRDR()
                 new_conclusions = new_rdr.fit_case(x_cp, t, expert, **kwargs)
                 self.start_rules_dict[type(t)] = new_rdr
-                x_cp.add_attributes(new_conclusions)
+                x_cp.update(*[c.as_dict for c in make_set(new_conclusions)])
             elif type(t) not in x_cp:
                 for rdr_type, rdr in self.start_rules_dict.items():
                     if type(t) != rdr_type:
                         conclusions = rdr.classify(x_cp)
                     else:
                         conclusions = self.start_rules_dict[type(t)].fit_case(x_cp, t, expert, **kwargs)
-                    x_cp.add_attributes(conclusions)
+                    x_cp.update(*[c.as_dict for c in make_set(conclusions)])
 
         return self.classify(x)
 

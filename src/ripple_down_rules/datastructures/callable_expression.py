@@ -1,14 +1,11 @@
 import ast
 import logging
 from _ast import AST
-from collections import UserDict
 
-from sqlalchemy.orm import Session, DeclarativeBase as SQLTable
+from sqlalchemy.orm import Session
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
-from . import Case, Attribute
-from ..utils import get_attribute_values_transitively
-from .table import create_row
+from .table import create_row, Row
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -122,7 +119,10 @@ class CallableExpression:
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            context = create_row(case, max_recursion_idx=3)
+            if not isinstance(case, Row):
+                context = create_row(case, max_recursion_idx=3)
+            else:
+                context = case
             assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)
             if self.conclusion_type:
@@ -197,7 +197,6 @@ def assert_context_contains_needed_information(case: Any, context: Dict[str, Any
             raise ValueError(f"Attribute {key.id}.{ast_attr.attr} not found in the case {case}")
         found_attributes.add(str_attr)
     return found_variables, found_attributes
-
 
 
 def parse_string_to_expression(expression_str: str) -> AST:
