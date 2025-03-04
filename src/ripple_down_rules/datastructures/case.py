@@ -5,6 +5,7 @@ from collections import UserDict
 import pandas as pd
 from typing_extensions import Union, List, Optional, Any, Type, Dict
 
+from .table import Row
 from .attribute import Attribute, Categorical, Integer, Continuous, \
     Bool, Unary, get_attributes_from_object
 from ..utils import make_set, get_property_name, table_rows_as_str, get_attribute_values_transitively
@@ -31,7 +32,7 @@ class Case:
         :param obj: The object that the case represents.
         :param is_corner_case: Whether the case is a corner case (a case that caused the addition of a new rule).
         """
-        self.attributes = Attributes({a.name: a for a in attributes})
+        self.attributes = Row(id(attributes), **{a.name: a for a in attributes})
         self.id = _id
         if conclusions:
             conclusions = conclusions if isinstance(conclusions, list) else [conclusions]

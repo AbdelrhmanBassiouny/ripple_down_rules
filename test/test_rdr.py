@@ -93,7 +93,7 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def test_fit_mcrdr_stop_only(self):
-        use_loaded_answers = True
+        use_loaded_answers = False
         draw_tree = False
         save_answers = False
         filename = self.expert_answers_dir + "/mcrdr_expert_answers_stop_only_fit"

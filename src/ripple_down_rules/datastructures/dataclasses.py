@@ -165,6 +165,9 @@ class Range:
                 and self.min_closed == other.min_closed
                 and self.max_closed == other.max_closed)
 
+    def __hash__(self) -> int:
+        return hash((self.min, self.max, self.min_closed, self.max_closed))
+
     def __str__(self) -> str:
         left = "[" if self.min_closed else "("
         right = "]" if self.max_closed else ")"

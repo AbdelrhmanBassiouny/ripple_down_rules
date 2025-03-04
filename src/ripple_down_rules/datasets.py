@@ -7,7 +7,7 @@ from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column
 from typing_extensions import Tuple, List, Dict
 from ucimlrepo import fetch_ucirepo
 
-from ripple_down_rules.datastructures import Case, Attribute, Species as SpeciesAttr
+from .datastructures import Case, Attribute, Species as SpeciesAttr
 
 
 def load_cached_dataset(cache_file):

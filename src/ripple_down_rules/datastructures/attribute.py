@@ -23,10 +23,6 @@ class AbstractAttribute(ABC):
     """
     The range of the attribute, this can be a set of possible values or a range of numeric values (int, float).
     """
-    _attributes: Dict[str, AbstractAttribute]
-    """
-    A dictionary of all sub attributes of the attribute class.
-    """
 
     @property
     @abstractmethod
@@ -70,10 +66,6 @@ class AbstractAttribute(ABC):
     def __setitem__(self, key: str, value: AbstractAttribute):
         self._attributes[key.lower()] = value
 
-    @property
-    def attributes(self) -> Dict[str, Type[AbstractAttribute]]:
-        return self._attributes
-
 
 class Attribute(AbstractAttribute):
     """
@@ -92,7 +84,7 @@ class Attribute(AbstractAttribute):
     """
     The range of the attribute, this can be a set of possible values or a range of numeric values (int, float).
     """
-    registry: Dict[str, Type[Self]] = {}
+    registry: Dict[str, Type[Attribute]] = {}
     """
     A dictionary of all dynamically created subclasses of the attribute class.
     """
@@ -746,7 +738,7 @@ def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
     hint, origin, args = get_hint_for_attribute(attr_name, obj)
     if not origin:
         raise ValueError(f"Couldn't get type for Attribute {attr_name}, please provide a type hint")
-    if origin in [list, set, tuple]:
+    if origin in [list, set, tuple, type, dict]:
         attr_value_type = args[0]
     else:
         raise ValueError(f"Attribute {attr_name} has unsupported type {hint}.")

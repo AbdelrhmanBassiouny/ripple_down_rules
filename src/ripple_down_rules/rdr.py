@@ -12,7 +12,7 @@ from typing_extensions import List, Optional, Dict, Type, Union, Any
 from .datastructures import Condition, Case, MCRDRMode, Attribute, RDRMode, CallableExpression
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
-from .utils import draw_tree, get_property_name
+from .utils import draw_tree, get_property_name, make_set
 
 
 class RippleDownRules(ABC):
@@ -257,10 +257,10 @@ class MultiClassRDR(RippleDownRules):
 
                 if evaluated_rule.fired:
                     if target and evaluated_rule.conclusion not in good_conclusions:
-                        if self.case_has_conclusion(x, evaluated_rule.conclusion):
+                        # if self.case_has_conclusion(x, evaluated_rule.conclusion):
                             # Rule fired and conclusion is different from target
-                            self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule,
-                                                                   add_extra_conclusions)
+                        self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule,
+                                                               add_extra_conclusions)
                     else:
                         # Rule fired and target is correct or there is no target to compare
                         self.add_conclusion(evaluated_rule)
@@ -354,10 +354,10 @@ class MultiClassRDR(RippleDownRules):
         :param target: The target category to compare the conclusion with.
         :return: Whether the conclusion is conflicting with the target category.
         """
-        if conclusion.mutually_exclusive:
+        if hasattr(conclusion, "mutually_exclusive") and conclusion.mutually_exclusive:
             return True
         else:
-            return not conclusion.value.issubset(target.value)
+            return not make_set(conclusion).issubset(make_set(target))
 
     @staticmethod
     def is_same_category_type(conclusion: Attribute, target: Attribute) -> bool:
@@ -432,13 +432,13 @@ class MultiClassRDR(RippleDownRules):
             self.conclusions.append(evaluated_rule.conclusion)
         else:
             same_type_conclusions = [c for c in self.conclusions if type(c) == type(evaluated_rule.conclusion)]
-            combined_conclusion = evaluated_rule.conclusion._value if isinstance(evaluated_rule.conclusion._value, set) \
-                else {evaluated_rule.conclusion._value}
+            combined_conclusion = evaluated_rule.conclusion if isinstance(evaluated_rule.conclusion, set) \
+                else {evaluated_rule.conclusion}
             category_type = type(evaluated_rule.conclusion)
             for c in same_type_conclusions:
-                combined_conclusion.update(c.value if isinstance(c.value, set) else {c.value})
+                combined_conclusion.update(c if isinstance(c, set) else make_set(c))
                 self.conclusions.remove(c)
-            self.conclusions.append(category_type(combined_conclusion))
+            self.conclusions.extend(combined_conclusion)
 
     def add_top_rule(self, conditions: Dict[str, Condition], conclusion: Attribute, corner_case: Case):
         """
@@ -536,7 +536,7 @@ class GeneralRDR(RippleDownRules):
             if type(t) not in self.start_rules_dict:
                 conclusions = self.classify(x)
                 x_cp.add_attributes(conclusions)
-                new_rdr = SingleClassRDR() if t._mutually_exclusive else MultiClassRDR()
+                new_rdr = SingleClassRDR() if t.mutually_exclusive else MultiClassRDR()
                 new_conclusions = new_rdr.fit_case(x_cp, t, expert, **kwargs)
                 self.start_rules_dict[type(t)] = new_rdr
                 x_cp.add_attributes(new_conclusions)

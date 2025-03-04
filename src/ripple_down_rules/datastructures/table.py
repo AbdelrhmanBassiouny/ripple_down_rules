@@ -3,12 +3,13 @@ from __future__ import annotations
 from collections import UserDict
 from dataclasses import dataclass
 
+from pandas import DataFrame
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Tuple, Union, List, TYPE_CHECKING
 
-from ripple_down_rules.datastructures import get_value_type_from_type_hint
-from ripple_down_rules.utils import make_set, row_to_dict, table_rows_as_str
+from . import get_value_type_from_type_hint
+from ..utils import make_set, row_to_dict, table_rows_as_str
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
@@ -39,7 +40,8 @@ class Row(UserDict):
             if isinstance(self[name], set):
                 value = make_set(value)
                 if (len(self[name]) > 0 and len(value) > 0
-                        and not issubclass(list(self[name])[0].__class__, list(value)[0].__class__)):
+                        and not issubclass(list(self[name])[0].__class__, list(value)[0].__class__)
+                        and self[name].mutually_exclusive):
                     raise ValueError(f"Attribute {name} already exists in the case and is mutually exclusive.")
                 else:
                     self[name].update(value)
@@ -176,7 +178,7 @@ class ColumnValue:
     def __eq__(self, other):
         if not isinstance(other, ColumnValue):
             return False
-        return self.id == other.id and self.value == other.value
+        return self.value == other.value
 
     def __hash__(self):
         return self.id
@@ -333,7 +335,7 @@ class Table(Row, ColumnMixin):
 
 
 def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
-                 obj_name: Optional[str] = None) -> Table:
+                 obj_name: Optional[str] = None, table_id: Optional[int] = None) -> Table:
     """
     Create a table from an object.
 
@@ -341,15 +343,19 @@ def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
     :param recursion_idx: The current recursion index.
     :param max_recursion_idx: The maximum recursion index to prevent infinite recursion.
     :param obj_name: The name of the object.
+    :param table_id: The id of the table.
     :return: The table of the object.
     """
+    table_id = table_id or id(obj)
+    if isinstance(obj, DataFrame):
+        obj = [{att: row[1][att].item() for att in obj.keys().tolist()} for row in obj.iterrows()]
     if hasattr(obj, "__iter__") and not isinstance(obj, str):
         return create_table_from_iterable(obj, obj_name, recursion_idx=recursion_idx,
-                                          max_recursion_idx=max_recursion_idx)
+                                          max_recursion_idx=max_recursion_idx, table_id=table_id)
     if ((recursion_idx > max_recursion_idx)
         or (obj.__class__.__module__ == "builtins") or (obj.__class__ in [MetaData, registry])):
         return {}
-    table = Table.create(obj.__class__.__name__, make_set(obj.__class__))(id_=id(obj))
+    table = Table.create(obj.__class__.__name__, make_set(obj.__class__))(id_=table_id)
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
             continue
@@ -365,7 +371,8 @@ def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
 
 
 def create_table_from_iterable(obj: Any, name: Optional[str] = None,
-                               recursion_idx: int = 0, max_recursion_idx: int = 1) -> Table:
+                               recursion_idx: int = 0, max_recursion_idx: int = 1,
+                               ids: Optional[List[int]] = None, table_id: Optional[int] = None) -> Table:
     """
     Create a table from an iterable object.
 
@@ -373,18 +380,22 @@ def create_table_from_iterable(obj: Any, name: Optional[str] = None,
     :param name: The name of the object.
     :param recursion_idx: The current recursion index.
     :param max_recursion_idx: The maximum recursion index to prevent infinite recursion.
+    :param ids: The ids of the rows.
+    :param table_id: The id of the table.
     :return: The table of the object.
     """
     name = name or obj.__class__.__name__
+    table_id = table_id or id(obj)
     values = list(obj.values()) if isinstance(obj, (dict, UserDict)) else obj
-    table = Table.create(name, make_set(type(values[0])))(id_=id(obj))
+    table = Table.create(name, make_set(type(values[0])))(id_=table_id)
     if isinstance(obj, (dict, UserDict)):
         for k, v in obj.items():
-            table.create_and_add_column(k, make_set(type(v)), {ColumnValue(id(obj), v)})
+            table.create_and_add_column(k, make_set(type(v)), {ColumnValue(table_id, v)})
     else:
-        for v in values:
+        for i, v in enumerate(values):
+            id_ = ids[i] if ids else i
             table.update(create_table(v, recursion_idx=recursion_idx + 1,
-                                      max_recursion_idx=max_recursion_idx, obj_name=name))
+                                      max_recursion_idx=max_recursion_idx, obj_name=name, table_id=id_))
     return table
 
 

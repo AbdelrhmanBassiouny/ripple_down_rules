@@ -73,11 +73,11 @@ class TestAlchemyRDR:
                   animate_tree=draw_tree, session=self.session)
 
         cat = scrdr.classify(result[50])
-        assert cat.pop() == targets[50]
+        assert cat == targets[50]
 
     def test_fit_mcrdr_stop_only(self):
         use_loaded_answers = True
-        draw_tree = False
+        draw_tree = True
         filename = "./test_expert_answers" + "/scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers, session=self.session)
         if use_loaded_answers:
@@ -92,7 +92,7 @@ class TestAlchemyRDR:
         mcrdr.fit(result, targets, expert=expert, animate_tree=draw_tree)
 
         cats = mcrdr.classify(result[50])
-        assert cats[0] == result[50]
+        assert cats[0] == result[50].species
         assert len(cats) == 1
 
 
@@ -100,5 +100,6 @@ tests = TestAlchemyRDR()
 tests.setUpClass()
 # tests.test_setup()
 # tests.test_alchemy_rules()
-tests.test_classify_scrdr()
+# tests.test_classify_scrdr()
 # tests.test_fit_scrdr()
+tests.test_fit_mcrdr_stop_only()
