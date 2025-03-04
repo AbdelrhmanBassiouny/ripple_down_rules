@@ -414,8 +414,6 @@ def get_table_from_iterable_attribute(attr_value: Any, name: str, obj: Any, obj_
     table_type = Table.create(name, range_)
     values_table = table_type(id_=id(values))
     for idx, val in enumerate(values):
-        if hasattr(val, "__iter__"):
-            continue
         val_table = create_table(val, recursion_idx=recursion_idx,
                                  max_recursion_idx=max_recursion_idx,
                                  obj_name=obj_name)
