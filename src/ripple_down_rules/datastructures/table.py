@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections import UserDict
 from dataclasses import dataclass
 
-from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn
+from sqlalchemy import MetaData
+from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Tuple, Union, List, TYPE_CHECKING
 
 from ripple_down_rules.datastructures import get_value_type_from_type_hint
@@ -83,7 +84,11 @@ class ColumnMixin:
     """
     nullable: bool = True
     """
-    A boolean indicating whether the attribute can be None or not.
+    A boolean indicating whether the column can be None or not.
+    """
+    mutually_exclusive: bool = False
+    """
+    A boolean indicating whether the column is mutually exclusive or not. (i.e. can only have one value)
     """
 
     @classmethod
@@ -185,21 +190,34 @@ class Column(set, ColumnMixin):
         :param values: The values of the column.
         """
         values = make_set(values)
-        self.id_value_map: Dict[Hashable, Set[ColumnValue]] = {id(v): v for v in values}
+        self.id_value_map: Dict[Hashable, Union[ColumnValue, Set[ColumnValue]]] = {id(v): v for v in values}
         super().__init__([v.value for v in values])
 
-    def __getitem__(self, row_id: Hashable) -> Set[ColumnValue]:
-        return {v for v in self if v.id == row_id}
+    def __getitem__(self, row_id: Hashable) -> Union[ColumnValue, Set[ColumnValue]]:
+        values = {v for v in self if v.id == row_id}
+        return values if len(values) > 1 else values.pop()
 
     @classmethod
     def from_obj(cls, row_obj: Any, values: Set[Any]):
         return cls({ColumnValue(id(row_obj), v) for v in values})
 
     def add(self, value: ColumnValue):
-        self.id_value_map[id(value)] = value
+        if id(value) in self.id_value_map:
+            if self.mutually_exclusive:
+                raise ValueError(f"Value {value} already exists in the column and is mutually exclusive.")
+            elif isinstance(self.id_value_map[id(value)], set):
+                self.id_value_map[id(value)].add(value)
+            else:
+                new_set = make_set(self.id_value_map[id(value)])
+                new_set.add(value)
+                self.id_value_map[id(value)] = new_set
+        else:
+            self.id_value_map[id(value)] = make_set(value) if self.mutually_exclusive else value
         super().add(value.value)
 
     def __eq__(self, other):
+        if not isinstance(other, set):
+            return super().__eq__(make_set(other))
         return super().__eq__(other)
 
     def __hash__(self):
@@ -314,8 +332,8 @@ class Table(Row, ColumnMixin):
         return Row.__str__(self)
 
 
-def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 1,
-                 obj_name: Optional[str] = None) -> Dict[str, Any]:
+def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
+                 obj_name: Optional[str] = None) -> Table:
     """
     Create a table from an object.
 
@@ -326,20 +344,12 @@ def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 1,
     :return: The table of the object.
     """
     if hasattr(obj, "__iter__") and not isinstance(obj, str):
-        obj_name = obj_name or obj.__class__.__name__
-        values = list(obj.values()) if isinstance(obj, (dict, UserDict)) else obj
-        table = Table.create(obj_name, make_set(type(values[0])))(id_=id(obj))
-        if isinstance(obj, (dict, UserDict)):
-            for k, v in obj.items():
-                table.create_and_add_column(k, make_set(type(v)), {ColumnValue(id(obj), v)})
-        else:
-            for v in values:
-                table.update(create_table(v, recursion_idx=recursion_idx + 1,
-                                          max_recursion_idx=max_recursion_idx, obj_name=obj_name))
-        return table
+        return create_table_from_iterable(obj, obj_name, recursion_idx=recursion_idx,
+                                          max_recursion_idx=max_recursion_idx)
+    if ((recursion_idx > max_recursion_idx)
+        or (obj.__class__.__module__ == "builtins") or (obj.__class__ in [MetaData, registry])):
+        return {}
     table = Table.create(obj.__class__.__name__, make_set(obj.__class__))(id_=id(obj))
-    if recursion_idx > max_recursion_idx:
-        return table
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
             continue
@@ -351,6 +361,30 @@ def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 1,
                                                                 recursion_idx=recursion_idx + 1,
                                                                 max_recursion_idx=max_recursion_idx)
         update_table_with_column_and_its_table(table, column, column_ref_table, chained_name)
+    return table
+
+
+def create_table_from_iterable(obj: Any, name: Optional[str] = None,
+                               recursion_idx: int = 0, max_recursion_idx: int = 1) -> Table:
+    """
+    Create a table from an iterable object.
+
+    :param obj: The object to create a table from.
+    :param name: The name of the object.
+    :param recursion_idx: The current recursion index.
+    :param max_recursion_idx: The maximum recursion index to prevent infinite recursion.
+    :return: The table of the object.
+    """
+    name = name or obj.__class__.__name__
+    values = list(obj.values()) if isinstance(obj, (dict, UserDict)) else obj
+    table = Table.create(name, make_set(type(values[0])))(id_=id(obj))
+    if isinstance(obj, (dict, UserDict)):
+        for k, v in obj.items():
+            table.create_and_add_column(k, make_set(type(v)), {ColumnValue(id(obj), v)})
+    else:
+        for v in values:
+            table.update(create_table(v, recursion_idx=recursion_idx + 1,
+                                      max_recursion_idx=max_recursion_idx, obj_name=name))
     return table
 
 
@@ -383,9 +417,9 @@ def get_ref_column_and_its_table(attr_value: Any, name: str, obj: Any, obj_name:
     :return: A reference column and its table.
     """
     if hasattr(attr_value, "__iter__") and not isinstance(attr_value, str):
-        column, values_table = get_table_from_iterable_attribute(attr_value, name, obj, obj_name,
-                                                                 recursion_idx=recursion_idx,
-                                                                 max_recursion_idx=max_recursion_idx)
+        column, values_table = create_table_from_iterable_attribute(attr_value, name, obj, obj_name,
+                                                                    recursion_idx=recursion_idx,
+                                                                    max_recursion_idx=max_recursion_idx)
     else:
         column = Column.create(name, {type(attr_value)}).from_obj(obj, make_set(attr_value))
         values_table = create_table(attr_value, recursion_idx=recursion_idx,
@@ -393,8 +427,8 @@ def get_ref_column_and_its_table(attr_value: Any, name: str, obj: Any, obj_name:
     return column, values_table
 
 
-def get_table_from_iterable_attribute(attr_value: Any, name: str, obj: Any, obj_name: Optional[str] = None,
-                                      recursion_idx: int = 0, max_recursion_idx: int = 1) -> Tuple[Column, Table]:
+def create_table_from_iterable_attribute(attr_value: Any, name: str, obj: Any, obj_name: Optional[str] = None,
+                                         recursion_idx: int = 0, max_recursion_idx: int = 1) -> Tuple[Column, Table]:
     """
     Get a table from an iterable.
 

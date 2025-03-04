@@ -44,11 +44,11 @@ class TestAlchemyRDR:
         print(type(conditions(r[0])))
 
     def test_classify_scrdr(self):
-        expert = Human(use_loaded_answers=False, mode=RDRMode.Relational)
+        expert = Human(use_loaded_answers=False)
 
         query = select(Animal)
         result = self.session.scalars(query).all()
-        scrdr = SingleClassRDR(mode=RDRMode.Relational)
+        scrdr = SingleClassRDR()
         scrdr.table = Animal
         scrdr.target_column = Animal.species
 
@@ -73,7 +73,7 @@ class TestAlchemyRDR:
                   animate_tree=draw_tree, session=self.session)
 
         cat = scrdr.classify(result[50])
-        assert cat == targets[50]
+        assert cat.pop() == targets[50]
 
     def test_fit_mcrdr_stop_only(self):
         use_loaded_answers = True
@@ -100,5 +100,5 @@ tests = TestAlchemyRDR()
 tests.setUpClass()
 # tests.test_setup()
 # tests.test_alchemy_rules()
-# tests.test_classify_scrdr()
+tests.test_classify_scrdr()
 # tests.test_fit_scrdr()
