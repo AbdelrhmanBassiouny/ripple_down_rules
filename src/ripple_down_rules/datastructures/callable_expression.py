@@ -8,7 +8,7 @@ from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from . import Case, Attribute
 from ..utils import get_attribute_values_transitively
-from .table import create_table
+from .table import create_row
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -122,12 +122,12 @@ class CallableExpression:
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            context = create_table(case, max_recursion_idx=3)
+            context = create_row(case, max_recursion_idx=3)
             assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)
-            # if self.conclusion_type:
-            #     assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
-            #                                                       f" got {type(output)}")
+            if self.conclusion_type:
+                assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
+                                                                  f" got {type(output)}")
             return output
         except Exception as e:
             raise ValueError(f"Error during evaluation: {e}")

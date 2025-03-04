@@ -14,7 +14,7 @@ from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, List, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ripple_down_rules.datastructures import Case, Attribute, create_table
+    from ripple_down_rules.datastructures import Case, Attribute, create_row
     from ripple_down_rules.rules import Rule
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability

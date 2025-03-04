@@ -7,7 +7,7 @@ from prompt_toolkit.completion import WordCompleter
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
 from typing_extensions import Any, List, Optional, Tuple, Dict, Union, Type
 
-from .datastructures import Case, PromptFor, CallableExpression, create_table, parse_string_to_expression
+from .datastructures import Case, PromptFor, CallableExpression, create_row, parse_string_to_expression
 
 
 def prompt_user_for_expression(case: Union[Case, SQLTable], prompt_for: PromptFor, target_name: str,
@@ -53,7 +53,7 @@ def get_completions(obj: Any) -> List[str]:
     # Define completer with all object attributes and comparison operators
     completions = ['==', '!=', '>', '<', '>=', '<=', 'in', 'not', 'and', 'or', 'is']
     completions += ["isinstance(", "issubclass(", "type(", "len(", "hasattr(", "getattr(", "setattr(", "delattr("]
-    completions += list(create_table(obj).keys())
+    completions += list(create_row(obj).keys())
     return completions
 
 

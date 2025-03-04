@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pandas import DataFrame
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
-from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Tuple, Union, List, TYPE_CHECKING
+from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING, Tuple
 
 from . import get_value_type_from_type_hint
 from ..utils import make_set, row_to_dict, table_rows_as_str
@@ -21,15 +21,15 @@ class Row(UserDict):
     the names of the attributes and the values are the attributes. All are stored in lower case.
     """
 
-    def __init__(self, id_: Hashable, **kwargs):
+    def __init__(self, data: Optional[Dict[str, Any]] = None, name: Optional[str] = None):
         """
         Create a new row.
 
-        :param id_: The unique identifier of the row.
-        :param kwargs: The attributes of the row.
+        :param name: The name of the row.
+        :param data: The attributes of the row.
         """
-        super().__init__(**kwargs)
-        self.id: Hashable = id_
+        super().__init__(data)
+        self.__class__.__name__ = name or self.__class__.__name__
 
     def __getitem__(self, item: str) -> Any:
         return super().__getitem__(item.lower())
@@ -38,16 +38,7 @@ class Row(UserDict):
         name = name.lower()
         if name in self:
             if isinstance(self[name], set):
-                value = make_set(value)
-                if (len(self[name]) > 0 and len(value) > 0
-                        and not issubclass(list(self[name])[0].__class__, list(value)[0].__class__)
-                        and self[name].mutually_exclusive):
-                    raise ValueError(f"Attribute {name} already exists in the case and is mutually exclusive.")
-                else:
-                    self[name].update(value)
-            elif not issubclass(self[name].__class__, value.__class__):
-                raise ValueError(f"Attribute {name} already exists in the case and is of a different type,"
-                                 f"current: {self[name].__class__} != new: {value.__class__}")
+                self[name].update(make_set(value))
             else:
                 raise ValueError(f"Attribute {name} already exists in the case and is mutually exclusive.")
         else:
@@ -61,14 +52,15 @@ class Row(UserDict):
         super().__delitem__(key.lower())
 
     def __eq__(self, other):
-        if not isinstance(other, (Row, dict)):
+        if not isinstance(other, (Row, dict, UserDict)):
             return False
-        elif isinstance(other, dict):
+        elif isinstance(other, (dict, UserDict)):
             return super().__eq__(Row(other))
-        return super().__eq__(other)
+        else:
+            return super().__eq__(other)
 
     def __hash__(self):
-        return hash(self.id)
+        return hash(tuple(self.items()))
 
 
 class ColumnMixin:
@@ -160,6 +152,9 @@ class ColumnMixin:
         else:
             return value in cls.value_range
 
+    def __instancecheck__(self, instance):
+        return isinstance(instance, (set, ColumnMixin, *self.value_range))
+
 
 @dataclass
 class ColumnValue:
@@ -195,27 +190,9 @@ class Column(set, ColumnMixin):
         self.id_value_map: Dict[Hashable, Union[ColumnValue, Set[ColumnValue]]] = {id(v): v for v in values}
         super().__init__([v.value for v in values])
 
-    def __getitem__(self, row_id: Hashable) -> Union[ColumnValue, Set[ColumnValue]]:
-        values = {v for v in self if v.id == row_id}
-        return values if len(values) > 1 else values.pop()
-
     @classmethod
     def from_obj(cls, row_obj: Any, values: Set[Any]):
         return cls({ColumnValue(id(row_obj), v) for v in values})
-
-    def add(self, value: ColumnValue):
-        if id(value) in self.id_value_map:
-            if self.mutually_exclusive:
-                raise ValueError(f"Value {value} already exists in the column and is mutually exclusive.")
-            elif isinstance(self.id_value_map[id(value)], set):
-                self.id_value_map[id(value)].add(value)
-            else:
-                new_set = make_set(self.id_value_map[id(value)])
-                new_set.add(value)
-                self.id_value_map[id(value)] = new_set
-        else:
-            self.id_value_map[id(value)] = make_set(value) if self.mutually_exclusive else value
-        super().add(value.value)
 
     def __eq__(self, other):
         if not isinstance(other, set):
@@ -229,113 +206,23 @@ class Column(set, ColumnMixin):
         return str({v for v in self})
 
 
-class Table(Row, ColumnMixin):
+def create_row_from_dataframe(df: DataFrame, name: Optional[str] = None) -> Row:
     """
-    A table is a collection of rows that are all of the same type. This is similar to a database table where each row
-    is a case and each column is an attribute of the case.
+    Create a row from a pandas DataFrame.
+
+    :param df: The DataFrame to create a row from.
+    :param name: The name of the DataFrame.
+    :return: The row of the DataFrame.
     """
-    id_row_map: Dict[Hashable, Row]
-    """
-    A dictionary of all rows in the table where the key is the id of the row and the value is the row.
-    """
-
-    def __init__(self, id_: Hashable, rows: Optional[Set[Row]] = None):
-        """
-        Create a new table.
-
-        :param id_: The unique identifier of the table.
-        :param rows: The rows of the table.
-        """
-        Row.__init__(self, id_)
-        self.id_row_map = {}
-        self.update(rows if rows else {})
-
-    def update(self, *rows):
-        for row in rows:
-            if len(row) == 0:
-                continue
-            if isinstance(row, Row):
-                self.assert_is_new_row(row)
-                self.assert_row_has_required_columns(row)
-                self.id_row_map[row.id] = row
-            else:
-                row = create_table(row)
-            super().update(row)
-
-    def assert_is_new_row(self, row: Row):
-        """
-        Check if a row is new.
-
-        :param row: The row to check.
-        """
-        if row.id in self.id_row_map:
-            raise ValueError(f"Row with id {row.id} already exists in the table.")
-
-    def assert_row_has_required_columns(self, row: Row):
-        """
-        Check if a row has all the required columns.
-        """
-        for column_name in self.column_names:
-            if column_name not in row and not self[column_name].nullable:
-                raise ValueError(f"Row {row} is missing attribute {column_name}.")
-
-    @property
-    def column_names(self) -> Set[str]:
-        """
-        Get all column names of the table.
-
-        :return: A set of all column names.
-        """
-        return {column_name for column_name in self.keys()}
-
-    @property
-    def columns(self) -> Dict[str, Column]:
-        """
-        Get all columns of the table.
-
-        :return: A set of all columns.
-        """
-        return {column_name: self[column_name] for column_name in self.column_names}
-
-    def create_and_add_column(self, name: str, range_: set, values: Set[ColumnValue]):
-        """
-        Add a new column to the table.
-
-        :param name: The name of the column.
-        :param range_: The range of the column.
-        :param values: The values of the column.
-        """
-        column_type = Column.create(name, range_)
-        self.add_column(column_type(values))
-
-    def add_column(self, column: Column):
-        """
-        Add a new column to the table.
-
-        :param column: The column to add.
-        """
-        if 0 < len(self) != len(column):
-            raise ValueError(f"Column length {len(column)} does not match the number of rows {len(self)}.")
-        if len(self) == 0:
-            self[column.__class__.__name__] = column
-        else:
-            for row in self.id_row_map.values():
-                row[column.__class__.__name__] = column[row.id]
-
-    def __eq__(self, other):
-        if not isinstance(other, Table):
-            return False
-        return Row.__eq__(self, other)
-
-    def __hash__(self):
-        return self.id
-
-    def __str__(self):
-        return Row.__str__(self)
+    row = Row(name=name)
+    for col in df.columns:
+        range_ = {type(list(df[col].iterrows())[0])} if len(df[col].iterrows()) > 0 else set()
+        row[col] = Column.create(col, range_)(list(df[col].iterrows()))
+    return row
 
 
-def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
-                 obj_name: Optional[str] = None, table_id: Optional[int] = None) -> Table:
+def create_row(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
+               obj_name: Optional[str] = None, parent_is_iterable: bool = False) -> Row:
     """
     Create a table from an object.
 
@@ -343,79 +230,27 @@ def create_table(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
     :param recursion_idx: The current recursion index.
     :param max_recursion_idx: The maximum recursion index to prevent infinite recursion.
     :param obj_name: The name of the object.
-    :param table_id: The id of the table.
+    :param parent_is_iterable: Boolean indicating whether the parent object is iterable or not.
     :return: The table of the object.
     """
-    table_id = table_id or id(obj)
-    if isinstance(obj, DataFrame):
-        obj = [{att: row[1][att].item() for att in obj.keys().tolist()} for row in obj.iterrows()]
-    if hasattr(obj, "__iter__") and not isinstance(obj, str):
-        return create_table_from_iterable(obj, obj_name, recursion_idx=recursion_idx,
-                                          max_recursion_idx=max_recursion_idx, table_id=table_id)
-    if ((recursion_idx > max_recursion_idx)
-        or (obj.__class__.__module__ == "builtins") or (obj.__class__ in [MetaData, registry])):
-        return {}
-    table = Table.create(obj.__class__.__name__, make_set(obj.__class__))(id_=table_id)
+    row = Row(name=obj_name or obj.__class__.__name__)
+    if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
+            or (obj.__class__ in [MetaData, registry])):
+        return row
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
             continue
         attr_value = getattr(obj, attr)
         chained_name = f"{obj_name}.{attr}" if obj_name else attr
-        if isinstance(attr_value, (dict, UserDict)):
-            table.update({f"{chained_name}.{k}": v for k, v in attr_value.items()})
-        column, column_ref_table = get_ref_column_and_its_table(attr_value, attr, obj, chained_name,
-                                                                recursion_idx=recursion_idx + 1,
-                                                                max_recursion_idx=max_recursion_idx)
-        update_table_with_column_and_its_table(table, column, column_ref_table, chained_name)
-    return table
+        row = create_or_update_row_from_attribute(attr_value, attr, obj, chained_name, recursion_idx,
+                                                  max_recursion_idx, parent_is_iterable, row)
+    return row
 
 
-def create_table_from_iterable(obj: Any, name: Optional[str] = None,
-                               recursion_idx: int = 0, max_recursion_idx: int = 1,
-                               ids: Optional[List[int]] = None, table_id: Optional[int] = None) -> Table:
-    """
-    Create a table from an iterable object.
-
-    :param obj: The object to create a table from.
-    :param name: The name of the object.
-    :param recursion_idx: The current recursion index.
-    :param max_recursion_idx: The maximum recursion index to prevent infinite recursion.
-    :param ids: The ids of the rows.
-    :param table_id: The id of the table.
-    :return: The table of the object.
-    """
-    name = name or obj.__class__.__name__
-    table_id = table_id or id(obj)
-    values = list(obj.values()) if isinstance(obj, (dict, UserDict)) else obj
-    table = Table.create(name, make_set(type(values[0])))(id_=table_id)
-    if isinstance(obj, (dict, UserDict)):
-        for k, v in obj.items():
-            table.create_and_add_column(k, make_set(type(v)), {ColumnValue(table_id, v)})
-    else:
-        for i, v in enumerate(values):
-            id_ = ids[i] if ids else i
-            table.update(create_table(v, recursion_idx=recursion_idx + 1,
-                                      max_recursion_idx=max_recursion_idx, obj_name=name, table_id=id_))
-    return table
-
-
-def update_table_with_column_and_its_table(table: Table, column: Column, column_ref_table: Table, column_name: str):
-    """
-    Update a table with a column and its table.
-
-    :param table: The table to update.
-    :param column: The column to add.
-    :param column_ref_table: The table of the column.
-    :param column_name: The name of the column.
-    """
-    for sub_column_name, val in column_ref_table.items():
-        setattr(column, sub_column_name.replace(f"{column_name}.", ""), val)
-    table[column_name] = column
-    table.update(column_ref_table)
-
-
-def get_ref_column_and_its_table(attr_value: Any, name: str, obj: Any, obj_name: Optional[str] = None,
-                                 recursion_idx: int = 0, max_recursion_idx: int = 1) -> Tuple[Column, Table]:
+def create_or_update_row_from_attribute(attr_value: Any, name: str, obj: Any, obj_name: Optional[str] = None,
+                                        recursion_idx: int = 0, max_recursion_idx: int = 1,
+                                        parent_is_iterable: bool = False,
+                                        row: Optional[Row] = None) -> Row:
     """
     Get a reference column and its table.
 
@@ -425,21 +260,30 @@ def get_ref_column_and_its_table(attr_value: Any, name: str, obj: Any, obj_name:
     :param obj_name: The parent object name.
     :param recursion_idx: The recursion index to prevent infinite recursion.
     :param max_recursion_idx: The maximum recursion index.
+    :param parent_is_iterable: Boolean indicating whether the parent object is iterable or not.
+    :param row: The row to update.
     :return: A reference column and its table.
     """
+    row = row or Row(name=obj_name or obj.__class__.__name__)
+    if isinstance(attr_value, (dict, UserDict)):
+        row.update({f"{obj_name}.{k}": v for k, v in attr_value.items()})
     if hasattr(attr_value, "__iter__") and not isinstance(attr_value, str):
-        column, values_table = create_table_from_iterable_attribute(attr_value, name, obj, obj_name,
-                                                                    recursion_idx=recursion_idx,
-                                                                    max_recursion_idx=max_recursion_idx)
+        column, attr_row = create_column_and_row_from_iterable_attribute(attr_value, name, obj, obj_name,
+                                                                         recursion_idx=recursion_idx + 1,
+                                                                         max_recursion_idx=max_recursion_idx)
+        row[obj_name] = column
     else:
-        column = Column.create(name, {type(attr_value)}).from_obj(obj, make_set(attr_value))
-        values_table = create_table(attr_value, recursion_idx=recursion_idx,
-                                    max_recursion_idx=max_recursion_idx, obj_name=obj_name)
-    return column, values_table
+        attr_row = create_row(attr_value, recursion_idx=recursion_idx + 1,
+                              max_recursion_idx=max_recursion_idx,
+                              obj_name=obj_name, parent_is_iterable=False)
+        row[obj_name] = make_set(attr_value) if parent_is_iterable else attr_value
+    row.update(attr_row)
+    return row
 
 
-def create_table_from_iterable_attribute(attr_value: Any, name: str, obj: Any, obj_name: Optional[str] = None,
-                                         recursion_idx: int = 0, max_recursion_idx: int = 1) -> Tuple[Column, Table]:
+def create_column_and_row_from_iterable_attribute(attr_value: Any, name: str, obj: Any, obj_name: Optional[str] = None,
+                                                  recursion_idx: int = 0,
+                                                  max_recursion_idx: int = 1) -> Tuple[Column, Row]:
     """
     Get a table from an iterable.
 
@@ -451,19 +295,20 @@ def create_table_from_iterable_attribute(attr_value: Any, name: str, obj: Any, o
     :param max_recursion_idx: The maximum recursion index.
     :return: A table of the iterable.
     """
+    attr_row = Row(name=name or name.__class__.__name__)
     values = attr_value.values() if isinstance(attr_value, (dict, UserDict)) else attr_value
     range_ = {type(list(values)[0])} if len(values) > 0 else set()
     if len(range_) == 0:
         range_ = make_set(get_value_type_from_type_hint(name, obj))
     column = Column.create(name, range_).from_obj(obj, values)
-    table_type = Table.create(name, range_)
-    values_table = table_type(id_=id(values))
     for idx, val in enumerate(values):
-        val_table = create_table(val, recursion_idx=recursion_idx,
-                                 max_recursion_idx=max_recursion_idx,
-                                 obj_name=obj_name)
-        values_table.update(val_table)
-    return column, values_table
+        sub_attr_row = create_row(val, recursion_idx=recursion_idx,
+                                  max_recursion_idx=max_recursion_idx,
+                                  obj_name=obj_name, parent_is_iterable=True)
+        attr_row.update(sub_attr_row)
+    for sub_attr, val in attr_row.items():
+        setattr(column, sub_attr.replace(f"{obj_name}.", ""), val)
+    return column, attr_row
 
 
 def show_current_and_corner_cases(case: Any, targets: Optional[Union[List[Column], List[SQLColumn]]] = None,
@@ -495,9 +340,9 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Union[List[Column
         if last_evaluated_rule and last_evaluated_rule.fired:
             corner_row_dict = row_to_dict(last_evaluated_rule.corner_case)
     else:
-        case_dict = create_table(case, max_recursion_idx=0)
+        case_dict = create_row(case, max_recursion_idx=0)
         if last_evaluated_rule and last_evaluated_rule.fired:
-            corner_row_dict = create_table(corner_case, max_recursion_idx=0)
+            corner_row_dict = create_row(corner_case, max_recursion_idx=0)
 
     if corner_row_dict:
         corner_conclusion = last_evaluated_rule.conclusion
