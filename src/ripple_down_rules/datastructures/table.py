@@ -15,21 +15,96 @@ if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
 
 
-class Row(UserDict):
+class SubClassFactory:
+    """
+    A custom set class that is used to add other attributes to the set. This is similar to a table where the set is the
+    table, the attributes are the columns, and the values are the rows.
+    """
+    _value_range: set
+    """
+    The range of the attribute, this can be a set of possible values or a range of numeric values (int, float).
+    """
+    _registry: Dict[(str, type), Type[SubClassFactory]] = {}
+    """
+    A dictionary of all dynamically created subclasses of this class.
+    """
+
+    @classmethod
+    def create(cls, name: str, range_: set, **kwargs) -> Type[SubClassFactory]:
+        """
+        Create a new custom set subclass.
+
+        :param name: The name of the column.
+        :param range_: The range of the column values.
+        :return: The new column type.
+        """
+        existing_class = cls._get_and_update_subclass(name, range_)
+        if existing_class:
+            return existing_class
+
+        new_attribute_type: Type[SubClassFactory] = type(name, (cls,), {})
+        new_attribute_type._value_range = range_
+        for key, value in kwargs.items():
+            setattr(new_attribute_type, key, value)
+
+        cls.register(new_attribute_type)
+        return new_attribute_type
+
+    @classmethod
+    def _get_and_update_subclass(cls, name: str, range_: set) -> Optional[Type[SubClassFactory]]:
+        """
+        Get a subclass of the attribute class and update its range if necessary.
+
+        :param name: The name of the column.
+        :param range_: The range of the column values.
+        """
+        key = (name.lower(), cls)
+        if key in cls._registry:
+            if not cls._registry[key].is_within_range(range_):
+                if isinstance(cls._registry[key]._value_range, set):
+                    cls._registry[key]._value_range.update(range_)
+                else:
+                    raise ValueError(f"Range of {key} is different from {cls._registry[key]._value_range}.")
+            return cls._registry[key]
+
+    @classmethod
+    def register(cls, subclass: Type[SubClassFactory]):
+        """
+        Register a subclass of the attribute class, this is used to be able to dynamically create Attribute subclasses.
+
+        :param subclass: The subclass to register.
+        """
+        if not issubclass(subclass, SubClassFactory):
+            raise ValueError(f"{subclass} is not a subclass of CustomSet.")
+        if subclass not in cls._registry:
+            cls._registry[(subclass.__name__.lower(), cls)] = subclass
+        else:
+            raise ValueError(f"{subclass} is already registered.")
+
+    @classmethod
+    def is_within_range(cls, value: Any) -> bool:
+        """
+        Check if a value is within the range of the custom set.
+
+        :param value: The value to check.
+        :return: Boolean indicating whether the value is within the range or not.
+        """
+        if hasattr(value, "__iter__") and not isinstance(value, str):
+            return set(value).issubset(cls._value_range)
+        elif isinstance(value, str):
+            return value.lower() in cls._value_range
+        else:
+            return value in cls._value_range
+
+    def __instancecheck__(self, instance):
+        return isinstance(instance, (SubClassFactory, *self._value_range))
+
+
+class Row(UserDict, SubClassFactory):
     """
     A collection of attributes that represents a set of constraints on a case. This is a dictionary where the keys are
     the names of the attributes and the values are the attributes. All are stored in lower case.
     """
-
-    def __init__(self, data: Optional[Dict[str, Any]] = None, name: Optional[str] = None):
-        """
-        Create a new row.
-
-        :param name: The name of the row.
-        :param data: The attributes of the row.
-        """
-        super().__init__(data)
-        self.__class__.__name__ = name or self.__class__.__name__
 
     def __getitem__(self, item: str) -> Any:
         return super().__getitem__(item.lower())
@@ -62,98 +137,8 @@ class Row(UserDict):
     def __hash__(self):
         return hash(tuple(self.items()))
 
-
-class ColumnMixin:
-    """
-    A custom set class that is used to add other attributes to the set. This is similar to a table where the set is the
-    table, the attributes are the columns, and the values are the rows.
-    """
-    value_range: set
-    """
-    The range of the attribute, this can be a set of possible values or a range of numeric values (int, float).
-    """
-    registry: Dict[(str, type), Type[ColumnMixin]] = {}
-    """
-    A dictionary of all dynamically created subclasses of the CustomSet class.
-    """
-    nullable: bool = True
-    """
-    A boolean indicating whether the column can be None or not.
-    """
-    mutually_exclusive: bool = False
-    """
-    A boolean indicating whether the column is mutually exclusive or not. (i.e. can only have one value)
-    """
-
-    @classmethod
-    def create(cls, name: str, range_: set, nullable: bool = True) -> Type[ColumnMixin]:
-        """
-        Create a new custom set subclass.
-
-        :param name: The name of the column.
-        :param range_: The range of the column values.
-        :param nullable: Boolean indicating whether the column can be None or not.
-        :return: The new column type.
-        """
-        existing_class = cls._get_and_update_subclass(name, range_)
-        if existing_class:
-            return existing_class
-
-        new_attribute_type: Type[ColumnMixin] = type(name, (cls,), {})
-        new_attribute_type.value_range = range_
-        new_attribute_type.nullable = nullable
-
-        cls.register(new_attribute_type)
-        return new_attribute_type
-
-    @classmethod
-    def _get_and_update_subclass(cls, name: str, range_: set) -> Optional[Type[ColumnMixin]]:
-        """
-        Get a subclass of the attribute class and update its range if necessary.
-
-        :param name: The name of the column.
-        :param range_: The range of the column values.
-        """
-        key = (name, cls)
-        if key in cls.registry:
-            if not cls.registry[key].is_within_range(range_):
-                if isinstance(cls.registry[key].value_range, set):
-                    cls.registry[key].value_range.update(range_)
-                else:
-                    raise ValueError(f"Range of {key} is different from {cls.registry[key].value_range}.")
-            return cls.registry[key]
-
-    @classmethod
-    def register(cls, subclass: Type[ColumnMixin]):
-        """
-        Register a subclass of the attribute class, this is used to be able to dynamically create Attribute subclasses.
-
-        :param subclass: The subclass to register.
-        """
-        if not issubclass(subclass, ColumnMixin):
-            raise ValueError(f"{subclass} is not a subclass of CustomSet.")
-        if subclass not in cls.registry:
-            cls.registry[subclass.__name__.lower()] = subclass
-        else:
-            raise ValueError(f"{subclass} is already registered.")
-
-    @classmethod
-    def is_within_range(cls, value: Any) -> bool:
-        """
-        Check if a value is within the range of the custom set.
-
-        :param value: The value to check.
-        :return: Boolean indicating whether the value is within the range or not.
-        """
-        if hasattr(value, "__iter__") and not isinstance(value, str):
-            return set(value).issubset(cls.value_range)
-        elif isinstance(value, str):
-            return value.lower() in cls.value_range
-        else:
-            return value in cls.value_range
-
     def __instancecheck__(self, instance):
-        return isinstance(instance, (set, ColumnMixin, *self.value_range))
+        return isinstance(instance, (dict, UserDict, Row)) or super().__instancecheck__(instance)
 
 
 @dataclass
@@ -179,7 +164,15 @@ class ColumnValue:
         return self.id
 
 
-class Column(set, ColumnMixin):
+class Column(set, SubClassFactory):
+    nullable: bool = True
+    """
+    A boolean indicating whether the column can be None or not.
+    """
+    mutually_exclusive: bool = False
+    """
+    A boolean indicating whether the column is mutually exclusive or not. (i.e. can only have one value)
+    """
     def __init__(self, values: Set[ColumnValue]):
         """
         Create a new column.
@@ -189,6 +182,11 @@ class Column(set, ColumnMixin):
         values = make_set(values)
         self.id_value_map: Dict[Hashable, Union[ColumnValue, Set[ColumnValue]]] = {id(v): v for v in values}
         super().__init__([v.value for v in values])
+
+    @classmethod
+    def create(cls, name: str, range_: set,
+               nullable: bool = False, mutually_exclusive: bool = False) -> Type[SubClassFactory]:
+        return super().create(name, range_, **{"nullable": nullable, "mutually_exclusive": mutually_exclusive})
 
     @classmethod
     def from_obj(cls, row_obj: Any, values: Set[Any]):
@@ -205,6 +203,9 @@ class Column(set, ColumnMixin):
     def __str__(self):
         return str({v for v in self})
 
+    def __instancecheck__(self, instance):
+        return isinstance(instance, (set, self.__class__)) or super().__instancecheck__(instance)
+
 
 def create_row_from_dataframe(df: DataFrame, name: Optional[str] = None) -> Row:
     """
@@ -214,7 +215,7 @@ def create_row_from_dataframe(df: DataFrame, name: Optional[str] = None) -> Row:
     :param name: The name of the DataFrame.
     :return: The row of the DataFrame.
     """
-    row = Row(name=name)
+    row = Row()
     for col in df.columns:
         range_ = {type(list(df[col].iterrows())[0])} if len(df[col].iterrows()) > 0 else set()
         row[col] = Column.create(col, range_)(list(df[col].iterrows()))
@@ -233,7 +234,7 @@ def create_row(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
     :param parent_is_iterable: Boolean indicating whether the parent object is iterable or not.
     :return: The table of the object.
     """
-    row = Row(name=obj_name or obj.__class__.__name__)
+    row = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)))()
     if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
             or (obj.__class__ in [MetaData, registry])):
         return row
@@ -264,7 +265,7 @@ def create_or_update_row_from_attribute(attr_value: Any, name: str, obj: Any, ob
     :param row: The row to update.
     :return: A reference column and its table.
     """
-    row = row or Row(name=obj_name or obj.__class__.__name__)
+    row = row if row is not None else Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)))()
     if isinstance(attr_value, (dict, UserDict)):
         row.update({f"{obj_name}.{k}": v for k, v in attr_value.items()})
     if hasattr(attr_value, "__iter__") and not isinstance(attr_value, str):
@@ -295,11 +296,13 @@ def create_column_and_row_from_iterable_attribute(attr_value: Any, name: str, ob
     :param max_recursion_idx: The maximum recursion index.
     :return: A table of the iterable.
     """
-    attr_row = Row(name=name or name.__class__.__name__)
     values = attr_value.values() if isinstance(attr_value, (dict, UserDict)) else attr_value
     range_ = {type(list(values)[0])} if len(values) > 0 else set()
     if len(range_) == 0:
         range_ = make_set(get_value_type_from_type_hint(name, obj))
+    if not range_:
+        raise ValueError(f"Could not determine the range of {name} in {obj}.")
+    attr_row = Row.create(name or list(range_)[0].__name__, range_)()
     column = Column.create(name, range_).from_obj(obj, values)
     for idx, val in enumerate(values):
         sub_attr_row = create_row(val, recursion_idx=recursion_idx,
