@@ -3,15 +3,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from anytree import NodeMixin
-from typing_extensions import List, Optional, Self, Dict, Union, TYPE_CHECKING, Any
+from typing_extensions import List, Optional, Self, Union
 
-from .datastructures import CallableExpression
-from .datastructures.attribute import Attribute, Stop
-from .datastructures.dataclasses import Condition
-from .datastructures.enums import RDREdge
-
-if TYPE_CHECKING:
-    from .datastructures.case import Case
+from .datastructures import CallableExpression, Case, Column
+from .datastructures.enums import RDREdge, Stop
 
 
 class Rule(NodeMixin, ABC):
@@ -21,7 +16,7 @@ class Rule(NodeMixin, ABC):
     """
 
     def __init__(self, conditions: Optional[CallableExpression] = None,
-                 conclusion: Optional[Dict[str, Any]] = None,
+                 conclusion: Optional[CallableExpression] = None,
                  parent: Optional[Rule] = None,
                  corner_case: Optional[Case] = None,
                  weight: Optional[str] = None):
@@ -71,13 +66,6 @@ class Rule(NodeMixin, ABC):
         Evaluate the next rule after this rule is evaluated.
         """
         pass
-
-    def get_different_attributes(self, x: Case) -> Dict[str, Attribute]:
-        """
-        :param x: The case to compare with the corner case.
-        :return: The differentiating attributes between the case and the corner case as a dictionary.
-        """
-        return x - self.corner_case
 
     @property
     def name(self):
@@ -169,9 +157,7 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
             returned_rule = self.alternative(x) if self.alternative else self
         return returned_rule if returned_rule.fired else self
 
-    def fit_rule(self, x: Case, target: Attribute, conditions: Optional[Dict[str, Condition]] = None):
-        if not conditions:
-            conditions = Condition.from_two_cases(self.corner_case, x)
+    def fit_rule(self, x: Case, target: CallableExpression, conditions: CallableExpression):
         new_rule = SingleClassRule(conditions, target,
                                    corner_case=x, parent=self)
         if self.fired:
@@ -192,7 +178,7 @@ class MultiClassStopRule(Rule, HasAlternativeRule):
 
     def __init__(self, *args, **kwargs):
         super(MultiClassStopRule, self).__init__(*args, **kwargs)
-        self.conclusion = Stop()
+        self.conclusion = Stop.stop
 
     def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, MultiClassTopRule]]:
         if self.fired:
@@ -219,10 +205,7 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         elif self.alternative:  # Here alternative refers to next rule in MultiClassRDR
             return self.alternative
 
-    def fit_rule(self, x: Case, target: Attribute, conditions: Optional[Dict[str, Condition]] = None):
-        if not conditions:
-            conditions = Condition.from_two_cases(self.corner_case, x)
-
+    def fit_rule(self, x: Case, target: CallableExpression, conditions: CallableExpression):
         if self.fired and target != self.conclusion:
             self.refinement = MultiClassStopRule(conditions, corner_case=x, parent=self)
         elif not self.fired:

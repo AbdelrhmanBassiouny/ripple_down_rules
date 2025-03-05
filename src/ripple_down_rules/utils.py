@@ -8,16 +8,51 @@ import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from ordered_set import OrderedSet
-from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn
 from tabulate import tabulate
-from typing_extensions import Callable, Set, Any, Type, Dict, List, Optional, Union, TYPE_CHECKING
+from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
+    get_origin, get_args, Tuple
 
 if TYPE_CHECKING:
-    from ripple_down_rules.datastructures import Case, Attribute, create_row
-    from ripple_down_rules.rules import Rule
+    pass
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
+    """
+    Get the value type from the type hint of an object attribute.
+
+    :param attr_name: The name of the attribute.
+    :param obj: The object to get the attributes from.
+    """
+    hint, origin, args = get_hint_for_attribute(attr_name, obj)
+    if not origin:
+        raise ValueError(f"Couldn't get type for Attribute {attr_name}, please provide a type hint")
+    if origin in [list, set, tuple, type, dict]:
+        attr_value_type = args[0]
+    else:
+        raise ValueError(f"Attribute {attr_name} has unsupported type {hint}.")
+    return attr_value_type
+
+
+def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Any, Any, Tuple[Any]]:
+    """
+    Get the type hint for an attribute of an object.
+
+    :param attr_name: The name of the attribute.
+    :param obj: The object to get the attribute from.
+    :return: The type hint of the attribute.
+    """
+    class_attr = getattr(obj.__class__, attr_name)
+    if isinstance(class_attr, property):
+        if not class_attr.fget:
+            raise ValueError(f"Attribute {attr_name} has no getter.")
+        hint = get_type_hints(class_attr.fget)['return']
+    else:
+        hint = get_type_hints(obj.__class__)[attr_name]
+    origin = get_origin(hint)
+    args = get_args(hint)
+    return hint, origin, args
 
 
 def table_rows_as_str(row_dict: Dict[str, Any], columns_per_row: int = 9):

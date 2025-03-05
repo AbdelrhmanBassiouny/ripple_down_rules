@@ -5,8 +5,9 @@ from unittest import TestCase, skip
 from typing_extensions import List, Optional
 
 from ripple_down_rules.datasets import load_zoo_dataset
-from ripple_down_rules.datastructures import Case, Condition, MCRDRMode, Habitat, Attribute, \
-    Row, Operator
+from ripple_down_rules.datastructures import Case, MCRDRMode, \
+    Row, Column, Category, CallableExpression
+from ripple_down_rules.datasets import HabitatCol as Habitat, SpeciesCol as Species
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree, get_all_subclasses
@@ -27,7 +28,8 @@ class TestRDR(TestCase):
             os.makedirs(cls.test_results_dir)
 
     def tearDown(self):
-        Attribute.registry = {}
+        Row.registry = {}
+        Column.registry = {}
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -164,7 +166,7 @@ class TestRDR(TestCase):
                               add_extra_conclusions=True, expert=expert)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_extra_classify")
-        LivesOnlyOnLand = get_all_subclasses(Attribute)["LivesOnlyOnLand".lower()]
+        LivesOnlyOnLand = get_all_subclasses(Column)["LivesOnlyOnLand".lower()]
         self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
 
         if save_answers:
@@ -177,7 +179,7 @@ class TestRDR(TestCase):
         draw_tree = False
         use_loaded_answers = True
         save_answers = False
-        expert = MCRDRTester()
+        expert = Human(use_loaded_answers=use_loaded_answers)
         mcrdr = MultiClassRDR()
         mcrdr.fit(self.all_cases, self.targets,
                   add_extra_conclusions=False, expert=expert, animate_tree=False)
@@ -188,7 +190,7 @@ class TestRDR(TestCase):
         mcrdr.fit(self.all_cases, self.targets,
                   add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
         cats = mcrdr.classify(self.all_cases[50])
-        LivesOnlyOnLand = get_all_subclasses(Attribute)["LivesOnlyOnLand".lower()]
+        LivesOnlyOnLand = get_all_subclasses(Column)["LivesOnlyOnLand".lower()]
         self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_extra")
@@ -205,7 +207,7 @@ class TestRDR(TestCase):
 
         grdr = GeneralRDR()
 
-        targets = [self.targets[0], Habitat("land")]
+        targets = [self.targets[0], Habitat.land]
         cats = grdr.fit_case(self.all_cases[0], targets, expert=expert)
         self.assertEqual(cats, targets)
 
@@ -227,22 +229,22 @@ class TestRDR(TestCase):
 
         grdr = GeneralRDR({type(fit_scrdr.start_rule.conclusion): fit_scrdr})
 
-        def get_habitat(x: Row, t: Attribute):
+        def get_habitat(x: Row, t: Category):
             all_habs = []
-            if t == "mammal" and x["aquatic"] == 0:
-                all_habs.append(Habitat("land"))
-            elif t == "bird":
-                all_habs.append(Habitat({"land"}))
+            if t == Species.mammal and x["aquatic"] == 0:
+                all_habs.append(Habitat.land)
+            elif t == Species.bird:
+                all_habs.append(Habitat.land)
                 if x["airborne"] == 1:
-                    all_habs[-1]._value.update({"air"})
+                    all_habs[-1].update(Habitat.air)
                 if x["aquatic"] == 1:
-                    all_habs[-1]._value.update({"water"})
-            elif t == "fish":
-                all_habs.append(Habitat("water"))
-            elif t == "molusc":
-                all_habs.append(Habitat({"land"}))
+                    all_habs[-1].update(Habitat.water)
+            elif t == Species.fish:
+                all_habs.append(Habitat.water)
+            elif t == Species.molusc:
+                all_habs.append(Habitat.land)
                 if x["aquatic"] == 1:
-                    all_habs[-1]._value.update({"water"})
+                    all_habs[-1].update(Habitat.water)
             return all_habs + [t]
 
         n = 20
@@ -254,7 +256,7 @@ class TestRDR(TestCase):
                         filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
 
         cats = grdr.classify(self.all_cases[50])
-        self.assertEqual(cats, [self.targets[50], Habitat("land")])
+        self.assertEqual(cats, [self.targets[50], Habitat.land])
 
         if save_answers:
             cwd = os.getcwd()
@@ -282,7 +284,7 @@ class TestRDR(TestCase):
                         filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
 
         cats = grdr.classify(self.all_cases[50])
-        self.assertEqual(cats, [self.targets[50], Habitat("land")])
+        self.assertEqual(cats, [self.targets[50], Habitat.land])
 
         if save_answers:
             cwd = os.getcwd()
@@ -298,41 +300,3 @@ class TestRDR(TestCase):
         scrdr.fit(self.all_cases, self.targets, expert=expert,
                   animate_tree=draw_tree)
         return scrdr
-
-
-class MCRDRTester(Expert):
-
-    def __init__(self, mode: MCRDRMode = MCRDRMode.StopOnly,
-                 expert_answers_dir: str = "./test_expert_answers"):
-        self.mode = mode
-        self.expert_answers_dir = expert_answers_dir
-        self.all_expert_answers = self.get_all_expert_answers(mode)
-        self.current_answer_idx = 0
-
-    def ask_for_conditions(self, x: Case, target: Attribute, last_evaluated_rule=None):
-        answer = self.all_expert_answers[self.current_answer_idx]
-        self.current_answer_idx += 1
-        return answer
-
-    def ask_for_extra_conclusions(self, x: Case, current_conclusions=None):
-        pass
-
-    def get_all_expert_answers(self, mode: MCRDRMode):
-        if mode == MCRDRMode.StopPlusRule:
-            json_file = self.expert_answers_dir + "/mcrdr_stop_plus_rule_answers_fit.json"
-            with open(json_file, "r") as f:
-                all_expert_answers = json.load(f)
-        elif mode == MCRDRMode.StopOnly:
-            json_file = self.expert_answers_dir + "/mcrdr_stop_only_answers_fit.json"
-            with open(json_file, "r") as f:
-                all_expert_answers = json.load(f)
-        all_expert_conditions = [{name: Operator.parse_operators(c)[0] for name, c in a.items()} for a in all_expert_answers]
-        all_expert_conditions = [
-            {name: Condition(op.arg_names[0], float(op.arg_names[1]), op) for name, op in a.items()}
-            for a in all_expert_conditions]
-        return all_expert_conditions
-
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Attribute,
-                                     target: Optional[Attribute] = None,
-                                     current_conclusions: Optional[List[Attribute]] = None) -> bool:
-        pass

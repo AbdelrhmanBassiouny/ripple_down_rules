@@ -1,6 +1,31 @@
+from __future__ import annotations
+
 from enum import auto, Enum
 
 from typing_extensions import List
+
+
+class Category(str, Enum):
+
+    @classmethod
+    def from_str(cls, value: str) -> Category:
+        return getattr(cls, value)
+
+    @classmethod
+    def from_strs(cls, values: List[str]) -> List[Category]:
+        return [cls.from_str(value) for value in values]
+
+    @property
+    def as_dict(self):
+        return {self.__class__.__name__.lower(): self.value}
+
+
+class Stop(Category):
+    """
+    A stop category is a special category that represents the stopping of the classification to prevent a wrong
+    conclusion from being made.
+    """
+    stop = "stop"
 
 
 class ExpressionParser(Enum):

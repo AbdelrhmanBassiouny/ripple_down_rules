@@ -3,20 +3,16 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 
-from sqlalchemy.orm import DeclarativeBase, Session, MappedColumn as Column
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Sequence, Any
+from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union
 
-from .datastructures import (Operator, Condition, Attribute, Case, RDRMode, Categorical, ObjectAttributeTarget,
-                             PromptFor, CallableExpression)
-from .failures import InvalidOperator
-from .utils import get_all_subclasses
-from .prompt import prompt_user_for_expression, prompt_user_about_case
+from .datastructures import (Case, PromptFor, CallableExpression, Column)
 from .datastructures.table import show_current_and_corner_cases
+from .prompt import prompt_user_for_expression, prompt_user_about_case
+from .utils import get_all_subclasses
 
 if TYPE_CHECKING:
     from .rdr import Rule
-
-SQLTable: Type[DeclarativeBase]
 
 
 class Expert(ABC):
@@ -34,13 +30,13 @@ class Expert(ABC):
     """
     A flag to indicate if the expert should use loaded answers or not.
     """
-    known_categories: Optional[Dict[str, Type[Attribute]]] = None
+    known_categories: Optional[Dict[str, Type[Column]]] = None
     """
-    The known categories (i.e. Attribute types) to use.
+    The known categories (i.e. Column types) to use.
     """
 
     @abstractmethod
-    def ask_for_conditions(self, x: Case, targets: List[Attribute], last_evaluated_rule: Optional[Rule] = None) \
+    def ask_for_conditions(self, x: Case, targets: List[Column], last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
@@ -54,8 +50,8 @@ class Expert(ABC):
         pass
 
     @abstractmethod
-    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Attribute]) \
-            -> Dict[Attribute, Dict[str, Condition]]:
+    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Column]) \
+            -> Dict[Column, CallableExpression]:
         """
         Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
         that category.
@@ -67,9 +63,9 @@ class Expert(ABC):
         pass
 
     @abstractmethod
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Attribute,
-                                     targets: Optional[List[Attribute]] = None,
-                                     current_conclusions: Optional[List[Attribute]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Column,
+                                     targets: Optional[List[Column]] = None,
+                                     current_conclusions: Optional[List[Column]] = None) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
@@ -122,14 +118,14 @@ class Human(Expert):
             self.all_expert_answers = json.load(f)
 
     def ask_for_conditions(self, case: Case,
-                           targets: Union[List[Attribute], List[Column]],
+                           targets: Union[List[Column], List[Column]],
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         if not self.use_loaded_answers:
             show_current_and_corner_cases(case, targets, last_evaluated_rule=last_evaluated_rule)
-        return self._get_relational_conditions(case, targets)
+        return self._get_conditions(case, targets)
 
-    def _get_relational_conditions(self, case: Case, targets: Union[List[Attribute], List[Column]]) \
+    def _get_conditions(self, case: Case, targets: List[Column]) \
             -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
@@ -142,10 +138,7 @@ class Human(Expert):
         targets = targets if isinstance(targets, list) else [targets]
         condition = None
         for target in targets:
-            if isinstance(target, Attribute):
-                target_name = target.name
-            else:
-                target_name = target.__class__.__name__
+            target_name = target.__class__.__name__
             user_input = None
             if self.use_loaded_answers:
                 user_input = self.all_expert_answers.pop(0)
@@ -157,8 +150,8 @@ class Human(Expert):
                 self.all_expert_answers.append(user_input)
         return condition
 
-    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Attribute]) \
-            -> Dict[Attribute, Dict[str, Condition]]:
+    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Column]) \
+            -> Dict[Column, CallableExpression]:
         """
         Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
         that category.
@@ -172,12 +165,12 @@ class Human(Expert):
             category = self.ask_for_conclusion(x, current_conclusions)
             if not category:
                 break
-            extra_conclusions[category] = self._get_relational_conditions(x, category)
+            extra_conclusions[category] = self._get_conditions(x, category)
         return extra_conclusions
 
-    def ask_for_conclusion(self, case: Case, current_conclusions: Optional[List[Attribute]] = None,
+    def ask_for_conclusion(self, case: Case, current_conclusions: Optional[List[Column]] = None,
                            attribute_name: Optional[str] = None, attribute_type: Optional[Type] = None
-                           ) -> Optional[Union[CallableExpression, Attribute, Column]]:
+                           ) -> Optional[Union[CallableExpression, Column, Column]]:
         """
         Ask the expert to provide a conclusion for the case.
 
@@ -195,31 +188,7 @@ class Human(Expert):
             self.all_expert_answers.append(expert_input)
         return CallableExpression(expert_input, attribute_type, session=self.session)(case)
 
-    def parse_conclusion(self, value: str) -> Attribute:
-        """
-        Parse the conclusion from the user input. If the conclusion is not found in the known categories,
-        a new category is created with the name and value else a new instance of the category is created with the value.
-
-        :param value: The value to parse.
-        :return: The parsed category name and value.
-        :raises ValueError: If the category name contains non-alphabetic characters.
-        """
-        if ':' not in value:
-            cat_name = "".join([w.capitalize() for w in value.split()])
-            if not all(char.isalpha() for char in cat_name):
-                raise ValueError(f"Attribute name {cat_name} should only contain alphabets")
-            cat_value = True
-        else:
-            cat_name_value = value.split(":")
-            cat_name = cat_name_value[0].strip(' "')
-            if len(cat_name_value) == 2:
-                cat_value = self.parse_value(cat_name_value[1])
-            else:
-                raise ValueError(f"Input format \"{value}\" is not correct")
-        category = self.create_category_instance(cat_name, cat_value)
-        return category
-
-    def create_category_instance(self, cat_name: str, cat_value: Union[str, int, float, set]) -> Attribute:
+    def create_category_instance(self, cat_name: str, cat_value: Union[str, int, float, set]) -> Column:
         """
         Create a new category instance.
 
@@ -232,7 +201,7 @@ class Human(Expert):
             category_type = self.create_new_category_type(cat_name)
         return category_type(cat_value)
 
-    def get_category_type(self, cat_name: str) -> Optional[Type[Attribute]]:
+    def get_category_type(self, cat_name: str) -> Optional[Type[Column]]:
         """
         Get the category type from the known categories.
 
@@ -240,24 +209,24 @@ class Human(Expert):
         :return: The category type.
         """
         cat_name = cat_name.lower()
-        self.known_categories = get_all_subclasses(Attribute) if not self.known_categories else self.known_categories
-        self.known_categories.update(Attribute.registry)
+        self.known_categories = get_all_subclasses(Column) if not self.known_categories else self.known_categories
+        self.known_categories.update(Column.registry)
         category_type = None
         if cat_name in self.known_categories:
             category_type = self.known_categories[cat_name]
         return category_type
 
-    def create_new_category_type(self, cat_name: str) -> Type[Attribute]:
+    def create_new_category_type(self, cat_name: str) -> Type[Column]:
         """
         Create a new category type.
 
         :param cat_name: The name of the category.
         :return: A new category type.
         """
-        category_type: Type[Attribute] = type(cat_name, (Categorical,), {})
-        if self.ask_if_category_is_mutually_exclusive(category_type.__name__):
-            category_type.mutually_exclusive = True
-        Attribute.register(category_type)
+        if self.ask_if_category_is_mutually_exclusive(cat_name):
+            category_type: Type[Column] = Column.create(cat_name, set(), mutually_exclusive=True)
+        else:
+            category_type: Type[Column] = Column.create(cat_name, set())
         return category_type
 
     def ask_if_category_is_mutually_exclusive(self, category_name: str) -> bool:
@@ -269,9 +238,9 @@ class Human(Expert):
         question = f"Can a case have multiple values of the new category {category_name}? (y/n):"
         return not self.ask_yes_no_question(question)
 
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Attribute,
-                                     targets: Optional[List[Attribute]] = None,
-                                     current_conclusions: Optional[List[Attribute]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Column,
+                                     targets: Optional[List[Column]] = None,
+                                     current_conclusions: Optional[List[Column]] = None) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
@@ -309,143 +278,3 @@ class Human(Expert):
                 return True
             elif answer.lower() == "n":
                 return False
-
-    def _get_conditions(self, all_names: List[str], conditions_for: str = "") -> Dict[str, Condition]:
-        """
-        Get the conditions from the user.
-
-        :param all_names: list of all attribute names.
-        :return: the conditions as a dictionary.
-        """
-        if not self.use_loaded_answers:
-            print(
-                f"Please provide conditions for {conditions_for} as comma separated conditions using: <, >, <=, >=, ==:")
-        while True:
-            if self.use_loaded_answers:
-                value = self.all_expert_answers.pop(0)
-            else:
-                value = input()
-                self.all_expert_answers.append(value)
-            rules = value.split(",")
-            all_messages = []
-            all_rule_conditions = {}
-            for rule in rules:
-                rule_conditions, messages = self.parse_rule(rule, all_names)
-                all_messages += messages if messages else []
-                all_rule_conditions.update(rule_conditions)
-            if not all_messages:
-                return all_rule_conditions
-            elif not self.use_loaded_answers:
-                print("\n".join(all_messages))
-
-    def parse_rule(self, rule: str, all_names: List[str]) -> Tuple[Dict[str, Condition], List[str]]:
-        """
-        Parse the rule from the user input.
-
-        :param rule: The rule to parse.
-        :param all_names: list of all attribute names.
-        :return: the rule conditions as a dictionary and the error messages.
-        """
-        rule_conditions = {}
-        rule = rule.strip()
-        messages, name, value, operator = self.validate_input_and_get_error_msgs(all_names, rule)
-        if messages:
-            messages.append(f"Please rewrite this condition: \"{rule}\"")
-        else:
-            # map value to string if it contains characters or quotes, else map to float
-            parsed_value = self.parse_value(value)
-            rule_conditions[name] = Condition(name, parsed_value, operator)
-        return rule_conditions, messages
-
-    def parse_value(self, value: str) -> Union[str, int, float, set]:
-        """
-        Parse the value from the user input.
-
-        :param value: The value to parse.
-        :return: The parsed value as a string, float or set of string or float.
-        """
-        if self.is_set(value):
-            set_values = value[1:-1].split(",")
-            for i, val in enumerate(set_values):
-                set_values[i] = self.parse_string_int_or_float(val)
-            parsed_value = set(set_values)
-        else:
-            parsed_value = self.parse_string_int_or_float(value)
-        return parsed_value
-
-    def parse_string_int_or_float(self, val: str) -> Union[str, int, float]:
-        """
-        Parse the value to a string or a float.
-
-        :param val: The value to parse.
-        :return: The parsed value as a string or a float.
-        """
-        if self.is_string(val):
-            return val.strip(' "' + "'")
-        elif val.isdigit():
-            return int(val)
-        elif self.is_float(val):
-            return float(val)
-        return val
-
-    @staticmethod
-    def is_float(val: str) -> bool:
-        """
-        Check if the value is a float.
-
-        :param val: The value to check.
-        """
-        try:
-            float(val)
-            return True
-        except ValueError:
-            return False
-
-    @staticmethod
-    def is_string(val: str) -> bool:
-        """
-        Check if the value is a string.
-
-        :param val: The value to check.
-        """
-        return (val[0] in ["'", '"'] and val[0] == val[-1]) or any(char.isalpha() for char in val)
-
-    @staticmethod
-    def is_set(val: str) -> bool:
-        """
-        Check if the value is a set.
-
-        :param val: The value to check.
-        """
-        return ((val[0] == "{" and val[-1] == "}")
-                or (val[0] == "[" and val[-1] == "]")
-                or (val[0] == "(" and val[-1] == ")"))
-
-    @staticmethod
-    def validate_input_and_get_error_msgs(all_names, rule) \
-            -> Tuple[List[str], Optional[str], Optional[str], Optional[Operator]]:
-        """
-        Validate the input and get error messages.
-
-        :param all_names: list of all attribute names.
-        :param rule: The rule to validate.
-        :return: list of error messages, and the name, value and operator of the rule.
-        """
-        try:
-            operator = Operator.parse_operators(rule)
-            operator = operator[0]
-            name = operator.arg_names[0]
-            value = operator.arg_names[1]
-            messages = []
-            if not name:
-                messages.append(f"Name cannot be empty")
-            elif name not in all_names:
-                messages.append(f"Attribute {name} not found in the attributes")
-            if not value:
-                messages.append(f"Value seems to be wrong or missing")
-            if not operator:
-                messages.append(f"Operator seems to be wrong or missing")
-            return messages, name, value, operator
-        except InvalidOperator as e:
-            messages = [str(e) + " please enter it again"]
-            return messages, None, None, None

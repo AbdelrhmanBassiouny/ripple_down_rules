@@ -9,11 +9,12 @@ from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING, Tuple
 
-from . import get_value_type_from_type_hint
-from ..utils import make_set, row_to_dict, table_rows_as_str
+from . import Category
+from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
+    from .callable_expression import CallableExpression
 
 
 class SubClassFactory:
@@ -106,6 +107,7 @@ class Row(UserDict, SubClassFactory):
     A collection of attributes that represents a set of constraints on a case. This is a dictionary where the keys are
     the names of the attributes and the values are the attributes. All are stored in lower case.
     """
+
     def __init__(self, id_: Optional[Hashable] = None, **kwargs):
         """
         Create a new row.
@@ -197,24 +199,66 @@ class Column(set, SubClassFactory):
     """
     A boolean indicating whether the column is mutually exclusive or not. (i.e. can only have one value)
     """
+
     def __init__(self, values: Set[ColumnValue]):
         """
         Create a new column.
 
         :param values: The values of the column.
         """
-        values = make_set(values)
+        values = self._type_cast_values_to_set_of_column_values(values)
         self.id_value_map: Dict[Hashable, Union[ColumnValue, Set[ColumnValue]]] = {id(v): v for v in values}
         super().__init__([v.value for v in values])
 
+    @staticmethod
+    def _type_cast_values_to_set_of_column_values(values: Set[Any]) -> Set[ColumnValue]:
+        """
+        Type cast values to a set of column values.
+
+        :param values: The values to type cast.
+        """
+        values = make_set(values)
+        if len(values) > 0 and not isinstance(next(iter(values)), ColumnValue):
+            values = {ColumnValue(id(values), v) for v in values}
+        return values
+
     @classmethod
     def create(cls, name: str, range_: set,
-               nullable: bool = False, mutually_exclusive: bool = False) -> Type[SubClassFactory]:
+               nullable: bool = True, mutually_exclusive: bool = False) -> Type[SubClassFactory]:
         return super().create(name, range_, **{"nullable": nullable, "mutually_exclusive": mutually_exclusive})
 
     @classmethod
-    def from_obj(cls, row_obj: Any, values: Set[Any]):
-        return cls({ColumnValue(id(row_obj), v) for v in values})
+    def create_from_category(cls, category: Type[Category], nullable: bool = True,
+                             mutually_exclusive: bool = False) -> Type[SubClassFactory]:
+        new_cls = cls.create(category.__name__.lower(), {category}, nullable=nullable,
+                             mutually_exclusive=mutually_exclusive)
+        for value in category:
+            setattr(new_cls, value.name, cls.create(category.__name__.lower(), {value}, mutually_exclusive=mutually_exclusive)(value))
+        return new_cls
+
+    @classmethod
+    def from_obj(cls, values: Set[Any], row_obj: Optional[Any] = None) -> Column:
+        id_ = id(row_obj) if row_obj else id(values)
+        values = make_set(values)
+        return cls({ColumnValue(id_, v) for v in values})
+
+    @property
+    def as_dict(self) -> Dict[str, Any]:
+        """
+        Get the column as a dictionary.
+
+        :return: The column as a dictionary.
+        """
+        return {self.__class__.__name__: self}
+
+    def filter_by(self, condition: CallableExpression) -> Column:
+        """
+        Filter the column by a condition.
+
+        :param condition: The condition to filter by.
+        :return: The filtered column.
+        """
+        return self.__class__({v for v in self if condition(v)})
 
     def __eq__(self, other):
         if not isinstance(other, set):
@@ -331,7 +375,7 @@ def create_column_and_row_from_iterable_attribute(attr_value: Any, name: str, ob
     if not range_:
         raise ValueError(f"Could not determine the range of {name} in {obj}.")
     attr_row = Row.create(name or list(range_)[0].__name__, range_)(id_=id(attr_value))
-    column = Column.create(name, range_).from_obj(obj, values)
+    column = Column.create(name, range_).from_obj(values, row_obj=obj)
     for idx, val in enumerate(values):
         sub_attr_row = create_row(val, recursion_idx=recursion_idx,
                                   max_recursion_idx=max_recursion_idx,
@@ -383,3 +427,6 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Union[List[Column
     case_dict.update(targets)
     case_dict.update(current_conclusions)
     print(table_rows_as_str(case_dict))
+
+
+Case = Row

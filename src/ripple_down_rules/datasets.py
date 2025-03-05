@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import os
 import pickle
+from abc import abstractmethod, ABC
 from enum import Enum
 
 import sqlalchemy
@@ -7,7 +10,7 @@ from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column
 from typing_extensions import Tuple, List, Dict
 from ucimlrepo import fetch_ucirepo
 
-from .datastructures import Case, Attribute, Species as SpeciesAttr, Row, create_rows_from_dataframe
+from .datastructures import Case, Row, create_rows_from_dataframe, Category, Column
 
 
 def load_cached_dataset(cache_file):
@@ -53,7 +56,7 @@ def get_dataset(dataset_id, cache_file):
     return dataset
 
 
-def load_zoo_dataset(cache_file: str) -> Tuple[List[Case], List[SpeciesAttr]]:
+def load_zoo_dataset(cache_file: str) -> Tuple[List[Case], List[Species]]:
     """
     Load the zoo dataset.
 
@@ -72,11 +75,11 @@ def load_zoo_dataset(cache_file: str) -> Tuple[List[Case], List[SpeciesAttr]]:
 
     category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
     category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
-    targets = [Species.from_str(category_id_to_name[i]) for i in y.values.flatten()]
+    targets = [getattr(SpeciesCol, category_id_to_name[i]) for i in y.values.flatten()]
     return all_cases, targets
 
 
-class Species(str, Enum):
+class Species(Category):
     mammal = "mammal"
     bird = "bird"
     reptile = "reptile"
@@ -85,17 +88,19 @@ class Species(str, Enum):
     insect = "insect"
     molusc = "molusc"
 
-    @property
-    def mutually_exclusive(self):
-        return True
 
-    @classmethod
-    def from_str(cls, value: str) -> "Species":
-        return getattr(cls, value)
+class Habitat(Category):
+    """
+    A habitat category is a category that represents the habitat of an animal.
+    """
+    land = "land"
+    water = "water"
+    air = "air"
 
-    @property
-    def as_dict(self):
-        return {"species": self.value}
+
+SpeciesCol = Column.create_from_category(Species, mutually_exclusive=True)
+HabitatCol = Column.create_from_category(Habitat, mutually_exclusive=False)
+
 
 class Base(sqlalchemy.orm.DeclarativeBase):
     pass
