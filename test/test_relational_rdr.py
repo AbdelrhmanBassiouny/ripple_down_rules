@@ -103,7 +103,7 @@ class RelationalRDRTestCase(TestCase):
         assert conditions(self.robot) == (self.robot.parts is not None and len(self.robot.parts) > 0)
 
     def test_parse_relational_conclusions(self):
-        user_input = "parts.contained_objects"
+        user_input = "parts.contained_objects.filter_by(name='B')"
         conclusion = CallableExpression(user_input, set)
         print(conclusion)
         print(conclusion(self.robot))

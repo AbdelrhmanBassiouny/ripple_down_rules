@@ -98,8 +98,8 @@ class Habitat(Category):
     air = "air"
 
 
-SpeciesCol = Column.create_from_category(Species, mutually_exclusive=True)
-HabitatCol = Column.create_from_category(Habitat, mutually_exclusive=False)
+SpeciesCol = Column.create_from_enum(Species, mutually_exclusive=True)
+HabitatCol = Column.create_from_enum(Habitat, mutually_exclusive=False)
 
 
 class Base(sqlalchemy.orm.DeclarativeBase):

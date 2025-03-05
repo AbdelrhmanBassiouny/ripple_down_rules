@@ -228,12 +228,13 @@ class Column(set, SubClassFactory):
         return super().create(name, range_, **{"nullable": nullable, "mutually_exclusive": mutually_exclusive})
 
     @classmethod
-    def create_from_category(cls, category: Type[Category], nullable: bool = True,
-                             mutually_exclusive: bool = False) -> Type[SubClassFactory]:
+    def create_from_enum(cls, category: Type[Enum], nullable: bool = True,
+                         mutually_exclusive: bool = False) -> Type[SubClassFactory]:
         new_cls = cls.create(category.__name__.lower(), {category}, nullable=nullable,
                              mutually_exclusive=mutually_exclusive)
         for value in category:
-            setattr(new_cls, value.name, cls.create(category.__name__.lower(), {value}, mutually_exclusive=mutually_exclusive)(value))
+            value_column = cls.create(category.__name__.lower(), {value}, mutually_exclusive=mutually_exclusive)(value)
+            setattr(new_cls, value.name, value_column)
         return new_cls
 
     @classmethod
