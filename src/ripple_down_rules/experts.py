@@ -76,8 +76,8 @@ class Expert(ABC):
         """
         pass
 
-    def ask_for_relational_conclusion(self, case: Union[Case, SQLTable], attribute_name: str, attribute_type: Type,
-                                      session: Optional[Session] = None) -> Optional[CallableExpression]:
+    def ask_for_conclusion(self, case: Union[Case, SQLTable], attribute_name: str, attribute_type: Type,
+                           session: Optional[Session] = None) -> Optional[CallableExpression]:
         """
         Ask the expert to provide a relational conclusion for the case.
 
@@ -186,7 +186,7 @@ class Human(Expert):
             show_current_and_corner_cases(case, current_conclusions=current_conclusions)
             expert_input, _ = prompt_user_about_case(case, PromptFor.Conclusion, attribute_name)
             self.all_expert_answers.append(expert_input)
-        return CallableExpression(expert_input, attribute_type, session=self.session)(case)
+        return CallableExpression(expert_input, conclusion_type=attribute_type, session=self.session)(case)
 
     def create_category_instance(self, cat_name: str, cat_value: Union[str, int, float, set]) -> Column:
         """

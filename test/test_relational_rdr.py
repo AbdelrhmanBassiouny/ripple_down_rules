@@ -3,10 +3,9 @@ from __future__ import annotations
 import os
 from unittest import TestCase
 
-from typing_extensions import List, Optional, Set, Any
-from sqlalchemy.orm import DeclarativeBase as SQLTable
+from typing_extensions import List, Optional, Any
 
-from ripple_down_rules.datastructures import Case, ObjectAttributeTarget, CallableExpression, create_row, Row
+from ripple_down_rules.datastructures import ObjectAttributeTarget, CallableExpression, Row
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.utils import get_property_name, render_tree
@@ -41,6 +40,7 @@ class Robot(PhysicalObject):
     """
     The robot parts.
     """
+
     def __init__(self, name: str, parts: Optional[List[Part]] = None):
         super().__init__(name)
         self.parts: List[Part] = parts if parts else []
@@ -103,7 +103,7 @@ class RelationalRDRTestCase(TestCase):
         assert conditions(self.robot) == (self.robot.parts is not None and len(self.robot.parts) > 0)
 
     def test_parse_relational_conclusions(self):
-        user_input = "parts.contained_objects.filter_by(name='B')"
+        user_input = "parts.contained_objects.filter_by()"
         conclusion = CallableExpression(user_input, set)
         print(conclusion)
         print(conclusion(self.robot))

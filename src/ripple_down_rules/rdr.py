@@ -6,9 +6,9 @@ from copy import copy
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session, MappedColumn
-from typing_extensions import List, Optional, Dict, Type, Union, Any, Set
+from typing_extensions import List, Optional, Dict, Type, Union, Any, Tuple
 
-from .datastructures import Case, MCRDRMode, CallableExpression, Row, Column
+from .datastructures import Case, MCRDRMode, CallableExpression, Column, create_row
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree, get_property_name, make_set, get_property_by_type
@@ -36,34 +36,35 @@ class RippleDownRules(ABC):
         self.session = session
         self.fig: Optional[plt.Figure] = None
 
-    def __call__(self, x: Case) -> Column:
-        return self.classify(x)
+    def __call__(self, case: Union[Case, SQLTable]) -> Column:
+        return self.classify(case)
 
     @abstractmethod
-    def classify(self, x: Case) -> Optional[Column]:
+    def classify(self, case: Union[Case, SQLTable]) -> Optional[Column]:
         """
         Classify a case.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :return: The category that the case belongs to.
         """
         pass
 
     @abstractmethod
-    def fit_case(self, x: Case, target: Optional[Column] = None,
-                 expert: Optional[Expert] = None, **kwargs) -> Column:
+    def fit_case(self, case: Union[Case, SQLTable], target: Optional[Any] = None,
+                 expert: Optional[Expert] = None, attribute: Optional[Any] = None, **kwargs) -> Column:
         """
         Fit the RDR on a case, and ask the expert for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
+        :param attribute: The attribute of the case to find a value for.
         :return: The category that the case belongs to.
         """
         pass
 
-    def fit(self, x_batch: List[Case], y_batch: Optional[List[Column]] = None,
+    def fit(self, cases: List[Union[Case, SQLTable]], targets: Optional[List[Any]] = None,
             expert: Optional[Expert] = None,
             n_iter: int = None,
             animate_tree: bool = False,
@@ -71,8 +72,8 @@ class RippleDownRules(ABC):
         """
         Fit the classifier to a batch of cases and categories.
 
-        :param x_batch: The batch of cases to fit the classifier to.
-        :param y_batch: The batch of categories to fit the classifier to.
+        :param cases: The cases to fit the classifier to.
+        :param targets: The categories to fit the classifier to.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param n_iter: The number of iterations to fit the classifier for.
         :param animate_tree: Whether to draw the tree while fitting the classifier.
@@ -87,29 +88,29 @@ class RippleDownRules(ABC):
             all_pred = 0
             all_recall = []
             all_precision = []
-            if not y_batch:
-                y_batch = [None] * len(x_batch)
-            for x, y in zip(x_batch, y_batch):
-                if not y:
-                    conclusions = self.classify(x) if self.start_rule and self.start_rule.conditions else []
-                    y = expert.ask_for_conclusion(x, conclusions)
-                pred_cat = self.fit_case(x, y, expert=expert, **kwargs_for_fit_case)
+            if not targets:
+                targets = [None] * len(cases)
+            for case, target in zip(cases, targets):
+                if not target:
+                    conclusions = self.classify(case) if self.start_rule and self.start_rule.conditions else []
+                    target = expert.ask_for_conclusion(case, conclusions)
+                pred_cat = self.fit_case(case, target, expert=expert, **kwargs_for_fit_case)
                 pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
-                y = y if isinstance(y, list) else [y]
-                recall = [not yi or (yi in pred_cat) for yi in y]
-                y_type = [type(yi) for yi in y]
-                precision = [(pred in y) or (type(pred) not in y_type) for pred in pred_cat]
+                target = target if isinstance(target, list) else [target]
+                recall = [not yi or (yi in pred_cat) for yi in target]
+                y_type = [type(yi) for yi in target]
+                precision = [(pred in target) or (type(pred) not in y_type) for pred in pred_cat]
                 match = all(recall) and all(precision)
                 all_recall.extend(recall)
                 all_precision.extend(precision)
                 if not match:
-                    print(f"Predicted: {pred_cat} but expected: {y}")
+                    print(f"Predicted: {pred_cat} but expected: {target}")
                 all_pred += int(match)
                 if animate_tree and self.start_rule.size > num_rules:
                     num_rules = self.start_rule.size
                     self.update_figures()
                 i += 1
-                all_predicted = y_batch and all_pred == len(y_batch)
+                all_predicted = targets and all_pred == len(targets)
                 num_iter_reached = n_iter and i >= n_iter
                 stop_iterating = all_predicted or num_iter_reached
                 if stop_iterating:
@@ -137,25 +138,25 @@ class RippleDownRules(ABC):
             draw_tree(self.start_rule, self.fig)
 
     @staticmethod
-    def case_has_conclusion(x: Union[Case, SQLTable], conclusion: Union[Type[Column], Type[MappedColumn]]) -> bool:
+    def case_has_conclusion(case: Union[Case, SQLTable], conclusion_type: Type) -> bool:
         """
         Check if the case has a conclusion.
 
-        :param x: The case to check.
-        :param conclusion: The target category to compare the case with.
+        :param case: The case to check.
+        :param conclusion_type: The target category type to compare the case with.
         :return: Whether the case has a conclusion or not.
         """
-        if isinstance(x, SQLTable):
-            prop = get_property_by_type(x, conclusion)
+        if isinstance(case, SQLTable):
+            prop = get_property_by_type(case, conclusion_type)
             if hasattr(prop, "__iter__") and not isinstance(prop, str):
                 return len(prop) > 0
             else:
                 return prop is not None
         else:
-            return conclusion in x
+            return conclusion_type in case
 
     @staticmethod
-    def copy_case(case: Union[Row, SQLTable]) -> Union[Row, SQLTable]:
+    def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:
         """
         Copy a case.
 
@@ -167,13 +168,44 @@ class RippleDownRules(ABC):
         else:
             return copy(case)
 
+    @staticmethod
+    def ask_for_target(case: Union[Case, SQLTable], expert: Expert, attribute: Optional[Any] = None):
+        """
+        Ask the expert for a target category for the case.
+
+        :param case: The case to classify.
+        :param expert: The expert to ask for differentiating features as new rule conditions.
+        :param attribute: The attribute of the case to find a value for.
+        """
+        attribute_name = get_property_name(case, attribute)
+        return expert.ask_for_conclusion(case, attribute_name=attribute_name, attribute_type=type(attribute))
+
+    @staticmethod
+    def convert_to_case_and_get_new_attribute(case: Union[Case, SQLTable],
+                                              attribute: Optional[Any] = None) -> Tuple[Union[Case, SQLTable], Any]:
+        """
+        Convert the case to a row object and get the new attribute.
+
+        :param case: The case to convert.
+        :param attribute: The attribute of the case to find a value for.
+        :return: The converted case and the new attribute.
+        """
+        if not isinstance(case, (Case, SQLTable)):
+            attribute_name = get_property_name(case, attribute) if attribute else None
+            case = create_row(case)
+            attribute = getattr(case, attribute_name) if attribute_name else None
+        return case, attribute
+
+
+RDR = RippleDownRules
+
 
 class SingleClassRDR(RippleDownRules):
     table: Type[SQLTable]
     target_column: Column
 
-    def fit_case(self, case: Union[table, Case], target: Optional[Column] = None,
-                 expert: Optional[Expert] = None, for_attribute: Optional[Any] = None,
+    def fit_case(self, case: Union[table, Case], target: Optional[Any] = None,
+                 expert: Optional[Expert] = None, attribute: Optional[Any] = None,
                  **kwargs) -> Column:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
@@ -182,15 +214,13 @@ class SingleClassRDR(RippleDownRules):
         :param case: The case to classify.
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
-        :param for_attribute: The property of the case to find a value for.
+        :param attribute: The attribute of the case to find a value for.
         :return: The category that the case belongs to.
         """
         expert = expert if expert else Human(session=self.session)
+        case, attribute = RDR.convert_to_case_and_get_new_attribute(case, attribute)
         if not target:
-            if isinstance(case, Case):
-                for_attribute = case[get_property_name(case, for_attribute)]
-            attribute_name = for_attribute.__class__.__name__
-            target = expert.ask_for_conclusion(case, attribute_name=attribute_name, attribute_type=type(for_attribute))
+            target = RDR.ask_for_target(case, expert, attribute)
         if not self.start_rule:
             conditions = expert.ask_for_conditions(case, [target])
             self.start_rule = SingleClassRule(conditions, target, corner_case=case)
@@ -203,18 +233,18 @@ class SingleClassRDR(RippleDownRules):
 
         return self.classify(case)
 
-    def classify(self, x: Case) -> Optional[Column]:
+    def classify(self, case: Case) -> Optional[Column]:
         """
         Classify a case by recursively evaluating the rules until a rule fires or the last rule is reached.
         """
-        pred = self.evaluate(x)
+        pred = self.evaluate(case)
         return pred.conclusion if pred.fired else None
 
-    def evaluate(self, x: Case) -> SingleClassRule:
+    def evaluate(self, case: Case) -> SingleClassRule:
         """
         Evaluate the starting rule on a case.
         """
-        matched_rule = self.start_rule(x)
+        matched_rule = self.start_rule(case)
         return matched_rule if matched_rule else self.start_rule
 
 
@@ -250,46 +280,51 @@ class MultiClassRDR(RippleDownRules):
         super(MultiClassRDR, self).__init__(self.start_rules[0], session=session)
         self.mode: MCRDRMode = mode
 
-    def classify(self, x: Case) -> List[Column]:
+    def classify(self, case: Union[Case, SQLTable]) -> List[Any]:
         evaluated_rule = self.start_rule
         self.conclusions = []
         while evaluated_rule:
-            next_rule = evaluated_rule(x)
+            next_rule = evaluated_rule(case)
             if evaluated_rule.fired:
                 self.add_conclusion(evaluated_rule)
             evaluated_rule = next_rule
         return self.conclusions
 
-    def fit_case(self, x: Case, targets: Optional[Union[Column, List[Column]]] = None,
-                 expert: Optional[Expert] = None, add_extra_conclusions: bool = False) -> List[Column]:
+    def fit_case(self, case: Union[Case, SQLTable], targets: Optional[Any] = None,
+                 expert: Optional[Expert] = None, attribute: Optional[Any] = None,
+                 add_extra_conclusions: bool = False) -> List[Any]:
         """
         Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
          or missing by comparing the case with the target category if provided.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :param targets: The target categories to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions or for extra conclusions.
+        :param attribute: The attribute of the case to find a value for.
         :param add_extra_conclusions: Whether to add extra conclusions after classification is done.
         :return: The conclusions that the case belongs to.
         """
         expert = expert if expert else Human(session=self.session)
+        case, attribute = RDR.convert_to_case_and_get_new_attribute(case, attribute)
         targets = targets if isinstance(targets, list) else [targets]
+        if len(targets) == 0:
+            targets = [RDR.ask_for_target(case, expert, attribute)]
         self.expert_accepted_conclusions = []
         user_conclusions = []
         for target in targets:
-            self.update_start_rule(x, target, expert)
+            self.update_start_rule(case, target, expert)
             self.conclusions = []
             self.stop_rule_conditions = None
             evaluated_rule = self.start_rule
             while evaluated_rule:
-                next_rule = evaluated_rule(x)
+                next_rule = evaluated_rule(case)
                 good_conclusions = targets + user_conclusions + self.expert_accepted_conclusions
 
                 if evaluated_rule.fired:
                     if target and evaluated_rule.conclusion not in good_conclusions:
-                        # if self.case_has_conclusion(x, evaluated_rule.conclusion):
+                        # if self.case_has_conclusion(case, evaluated_rule.conclusion):
                         # Rule fired and conclusion is different from target
-                        self.stop_wrong_conclusion_else_add_it(x, target, expert, evaluated_rule,
+                        self.stop_wrong_conclusion_else_add_it(case, target, expert, evaluated_rule,
                                                                add_extra_conclusions)
                     else:
                         # Rule fired and target is correct or there is no target to compare
@@ -298,30 +333,30 @@ class MultiClassRDR(RippleDownRules):
                 if not next_rule:
                     if target not in self.conclusions:
                         # Nothing fired and there is a target that should have been in the conclusions
-                        self.add_rule_for_case(x, target, expert)
+                        self.add_rule_for_case(case, target, expert)
                         # Have to check all rules again to make sure only this new rule fires
                         next_rule = self.start_rule
                     elif add_extra_conclusions and not user_conclusions:
                         # No more conclusions can be made, ask the expert for extra conclusions if needed.
-                        user_conclusions.extend(self.ask_expert_for_extra_conclusions(expert, x))
+                        user_conclusions.extend(self.ask_expert_for_extra_conclusions(expert, case))
                         if user_conclusions:
                             next_rule = self.last_top_rule
                 evaluated_rule = next_rule
         return list(OrderedSet(self.conclusions))
 
-    def update_start_rule(self, x: Case, target: Column, expert: Expert):
+    def update_start_rule(self, case: Union[Case, SQLTable], target: Any, expert: Expert):
         """
         Update the starting rule of the classifier.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         """
         if not self.start_rule.conditions:
-            conditions = expert.ask_for_conditions(x, target)
+            conditions = expert.ask_for_conditions(case, target)
             self.start_rule.conditions = conditions
             self.start_rule.conclusion = target
-            self.start_rule.corner_case = x
+            self.start_rule.corner_case = case
 
     @property
     def last_top_rule(self) -> Optional[MultiClassTopRule]:
@@ -333,7 +368,7 @@ class MultiClassRDR(RippleDownRules):
         else:
             return self.start_rule.furthest_alternative[-1]
 
-    def stop_wrong_conclusion_else_add_it(self, x: Case, target: Column, expert: Expert,
+    def stop_wrong_conclusion_else_add_it(self, case: Union[Case, SQLTable], target: Any, expert: Expert,
                                           evaluated_rule: MultiClassTopRule,
                                           add_extra_conclusions: bool):
         """
@@ -341,29 +376,30 @@ class MultiClassRDR(RippleDownRules):
         """
         if self.is_same_category_type(evaluated_rule.conclusion, target) \
                 and self.is_conflicting_with_target(evaluated_rule.conclusion, target):
-            self.stop_conclusion(x, target, expert, evaluated_rule)
-        elif not self.conclusion_is_correct(x, target, expert, evaluated_rule, add_extra_conclusions):
-            self.stop_conclusion(x, target, expert, evaluated_rule)
+            self.stop_conclusion(case, target, expert, evaluated_rule)
+        elif not self.conclusion_is_correct(case, target, expert, evaluated_rule, add_extra_conclusions):
+            self.stop_conclusion(case, target, expert, evaluated_rule)
 
-    def stop_conclusion(self, x: Case, target: Column, expert: Expert, evaluated_rule: MultiClassTopRule):
+    def stop_conclusion(self, case: Union[Case, SQLTable], target: Any,
+                        expert: Expert, evaluated_rule: MultiClassTopRule):
         """
         Stop a conclusion by adding a stopping rule.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param evaluated_rule: The evaluated rule to ask the expert about.
         """
-        conditions = expert.ask_for_conditions(x, target, evaluated_rule)
-        evaluated_rule.fit_rule(x, target, conditions=conditions)
+        conditions = expert.ask_for_conditions(case, target, evaluated_rule)
+        evaluated_rule.fit_rule(case, target, conditions=conditions)
         if self.mode == MCRDRMode.StopPlusRule:
             self.stop_rule_conditions = conditions
         if self.mode == MCRDRMode.StopPlusRuleCombined:
             new_top_rule_conditions = conditions.combine_with(evaluated_rule.conditions)
-            self.add_top_rule(new_top_rule_conditions, target, x)
+            self.add_top_rule(new_top_rule_conditions, target, case)
 
     @staticmethod
-    def is_conflicting_with_target(conclusion: Column, target: Column) -> bool:
+    def is_conflicting_with_target(conclusion: Any, target: Any) -> bool:
         """
         Check if the conclusion is conflicting with the target category.
 
@@ -377,7 +413,7 @@ class MultiClassRDR(RippleDownRules):
             return not make_set(conclusion).issubset(make_set(target))
 
     @staticmethod
-    def is_same_category_type(conclusion: Column, target: Column) -> bool:
+    def is_same_category_type(conclusion: Any, target: Any) -> bool:
         """
         Check if the conclusion is of the same class as the target category.
 
@@ -387,12 +423,12 @@ class MultiClassRDR(RippleDownRules):
         """
         return conclusion.__class__ == target.__class__ and target.__class__ != Column
 
-    def conclusion_is_correct(self, x: Case, target: Column, expert: Expert, evaluated_rule: Rule,
+    def conclusion_is_correct(self, case: Union[Case, SQLTable], target: Any, expert: Expert, evaluated_rule: Rule,
                               add_extra_conclusions: bool) -> bool:
         """
         Ask the expert if the conclusion is correct, and add it to the conclusions if it is.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :param target: The target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param evaluated_rule: The evaluated rule to ask the expert about.
@@ -400,7 +436,7 @@ class MultiClassRDR(RippleDownRules):
         :return: Whether the conclusion is correct or not.
         """
         conclusions = list(OrderedSet(self.conclusions))
-        if (add_extra_conclusions and expert.ask_if_conclusion_is_correct(x, evaluated_rule.conclusion,
+        if (add_extra_conclusions and expert.ask_if_conclusion_is_correct(case, evaluated_rule.conclusion,
                                                                           targets=target,
                                                                           current_conclusions=conclusions)):
             self.add_conclusion(evaluated_rule)
@@ -408,7 +444,7 @@ class MultiClassRDR(RippleDownRules):
             return True
         return False
 
-    def add_rule_for_case(self, x: Case, target: Column, expert: Expert):
+    def add_rule_for_case(self, case: Union[Case, SQLTable], target: Any, expert: Expert):
         """
         Add a rule for a case that has not been classified with any conclusion.
         """
@@ -416,25 +452,25 @@ class MultiClassRDR(RippleDownRules):
             conditions = self.stop_rule_conditions
             self.stop_rule_conditions = None
         else:
-            conditions = expert.ask_for_conditions(x, target)
-        self.add_top_rule(conditions, target, x)
+            conditions = expert.ask_for_conditions(case, target)
+        self.add_top_rule(conditions, target, case)
 
-    def ask_expert_for_extra_conclusions(self, expert: Expert, x: Case) -> List[Column]:
+    def ask_expert_for_extra_conclusions(self, expert: Expert, case: Union[Case, SQLTable]) -> List[Any]:
         """
         Ask the expert for extra conclusions when no more conclusions can be made.
 
         :param expert: The expert to ask for extra conclusions.
-        :param x: The case to ask extra conclusions for.
+        :param case: The case to ask extra conclusions for.
         :return: The extra conclusions that the expert has provided.
         """
         extra_conclusions = []
         conclusions = list(OrderedSet(self.conclusions))
         if not expert.use_loaded_answers:
             print("current conclusions:", conclusions)
-        extra_conclusions_dict = expert.ask_for_extra_conclusions(x, conclusions)
+        extra_conclusions_dict = expert.ask_for_extra_conclusions(case, conclusions)
         if extra_conclusions_dict:
             for conclusion, conditions in extra_conclusions_dict.items():
-                self.add_top_rule(conditions, conclusion, x)
+                self.add_top_rule(conditions, conclusion, case)
                 extra_conclusions.append(conclusion)
         return extra_conclusions
 
@@ -451,13 +487,12 @@ class MultiClassRDR(RippleDownRules):
             same_type_conclusions = [c for c in self.conclusions if type(c) == type(evaluated_rule.conclusion)]
             combined_conclusion = evaluated_rule.conclusion if isinstance(evaluated_rule.conclusion, set) \
                 else {evaluated_rule.conclusion}
-            category_type = type(evaluated_rule.conclusion)
             for c in same_type_conclusions:
                 combined_conclusion.update(c if isinstance(c, set) else make_set(c))
                 self.conclusions.remove(c)
             self.conclusions.extend(combined_conclusion)
 
-    def add_top_rule(self, conditions: CallableExpression, conclusion: CallableExpression, corner_case: Case):
+    def add_top_rule(self, conditions: CallableExpression, conclusion: Any, corner_case: Union[Case, SQLTable]):
         """
         Add a top rule to the classifier, which is a rule that is always checked and is part of the start_rules list.
 
@@ -480,7 +515,7 @@ class GeneralRDR(RippleDownRules):
      gets called when the final rule fires.
     """
 
-    def __init__(self, category_rdr_map: Optional[Dict[Type[Column], Union[SingleClassRDR, MultiClassRDR]]] = None):
+    def __init__(self, category_rdr_map: Optional[Dict[Type, Union[SingleClassRDR, MultiClassRDR]]] = None):
         """
         :param category_rdr_map: A map of categories to ripple down rules classifiers,
         where each category is a parent category that has a set of mutually exclusive (in case of SCRDR) child
@@ -489,7 +524,7 @@ class GeneralRDR(RippleDownRules):
         Mammal, Bird, Fish, etc. which are mutually exclusive, and Habitat can have child categories like
         Land, Water, Air, etc, which are not mutually exclusive due to some animals living more than one habitat.
         """
-        self.start_rules_dict: Dict[Type[Column], Union[SingleClassRDR, MultiClassRDR]] \
+        self.start_rules_dict: Dict[Type, Union[SingleClassRDR, MultiClassRDR]] \
             = category_rdr_map if category_rdr_map else {}
         super(GeneralRDR, self).__init__()
         self.all_figs: List[plt.Figure] = [sr.fig for sr in self.start_rules_dict.values()]
@@ -507,34 +542,34 @@ class GeneralRDR(RippleDownRules):
     def start_rules(self) -> List[Union[SingleClassRule, MultiClassTopRule]]:
         return [rdr.start_rule for rdr in self.start_rules_dict.values()]
 
-    def classify(self, x: Row) -> Optional[List[Column]]:
+    def classify(self, case: Union[Case, SQLTable]) -> Optional[List[Any]]:
         """
         Classify a case by going through all RDRs and adding the categories that are classified, and then restarting
         the classification until no more categories can be added.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :return: The categories that the case belongs to.
         """
         conclusions = []
-        x_cp = self.copy_case(x)
+        case_cp = self.copy_case(case)
         while True:
             added_attributes = False
             for cat_type, rdr in self.start_rules_dict.items():
-                if self.case_has_conclusion(x_cp, cat_type):
+                if self.case_has_conclusion(case_cp, cat_type):
                     continue
-                pred_atts = rdr.classify(x_cp)
+                pred_atts = rdr.classify(case_cp)
                 if pred_atts:
                     pred_atts = pred_atts if isinstance(pred_atts, list) else [pred_atts]
                     added_attributes = True
-                    self.update_case_with_same_type_conclusions(x_cp, pred_atts)
+                    self.update_case_with_same_type_conclusions(case_cp, pred_atts, get_property_by_type(case_cp, cat_type))
                     conclusions.extend(pred_atts)
             if not added_attributes:
                 break
         return list(OrderedSet(conclusions))
 
-    def fit_case(self, x: Row, targets: Optional[Union[Column, List[Column]]] = None,
-                 expert: Optional[Expert] = None,
-                 **kwargs) -> List[Column]:
+    def fit_case(self, case: Union[Case, SQLTable], targets: Optional[Any] = None,
+                 expert: Optional[Expert] = None, attributes: Optional[List[Any]] = None,
+                 **kwargs) -> List[Any]:
         """
         Fit the GRDR on a case, if the target is a new type of category, a new RDR is created for it,
         else the existing RDR of that type will be fitted on the case, and then classification is done and all
@@ -542,65 +577,79 @@ class GeneralRDR(RippleDownRules):
         In case of SCRDR, multiple conclusions of the same type replace each other, in case of MCRDR, they are added if
         they are accepted by the expert, and the attribute of that category is represented in the case as a set of
         values.
+
+        :param case: The case to classify.
+        :param targets: The target categories to compare the case with.
+        :param expert: The expert to ask for differentiating features as new rule conditions.
+        :param attributes: The attributes of the case to find values for.
+        :return: The categories that the case belongs to.
         """
         expert = expert if expert else Human()
         if not targets:
-            return self.classify(x)
+            return self.classify(case)
         targets = targets if isinstance(targets, list) else [targets]
-        for t in targets:
-            x_cp = self.copy_case(x)
-            if type(t) not in self.start_rules_dict:
-                conclusions = self.classify(x)
-                self.update_case_with_same_type_conclusions(x_cp, conclusions)
-                new_rdr = self.initialize_appropriate_rdr_type_for_target(t, x_cp)
-                new_conclusions = new_rdr.fit_case(x_cp, t, expert, **kwargs)
-                self.start_rules_dict[type(t)] = new_rdr
-                self.update_case_with_same_type_conclusions(x_cp, new_conclusions)
-            elif get_property_by_type(x_cp, type(t)) is None:
+        if len(targets) == 0:
+            targets = [self.ask_for_target(case, expert)]
+        attributes = attributes if attributes else [None] * len(targets)
+        for target, attribute in zip(targets, attributes):
+            case_cp = self.copy_case(case)
+            if type(target) not in self.start_rules_dict:
+                conclusions = self.classify(case)
+                self.update_case_with_same_type_conclusions(case_cp, conclusions, attribute)
+                new_rdr = self.initialize_new_rdr_for_attribute(target, case_cp)
+                new_conclusions = new_rdr.fit_case(case_cp, target, expert, **kwargs)
+                self.start_rules_dict[type(target)] = new_rdr
+                self.update_case_with_same_type_conclusions(case_cp, new_conclusions, attribute)
+            elif not self.case_has_conclusion(case_cp, type(target)):
                 for rdr_type, rdr in self.start_rules_dict.items():
-                    if type(t) != rdr_type:
-                        conclusions = rdr.classify(x_cp)
+                    if type(target) is not rdr_type:
+                        conclusions = rdr.classify(case_cp)
+                        rdr_attribute = get_property_by_type(case_cp, rdr_type)
                     else:
-                        conclusions = self.start_rules_dict[type(t)].fit_case(x_cp, t, expert, **kwargs)
-                    self.update_case_with_same_type_conclusions(x_cp, conclusions)
+                        conclusions = self.start_rules_dict[type(target)].fit_case(case_cp, target, expert, **kwargs)
+                        rdr_attribute = attribute
+                    self.update_case_with_same_type_conclusions(case_cp, conclusions, rdr_attribute)
 
-        return self.classify(x)
+        return self.classify(case)
 
     @staticmethod
-    def initialize_appropriate_rdr_type_for_target(target: Union[Column, MappedColumn], case: Union[Row, SQLTable]):
+    def initialize_new_rdr_for_attribute(attribute: Any, case: Union[Case, SQLTable]):
         """
         Initialize the appropriate RDR type for the target.
         """
         if isinstance(case, SQLTable):
-            prop = get_property_by_type(case, type(target))
+            prop = get_property_by_type(case, type(attribute))
             if hasattr(prop, "__iter__") and not isinstance(prop, str):
                 return MultiClassRDR()
             else:
                 return SingleClassRDR()
         else:
-            return SingleClassRDR() if target.mutually_exclusive else MultiClassRDR()
+            return SingleClassRDR() if attribute.mutually_exclusive else MultiClassRDR()
 
     @staticmethod
-    def update_case_with_same_type_conclusions(case: Union[Row, SQLTable],
-                                               conclusions: Union[List[Column], List[MappedColumn]]):
+    def update_case_with_same_type_conclusions(case: Union[Case, SQLTable],
+                                               conclusions: List[Any], attribute: Optional[Any] = None):
         """
         Update the case with the conclusions.
 
         :param case: The case to update.
         :param conclusions: The conclusions to update the case with.
+        :param attribute: The attribute of the case to update.
         """
+        if not conclusions:
+            return
         if not hasattr(conclusions, "__iter__") or isinstance(conclusions, str):
             conclusions = [conclusions]
         if len(conclusions) == 0:
             return
         if isinstance(case, SQLTable):
             conclusions_type = type(conclusions[0])
-            attr = get_property_by_type(case, conclusions_type)
-            attr_name = get_property_name(case, attr)
-            if isinstance(attr, set):
-                attr.update(conclusions)
-            elif isinstance(attr, list):
-                attr.extend(conclusions)
+            attribute = get_property_by_type(case, conclusions_type) if attribute is None else attribute
+            attr_name = get_property_name(case, attribute)
+            if isinstance(attribute, set):
+                attribute.update(conclusions)
+            elif isinstance(attribute, list):
+                attribute.extend(conclusions)
             elif len(conclusions) == 1:
                 setattr(case, attr_name, conclusions.pop())
             else:
@@ -616,7 +665,7 @@ class GeneralRDR(RippleDownRules):
         return [t.__name__ for t in self.start_rules_dict.keys()]
 
     @property
-    def all_types(self) -> List[Type[Column]]:
+    def all_types(self) -> List[Type]:
         """
         Get all the types of categories that the GRDR can classify.
         """

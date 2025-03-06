@@ -133,14 +133,15 @@ class TestAlchemyRDR:
 
         n = 20
         habitat_targets = [get_habitat(x, t) for x, t in zip(self.all_cases[:n], self.targets[:n])]
-        grdr.fit(self.all_cases, habitat_targets, expert=expert,
+        attributes = [case.habitats for case in self.all_cases[:n]]
+        grdr.fit(self.all_cases, habitat_targets, attributes=attributes, expert=expert,
                  animate_tree=draw_tree, n_iter=n)
         for rule in grdr.start_rules:
             render_tree(rule, use_dot_exporter=True,
                         filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
 
         cats = grdr.classify(self.all_cases[50])
-        self.assertEqual(cats, [self.targets[50], Habitat.land])
+        assert cats == [self.targets[50], Habitat.land]
 
         if save_answers:
             cwd = os.getcwd()
