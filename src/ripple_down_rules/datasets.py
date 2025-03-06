@@ -138,6 +138,6 @@ class Animal(MappedAsDataclass, Base):
     tail: Mapped[bool]
     domestic: Mapped[bool]
     catsize: Mapped[bool]
-    species: Mapped[Species]
+    species: Mapped[Species] = mapped_column(nullable=True)
 
     habitats: Mapped[Set[HabitatTable]] = relationship(default_factory=set)

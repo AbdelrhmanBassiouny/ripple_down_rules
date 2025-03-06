@@ -8,7 +8,8 @@ import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from sqlalchemy.orm import Mapped
+from sqlalchemy import MetaData
+from sqlalchemy.orm import Mapped, registry
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
     get_origin, get_args, Tuple, Optional, List
@@ -93,6 +94,8 @@ def get_property_by_type(obj: Any, prop_type: Type) -> Optional[Any]:
     for name in dir(obj):
         if name.startswith("_") or callable(getattr(obj, name)):
             continue
+        if isinstance(getattr(obj.__class__, name), (MetaData, registry)):
+            continue
         prop_value = getattr(obj, name)
         if isinstance(prop_value, prop_type):
             return prop_value
@@ -107,6 +110,14 @@ def get_property_by_type(obj: Any, prop_type: Type) -> Optional[Any]:
                 if origin in [list, set, tuple, dict, List, Set, Tuple, Dict]:
                     if prop_type is args[0]:
                         return prop_value
+        else:
+            # get the type hint of the attribute
+            hint, origin, args = get_hint_for_attribute(name, obj)
+            if origin is Mapped:
+                if prop_type is args[0]:
+                    return prop_value
+            if origin is prop_type:
+                return prop_value
 
 
 def get_property_name(obj: Any, prop: Any) -> str:

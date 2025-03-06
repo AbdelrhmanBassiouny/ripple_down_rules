@@ -33,7 +33,7 @@ class TestAlchemyRDR:
 
         category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
         category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
-        X.loc[:, "species"] = [Species(category_id_to_name[i]) for i in y.values.flatten()]
+        # X.loc[:, "species"] = [Species(category_id_to_name[i]) for i in y.values.flatten()]
 
         engine = sqlalchemy.create_engine("sqlite:///:memory:")
         Base.metadata.create_all(engine)
@@ -43,7 +43,7 @@ class TestAlchemyRDR:
         cls.session = session
         query = select(Animal)
         cls.all_cases = cls.session.scalars(query).all()
-        cls.targets = [r.species for r in cls.all_cases]
+        cls.targets = [Species(category_id_to_name[i]) for i in y.values.flatten()]
 
     def test_setup(self):
         r = self.session.scalars(select(Animal)).all()
@@ -115,6 +115,7 @@ class TestAlchemyRDR:
 
         def get_habitat(x: Animal, t: Column) -> List[Column]:
             all_habs = []
+            atts = []
             if t == Species.mammal and x.aquatic == 0:
                 all_habs.append(HabitatTable(Habitat.land))
             elif t == Species.bird:
@@ -129,11 +130,14 @@ class TestAlchemyRDR:
                 all_habs.append(HabitatTable(Habitat.land))
                 if x.aquatic == 1:
                     all_habs[-1] = make_set([all_habs[-1], HabitatTable(Habitat.water)])
-            return all_habs + [t]
+            atts = [x.habitats for _ in all_habs]
+            atts.extend([x.species for _ in [t]])
+            return all_habs + [t], atts
 
         n = 20
         habitat_targets = [get_habitat(x, t) for x, t in zip(self.all_cases[:n], self.targets[:n])]
-        attributes = [case.habitats for case in self.all_cases[:n]]
+        attributes = [h[1] for h in habitat_targets]
+        habitat_targets = [h[0] for h in habitat_targets]
         grdr.fit(self.all_cases, habitat_targets, attributes=attributes, expert=expert,
                  animate_tree=draw_tree, n_iter=n)
         for rule in grdr.start_rules:
