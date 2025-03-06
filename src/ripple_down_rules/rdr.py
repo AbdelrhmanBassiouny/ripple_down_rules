@@ -342,7 +342,7 @@ class MultiClassRDR(RippleDownRules):
                         if user_conclusions:
                             next_rule = self.last_top_rule
                 evaluated_rule = next_rule
-        return list(OrderedSet(self.conclusions))
+        return self.conclusions
 
     def update_start_rule(self, case: Union[Case, SQLTable], target: Any, expert: Expert):
         """
@@ -560,12 +560,13 @@ class GeneralRDR(RippleDownRules):
                 pred_atts = rdr.classify(case_cp)
                 if pred_atts:
                     pred_atts = pred_atts if isinstance(pred_atts, list) else [pred_atts]
+                    pred_atts = [p for p in pred_atts if p not in conclusions]
                     added_attributes = True
                     self.update_case_with_same_type_conclusions(case_cp, pred_atts, get_property_by_type(case_cp, cat_type))
                     conclusions.extend(pred_atts)
             if not added_attributes:
                 break
-        return list(OrderedSet(conclusions))
+        return conclusions
 
     def fit_case(self, case: Union[Case, SQLTable], targets: Optional[Any] = None,
                  expert: Optional[Expert] = None, attributes: Optional[List[Any]] = None,
@@ -638,8 +639,7 @@ class GeneralRDR(RippleDownRules):
         """
         if not conclusions:
             return
-        if not hasattr(conclusions, "__iter__") or isinstance(conclusions, str):
-            conclusions = [conclusions]
+        conclusions = [conclusions] if not isinstance(conclusions, list) else conclusions
         if len(conclusions) == 0:
             return
         if isinstance(case, SQLTable):
@@ -647,7 +647,7 @@ class GeneralRDR(RippleDownRules):
             attribute = get_property_by_type(case, conclusions_type) if attribute is None else attribute
             attr_name = get_property_name(case, attribute)
             if isinstance(attribute, set):
-                attribute.update(conclusions)
+                attribute.update(*[make_set(c) for c in conclusions])
             elif isinstance(attribute, list):
                 attribute.extend(conclusions)
             elif len(conclusions) == 1:
