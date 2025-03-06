@@ -2,7 +2,7 @@ import ast
 import logging
 from _ast import AST
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, DeclarativeBase as SQLTable
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .table import create_row, Row
@@ -119,9 +119,11 @@ class CallableExpression:
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            if not isinstance(case, Row):
+            if not isinstance(case, (Row, SQLTable)):
                 context = create_row(case, max_recursion_idx=3)
-            else:
+            elif isinstance(case, SQLTable):
+                context = case.__dict__
+            elif isinstance(case, Row):
                 context = case
             assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)

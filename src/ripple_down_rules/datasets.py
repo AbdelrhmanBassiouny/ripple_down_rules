@@ -6,8 +6,9 @@ from abc import abstractmethod, ABC
 from enum import Enum
 
 import sqlalchemy
-from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column
-from typing_extensions import Tuple, List, Dict
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column, relationship
+from typing_extensions import Tuple, List, Dict, Set
 from ucimlrepo import fetch_ucirepo
 
 from .datastructures import Case, Row, create_rows_from_dataframe, Category, Column
@@ -106,6 +107,17 @@ class Base(sqlalchemy.orm.DeclarativeBase):
     pass
 
 
+class HabitatTable(MappedAsDataclass, Base):
+    __tablename__ = "Habitat"
+
+    # make the id the foreign kez to the id of the animal
+    habitat: Mapped[Habitat]
+    id = mapped_column(ForeignKey("Animal.id"), init=False, primary_key=True)
+
+    def __hash__(self):
+        return hash(self.habitat)
+
+
 class Animal(MappedAsDataclass, Base):
     __tablename__ = "Animal"
 
@@ -127,3 +139,5 @@ class Animal(MappedAsDataclass, Base):
     domestic: Mapped[bool]
     catsize: Mapped[bool]
     species: Mapped[Species]
+
+    habitats: Mapped[Set[HabitatTable]] = relationship(default_factory=set)

@@ -1,17 +1,26 @@
-import sqlalchemy.orm
-from sqlalchemy import select
+import os
 
-from ripple_down_rules.datasets import Base, Animal, Species, get_dataset
+import sqlalchemy.orm
+from sqlalchemy.orm import DeclarativeBase as Table, MappedColumn as Column
+from sqlalchemy import select
+from typing_extensions import List, Sequence
+
+from ripple_down_rules.datasets import Base, Animal, Species, get_dataset, Habitat, HabitatTable
 from ripple_down_rules.datastructures import RDRMode, PromptFor
 from ripple_down_rules.experts import Human
-from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR
+from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.prompt import prompt_user_for_expression
-from ripple_down_rules.utils import render_tree
+from ripple_down_rules.utils import render_tree, make_set
 from test_rdr import TestRDR
 
 
 class TestAlchemyRDR:
     session: sqlalchemy.orm.Session
+    test_results_dir: str = "./test_results"
+    expert_answers_dir: str = "./test_expert_answers"
+    cache_file: str = f"{test_results_dir}/zoo_dataset.pkl"
+    all_cases: Sequence[Animal]
+    targets: List[Species]
 
     @classmethod
     def setUpClass(cls):
@@ -32,6 +41,9 @@ class TestAlchemyRDR:
         session.bulk_insert_mappings(Animal, X.to_dict(orient="records"))
         session.commit()
         cls.session = session
+        query = select(Animal)
+        cls.all_cases = cls.session.scalars(query).all()
+        cls.targets = [r.species for r in cls.all_cases]
 
     def test_setup(self):
         r = self.session.scalars(select(Animal)).all()
@@ -58,7 +70,7 @@ class TestAlchemyRDR:
     def test_fit_scrdr(self):
         use_loaded_answers = True
         draw_tree = True
-        filename = "./test_expert_answers" + "/scrdr_expert_answers_fit"
+        filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers, session=self.session)
         if use_loaded_answers:
             expert.load_answers(filename)
@@ -78,22 +90,79 @@ class TestAlchemyRDR:
     def test_fit_mcrdr_stop_only(self):
         use_loaded_answers = True
         draw_tree = True
-        filename = "./test_expert_answers" + "/scrdr_expert_answers_fit"
-        expert = Human(use_loaded_answers=use_loaded_answers, session=self.session)
+        expert, filename = self.get_expert_and_file_name(use_loaded_answers,
+                                                         "mcrdr_expert_answers_stop_only_fit")
+
+        mcrdr = MultiClassRDR(session=self.session)
+        mcrdr.fit(self.all_cases, self.targets, expert=expert, animate_tree=draw_tree)
+
+        cats = mcrdr.classify(self.all_cases[50])
+        assert cats[0] == self.all_cases[50].species
+        assert len(cats) == 1
+
+    def test_fit_grdr(self):
+        use_loaded_answers = True
+        save_answers = False
+        draw_tree = False
+        filename = self.expert_answers_dir + "/grdr_expert_answers_fit"
+        expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
 
-        query = select(Animal)
-        result = self.session.scalars(query).all()
-        mcrdr = MultiClassRDR(session=self.session)
-        mcrdr.table = Animal
-        mcrdr.target_column = Animal.species
-        targets = [r.species for r in result]
-        mcrdr.fit(result, targets, expert=expert, animate_tree=draw_tree)
+        fit_scrdr = self.get_fit_scrdr(draw_tree=False)
 
-        cats = mcrdr.classify(result[50])
-        assert cats[0] == result[50].species
-        assert len(cats) == 1
+        grdr = GeneralRDR({type(fit_scrdr.start_rule.conclusion): fit_scrdr})
+
+        def get_habitat(x: Animal, t: Column) -> List[Column]:
+            all_habs = []
+            if t == Species.mammal and x.aquatic == 0:
+                all_habs.append(HabitatTable(Habitat.land))
+            elif t == Species.bird:
+                all_habs.append(HabitatTable(Habitat.land))
+                if x.airborne == 1:
+                    all_habs[-1] = make_set([all_habs[-1], HabitatTable(Habitat.air)])
+                if x.aquatic == 1:
+                    all_habs[-1] = make_set([all_habs[-1], HabitatTable(Habitat.water)])
+            elif t == Species.fish:
+                all_habs.append(HabitatTable(Habitat.water))
+            elif t == Species.molusc:
+                all_habs.append(HabitatTable(Habitat.land))
+                if x.aquatic == 1:
+                    all_habs[-1] = make_set([all_habs[-1], HabitatTable(Habitat.water)])
+            return all_habs + [t]
+
+        n = 20
+        habitat_targets = [get_habitat(x, t) for x, t in zip(self.all_cases[:n], self.targets[:n])]
+        grdr.fit(self.all_cases, habitat_targets, expert=expert,
+                 animate_tree=draw_tree, n_iter=n)
+        for rule in grdr.start_rules:
+            render_tree(rule, use_dot_exporter=True,
+                        filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
+
+        cats = grdr.classify(self.all_cases[50])
+        self.assertEqual(cats, [self.targets[50], Habitat.land])
+
+        if save_answers:
+            cwd = os.getcwd()
+            file = os.path.join(cwd, filename)
+            expert.save_answers(file)
+
+    def get_fit_scrdr(self, draw_tree=False) -> SingleClassRDR:
+        filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
+        expert = Human(use_loaded_answers=True)
+        expert.load_answers(filename)
+
+        scrdr = SingleClassRDR()
+        scrdr.fit(self.all_cases, self.targets, expert=expert,
+                  animate_tree=draw_tree)
+        return scrdr
+
+    def get_expert_and_file_name(self, use_loaded_answers: bool, filename: str):
+        filename = self.expert_answers_dir + "/" + filename
+        expert = Human(use_loaded_answers=use_loaded_answers, session=self.session)
+        if use_loaded_answers:
+            expert.load_answers(filename)
+        return expert, filename
 
 
 tests = TestAlchemyRDR()
@@ -102,4 +171,5 @@ tests.setUpClass()
 # tests.test_alchemy_rules()
 # tests.test_classify_scrdr()
 # tests.test_fit_scrdr()
-tests.test_fit_mcrdr_stop_only()
+# tests.test_fit_mcrdr_stop_only()
+tests.test_fit_grdr()

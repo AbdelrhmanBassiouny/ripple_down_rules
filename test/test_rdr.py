@@ -1,14 +1,13 @@
-import json
 import os
 from unittest import TestCase, skip
 
-from typing_extensions import List, Optional
+from typing_extensions import List
 
+from ripple_down_rules.datasets import HabitatCol as Habitat, SpeciesCol as Species
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import Case, MCRDRMode, \
-    Row, Column, Category, CallableExpression
-from ripple_down_rules.datasets import HabitatCol as Habitat, SpeciesCol as Species
-from ripple_down_rules.experts import Expert, Human
+    Row, Column, Category
+from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree, get_all_subclasses
 

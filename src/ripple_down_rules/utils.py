@@ -82,6 +82,21 @@ def row_to_dict(obj):
     }
 
 
+def get_property_by_type(obj: Any, prop_type: Type) -> Any:
+    """
+    Get a property from an object by type.
+
+    :param obj: The object to get the property from.
+    :param prop_type: The type of the property.
+    """
+    for name in dir(obj):
+        if name.startswith("_") or callable(getattr(obj, name)):
+            continue
+        prop_value = getattr(obj, name)
+        if isinstance(prop_value, prop_type):
+            return prop_value
+
+
 def get_property_name(obj: Any, prop: Any) -> str:
     """
     Get the name of a property from an object.

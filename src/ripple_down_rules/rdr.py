@@ -5,14 +5,13 @@ from copy import copy
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
-from sqlalchemy import Column
-from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
-from typing_extensions import List, Optional, Dict, Type, Union, Any
+from sqlalchemy.orm import DeclarativeBase as SQLTable, Session, MappedColumn
+from typing_extensions import List, Optional, Dict, Type, Union, Any, Set
 
 from .datastructures import Case, MCRDRMode, CallableExpression, Row, Column
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
-from .utils import draw_tree, get_property_name, make_set
+from .utils import draw_tree, get_property_name, make_set, get_property_by_type
 
 
 class RippleDownRules(ABC):
@@ -136,6 +135,37 @@ class RippleDownRules(ABC):
             if not self.fig:
                 self.fig = plt.figure(0)
             draw_tree(self.start_rule, self.fig)
+
+    @staticmethod
+    def case_has_conclusion(x: Union[Case, SQLTable], conclusion: Union[Type[Column], Type[MappedColumn]]) -> bool:
+        """
+        Check if the case has a conclusion.
+
+        :param x: The case to check.
+        :param conclusion: The target category to compare the case with.
+        :return: Whether the case has a conclusion or not.
+        """
+        if isinstance(x, SQLTable):
+            prop = get_property_by_type(x, conclusion)
+            if hasattr(prop, "__iter__") and not isinstance(prop, str):
+                return len(prop) > 0
+            else:
+                return prop is not None
+        else:
+            return conclusion in x
+
+    @staticmethod
+    def copy_case(case: Union[Row, SQLTable]) -> Union[Row, SQLTable]:
+        """
+        Copy a case.
+
+        :param case: The case to copy.
+        :return: The copied case.
+        """
+        if isinstance(case, SQLTable):
+            return case
+        else:
+            return copy(case)
 
 
 class SingleClassRDR(RippleDownRules):
@@ -278,19 +308,6 @@ class MultiClassRDR(RippleDownRules):
                             next_rule = self.last_top_rule
                 evaluated_rule = next_rule
         return list(OrderedSet(self.conclusions))
-
-    @staticmethod
-    def case_has_conclusion(x: Union[Case, SQLTable], conclusion: Union[Column, Column]) -> bool:
-        """
-        Check if the case has a conclusion.
-
-        :param x: The case to check.
-        :param conclusion: The target category to compare the case with.
-        :return: Whether the case has a conclusion or not.
-        """
-        if isinstance(x, SQLTable):
-            return get_property_name(x, conclusion) is not None
-        return conclusion in x
 
     def update_start_rule(self, x: Case, target: Column, expert: Expert):
         """
@@ -499,19 +516,18 @@ class GeneralRDR(RippleDownRules):
         :return: The categories that the case belongs to.
         """
         conclusions = []
-        x_cp = copy(x)
+        x_cp = self.copy_case(x)
         while True:
             added_attributes = False
             for cat_type, rdr in self.start_rules_dict.items():
-                if cat_type in x_cp:
+                if self.case_has_conclusion(x_cp, cat_type):
                     continue
                 pred_atts = rdr.classify(x_cp)
                 if pred_atts:
                     pred_atts = pred_atts if isinstance(pred_atts, list) else [pred_atts]
                     added_attributes = True
-                    for pred_att in pred_atts:
-                        x_cp.update(pred_att.as_dict)
-                        conclusions.append(pred_att)
+                    self.update_case_with_same_type_conclusions(x_cp, pred_atts)
+                    conclusions.extend(pred_atts)
             if not added_attributes:
                 break
         return list(OrderedSet(conclusions))
@@ -532,23 +548,65 @@ class GeneralRDR(RippleDownRules):
             return self.classify(x)
         targets = targets if isinstance(targets, list) else [targets]
         for t in targets:
-            x_cp = copy(x)
+            x_cp = self.copy_case(x)
             if type(t) not in self.start_rules_dict:
                 conclusions = self.classify(x)
-                x_cp.update(*[c.as_dict for c in make_set(conclusions)])
-                new_rdr = SingleClassRDR() if t.mutually_exclusive else MultiClassRDR()
+                self.update_case_with_same_type_conclusions(x_cp, conclusions)
+                new_rdr = self.initialize_appropriate_rdr_type_for_target(t, x_cp)
                 new_conclusions = new_rdr.fit_case(x_cp, t, expert, **kwargs)
                 self.start_rules_dict[type(t)] = new_rdr
-                x_cp.update(*[c.as_dict for c in make_set(new_conclusions)])
-            elif type(t) not in x_cp:
+                self.update_case_with_same_type_conclusions(x_cp, new_conclusions)
+            elif get_property_by_type(x_cp, type(t)) is None:
                 for rdr_type, rdr in self.start_rules_dict.items():
                     if type(t) != rdr_type:
                         conclusions = rdr.classify(x_cp)
                     else:
                         conclusions = self.start_rules_dict[type(t)].fit_case(x_cp, t, expert, **kwargs)
-                    x_cp.update(*[c.as_dict for c in make_set(conclusions)])
+                    self.update_case_with_same_type_conclusions(x_cp, conclusions)
 
         return self.classify(x)
+
+    @staticmethod
+    def initialize_appropriate_rdr_type_for_target(target: Union[Column, MappedColumn], case: Union[Row, SQLTable]):
+        """
+        Initialize the appropriate RDR type for the target.
+        """
+        if isinstance(case, SQLTable):
+            prop = get_property_by_type(case, type(target))
+            if hasattr(prop, "__iter__") and not isinstance(prop, str):
+                return MultiClassRDR()
+            else:
+                return SingleClassRDR()
+        else:
+            return SingleClassRDR() if target.mutually_exclusive else MultiClassRDR()
+
+    @staticmethod
+    def update_case_with_same_type_conclusions(case: Union[Row, SQLTable],
+                                               conclusions: Union[List[Column], List[MappedColumn]]):
+        """
+        Update the case with the conclusions.
+
+        :param case: The case to update.
+        :param conclusions: The conclusions to update the case with.
+        """
+        if not hasattr(conclusions, "__iter__") or isinstance(conclusions, str):
+            conclusions = [conclusions]
+        if len(conclusions) == 0:
+            return
+        if isinstance(case, SQLTable):
+            conclusions_type = type(conclusions[0])
+            attr = get_property_by_type(case, conclusions_type)
+            attr_name = get_property_name(case, attr)
+            if isinstance(attr, set):
+                attr.update(conclusions)
+            elif isinstance(attr, list):
+                attr.extend(conclusions)
+            elif len(conclusions) == 1:
+                setattr(case, attr_name, conclusions.pop())
+            else:
+                raise ValueError(f"Cannot add multiple conclusions to attribute {attr_name}")
+        else:
+            case.update(*[c.as_dict for c in make_set(conclusions)])
 
     @property
     def names_of_all_types(self) -> List[str]:
