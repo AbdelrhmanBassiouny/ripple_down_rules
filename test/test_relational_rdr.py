@@ -5,10 +5,10 @@ from unittest import TestCase
 
 from typing_extensions import List, Optional, Any
 
-from ripple_down_rules.datastructures import ObjectAttributeTarget, CallableExpression, Row
+from ripple_down_rules.datastructures import CaseQuery, CallableExpression, Row
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import get_property_name, render_tree
+from ripple_down_rules.utils import get_attribute_name_from_value, render_tree
 
 
 class PhysicalObject:
@@ -72,8 +72,8 @@ class RelationalRDRTestCase(TestCase):
         cls.part_c.contained_objects = {cls.part_d}
         cls.part_d.contained_objects = {cls.part_e}
         cls.robot: Robot = robot
-        attr_name = get_property_name(robot, robot.contained_objects)
-        cls.target = ObjectAttributeTarget(robot, attr_name, {cls.part_b, cls.part_c, cls.part_d, cls.part_e})
+        cls.target = CaseQuery(robot, robot.contained_objects,
+                               {cls.part_b, cls.part_c, cls.part_d, cls.part_e})
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -88,7 +88,7 @@ class RelationalRDRTestCase(TestCase):
         cat = scrdr.fit_case(table, for_attribute=table.parts.contained_objects, expert=expert)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + "/relational_scrdr_classify")
-        assert cat == self.target.target_value
+        assert cat == self.target.target
 
         if save_answers:
             cwd = os.getcwd()
@@ -107,4 +107,4 @@ class RelationalRDRTestCase(TestCase):
         conclusion = CallableExpression(user_input, set)
         print(conclusion)
         print(conclusion(self.robot))
-        assert conclusion(self.robot) == self.target.target_value
+        assert conclusion(self.robot) == self.target.target

@@ -110,18 +110,24 @@ class Base(sqlalchemy.orm.DeclarativeBase):
 class HabitatTable(MappedAsDataclass, Base):
     __tablename__ = "Habitat"
 
-    # make the id the foreign kez to the id of the animal
+    id: Mapped[int] = mapped_column(init=False, primary_key=True, autoincrement=True)
     habitat: Mapped[Habitat]
-    id = mapped_column(ForeignKey("Animal.id"), init=False, primary_key=True)
+    animal_id = mapped_column(ForeignKey("Animal.id"), init=False)
 
     def __hash__(self):
         return hash(self.habitat)
+
+    def __str__(self):
+        return self.habitat.value
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class Animal(MappedAsDataclass, Base):
     __tablename__ = "Animal"
 
-    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    id: Mapped[int] = mapped_column(init=False, primary_key=True, autoincrement=True)
     hair: Mapped[bool]
     feathers: Mapped[bool]
     eggs: Mapped[bool]

@@ -2,38 +2,71 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from typing_extensions import Any, Optional
+from sqlalchemy.orm import DeclarativeBase as SQLTable
+from typing_extensions import Any, Optional, Type
+
+from ripple_down_rules.datastructures import create_row, Case
+from ripple_down_rules.utils import get_attribute_name
 
 
 @dataclass
-class ObjectAttributeTarget:
-    obj: Any
+class CaseQuery:
     """
-    The object that the attribute belongs to.
+    This is a dataclass that represents an attribute of an object and its target value. If attribute name is
+    not provided, it will be inferred from the attribute itself or from the attribute type or from the target value,
+    depending on what is provided.
     """
-    attribute_name: str
+    case: Any
+    """
+    The case that the attribute belongs to.
+    """
+    attribute: Optional[Any] = None
+    """
+    The attribute itself.
+    """
+    target: Optional[Any] = None
+    """
+    The target value of the attribute.
+    """
+    attribute_name: Optional[str] = None
     """
     The name of the attribute.
     """
-    target_value: Any
+    attribute_type: Optional[Type] = None
     """
-    The target value of the attribute.
+    The type of the attribute.
     """
     relational_representation: Optional[str] = None
     """
     The representation of the target value in relational form.
     """
 
-    def __init__(self, obj: Any, attribute_name: str, target_value: Any,
+    def __init__(self, case: Any, attribute: Optional[Any] = None, target: Optional[Any] = None,
+                 attribute_name: Optional[str] = None, attribute_type: Optional[Type] = None,
                  relational_representation: Optional[str] = None):
-        self.obj = obj
-        self.name = attribute_name
-        self.__class__.__name__ = self.name
-        self.target_value = target_value
+
+        if attribute_name is None:
+            attribute_name = get_attribute_name(case, attribute, attribute_type, target)
+        self.attribute_name = attribute_name
+
+        if not isinstance(case, (Case, SQLTable)):
+            case = create_row(case)
+        self.case = case
+
+        self.attribute = getattr(self.case, self.attribute_name)
+        self.attribute_type = type(self.attribute)
+        self.target = target
         self.relational_representation = relational_representation
+
+    @property
+    def name(self):
+        return self.attribute_name if self.attribute_name else self.__class__.__name__
 
     def __str__(self):
         if self.relational_representation:
             return f"{self.name} |= {self.relational_representation}"
         else:
-            return f"{self.target_value}"
+            return f"{self.target}"
+
+    def __repr__(self):
+        return self.__str__()

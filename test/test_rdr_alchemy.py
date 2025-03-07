@@ -6,7 +6,7 @@ from sqlalchemy import select
 from typing_extensions import List, Sequence
 
 from ripple_down_rules.datasets import Base, Animal, Species, get_dataset, Habitat, HabitatTable
-from ripple_down_rules.datastructures import RDRMode, PromptFor
+from ripple_down_rules.datastructures import RDRMode, PromptFor, CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.prompt import prompt_user_for_expression
@@ -138,8 +138,10 @@ class TestAlchemyRDR:
         habitat_targets = [get_habitat(x, t) for x, t in zip(self.all_cases[:n], self.targets[:n])]
         attributes = [h[1] for h in habitat_targets]
         habitat_targets = [h[0] for h in habitat_targets]
-        grdr.fit(self.all_cases, habitat_targets, attributes=attributes, expert=expert,
-                 animate_tree=draw_tree, n_iter=n)
+        targets: List[CaseQuery] = []
+        for case, attr, target in zip(self.all_cases[:n], attributes, habitat_targets):
+            targets.append(CaseQuery(case, attr, target))
+        grdr.fit(self.all_cases, targets, expert=expert, animate_tree=draw_tree, n_iter=n)
         for rule in grdr.start_rules:
             render_tree(rule, use_dot_exporter=True,
                         filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")

@@ -9,7 +9,6 @@ from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING, Tuple
 
-from . import Category
 from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint
 
 if TYPE_CHECKING:

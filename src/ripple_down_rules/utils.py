@@ -84,6 +84,28 @@ def row_to_dict(obj):
     }
 
 
+def get_attribute_name(obj: Any, attribute: Optional[Any] = None, attribute_type: Optional[Type] = None,
+                       possible_value: Optional[Any] = None) -> Optional[str]:
+    """
+    Get the name of an attribute from an object. The attribute can be given as a value, a type or a target value.
+    And this method will try to find the attribute name using the given information.
+
+    :param obj: The object to get the attribute name from.
+    :param attribute: The attribute to get the name of.
+    :param attribute_type: The type of the attribute to get the name of.
+    :param possible_value: A possible value of the attribute to get the name of.
+    :return: The name of the attribute.
+    """
+    attribute_name: Optional[str] = None
+    if attribute_name is None and attribute is not None:
+        attribute_name = get_attribute_name_from_value(obj, attribute)
+    if attribute_name is None and attribute_type is not None:
+        attribute_name = get_attribute_name_from_value(obj, get_property_by_type(obj, attribute_type))
+    if attribute_name is None and possible_value is not None:
+        attribute_name = get_attribute_name_from_value(obj, get_property_by_type(obj, type(possible_value)))
+    return attribute_name
+
+
 def get_property_by_type(obj: Any, prop_type: Type) -> Optional[Any]:
     """
     Get a property from an object by type.
@@ -120,19 +142,20 @@ def get_property_by_type(obj: Any, prop_type: Type) -> Optional[Any]:
                 return prop_value
 
 
-def get_property_name(obj: Any, prop: Any) -> str:
+def get_attribute_name_from_value(obj: Any, attribute_value: Any) -> str:
     """
-    Get the name of a property from an object.
+    Get the name of an attribute from an object.
 
-    :param obj: The object to get the property name from.
-    :param prop: The property to get the name of.
+    :param obj: The object to get the attribute name from.
+    :param attribute_value: The attribute value to get the name of.
     """
     for name in dir(obj):
         if name.startswith("_") or callable(getattr(obj, name)):
             continue
         prop_value = getattr(obj, name)
-        if prop_value is prop or (hasattr(prop_value, "_value") and prop_value.value is prop):
+        if prop_value is attribute_value:
             return name
+    return get_property_by_type(obj, attribute_value).__name__
 
 
 def get_attribute_values_transitively(obj: Any, attribute: Any) -> Any:
