@@ -585,7 +585,7 @@ class GeneralRDR(RippleDownRules):
                 conclusions = self.classify(case)
                 self.update_case_with_same_type_conclusions(case_cp, conclusions, attribute)
                 new_rdr = self.initialize_new_rdr_for_attribute(target, case_cp)
-                new_conclusions = new_rdr.fit_case(CaseQuery(case_cp, target=target), expert, **kwargs)
+                new_conclusions = new_rdr.fit_case(case_query_cp, expert, **kwargs)
                 self.start_rules_dict[type(target)] = new_rdr
                 self.update_case_with_same_type_conclusions(case_cp, new_conclusions, attribute)
             elif not self.case_has_conclusion(case_cp, type(target)):

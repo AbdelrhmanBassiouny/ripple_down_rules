@@ -84,6 +84,9 @@ class CaseQuery:
         :return: The copied case.
         """
         if isinstance(case, SQLTable):
-            return case
+            data = {c.name: getattr(case, c.name) for c in case.__table__.columns if c.name != "id"}
+            return case.__class__(**data)
         else:
             return copy(case)
+
+

@@ -78,14 +78,12 @@ class TestAlchemyRDR:
         query = select(Animal)
         result = self.session.scalars(query).all()
         scrdr = SingleClassRDR(session=self.session)
-        scrdr.table = Animal
-        scrdr.target_column = Animal.species
-        targets = [r.species for r in result]
-        scrdr.fit(result, targets, expert=expert,
+        case_queries = [CaseQuery(c, target=t) for c, t in zip(self.all_cases, self.targets)]
+        scrdr.fit(case_queries, expert=expert,
                   animate_tree=draw_tree, session=self.session)
 
         cat = scrdr.classify(result[50])
-        assert cat == targets[50]
+        assert cat == self.targets[50]
 
     def test_fit_mcrdr_stop_only(self):
         use_loaded_answers = True
@@ -94,10 +92,11 @@ class TestAlchemyRDR:
                                                          "mcrdr_expert_answers_stop_only_fit")
 
         mcrdr = MultiClassRDR(session=self.session)
-        mcrdr.fit(self.all_cases, self.targets, expert=expert, animate_tree=draw_tree)
+        case_queries = [CaseQuery(c, target=t) for c, t in zip(self.all_cases, self.targets)]
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
 
         cats = mcrdr.classify(self.all_cases[50])
-        assert cats[0] == self.all_cases[50].species
+        assert cats[0] == self.targets[50]
         assert len(cats) == 1
 
     def test_fit_grdr(self):
@@ -115,7 +114,6 @@ class TestAlchemyRDR:
 
         def get_habitat(x: Animal, t: Column) -> List[Column]:
             all_habs = []
-            atts = []
             if t == Species.mammal and x.aquatic == 0:
                 all_habs.append(HabitatTable(Habitat.land))
             elif t == Species.bird:
@@ -136,12 +134,13 @@ class TestAlchemyRDR:
 
         n = 20
         habitat_targets = [get_habitat(x, t) for x, t in zip(self.all_cases[:n], self.targets[:n])]
-        attributes = [h[1] for h in habitat_targets]
+        all_attributes = [h[1] for h in habitat_targets]
         habitat_targets = [h[0] for h in habitat_targets]
-        targets: List[CaseQuery] = []
-        for case, attr, target in zip(self.all_cases[:n], attributes, habitat_targets):
-            targets.append(CaseQuery(case, attr, target))
-        grdr.fit(self.all_cases, targets, expert=expert, animate_tree=draw_tree, n_iter=n)
+        case_queries = []
+        for case, attributes, targets in zip(self.all_cases[:n], all_attributes, habitat_targets):
+            for attr, target in zip(attributes, targets):
+                case_queries.append(CaseQuery(case, attr, target=target))
+        grdr.fit(case_queries, expert=expert, animate_tree=draw_tree, n_iter=n)
         for rule in grdr.start_rules:
             render_tree(rule, use_dot_exporter=True,
                         filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
@@ -160,8 +159,8 @@ class TestAlchemyRDR:
         expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        scrdr.fit(self.all_cases, self.targets, expert=expert,
-                  animate_tree=draw_tree)
+        case_queries = [CaseQuery(c, target=t) for c, t in zip(self.all_cases, self.targets)]
+        scrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         return scrdr
 
     def get_expert_and_file_name(self, use_loaded_answers: bool, filename: str):
