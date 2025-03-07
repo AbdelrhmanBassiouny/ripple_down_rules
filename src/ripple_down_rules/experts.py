@@ -4,9 +4,9 @@ import json
 from abc import ABC, abstractmethod
 
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any
 
-from .datastructures import (Case, PromptFor, CallableExpression, Column)
+from .datastructures import (Case, PromptFor, CallableExpression, Column, CaseQuery)
 from .datastructures.table import show_current_and_corner_cases
 from .prompt import prompt_user_for_expression, prompt_user_about_case
 from .utils import get_all_subclasses
@@ -76,14 +76,12 @@ class Expert(ABC):
         """
         pass
 
-    def ask_for_conclusion(self, case: Union[Case, SQLTable], attribute_name: str, attribute_type: Type,
+    def ask_for_conclusion(self, case_query: CaseQuery,
                            session: Optional[Session] = None) -> Optional[CallableExpression]:
         """
         Ask the expert to provide a relational conclusion for the case.
 
-        :param case: The case to classify.
-        :param attribute_name: The name of the attribute to provide the conclusion for.
-        :param attribute_type: The type of the attribute to provide the conclusion for.
+        :param case_query: The case query containing the case to find a conclusion for.
         :param session: The sqlalchemy orm session to use if the case is a Table.
         :return: A callable expression that can be called with a new case as an argument.
         """
@@ -150,36 +148,37 @@ class Human(Expert):
                 self.all_expert_answers.append(user_input)
         return condition
 
-    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Column]) \
+    def ask_for_extra_conclusions(self, case: Case, current_conclusions: List[Column]) \
             -> Dict[Column, CallableExpression]:
         """
         Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
         that category.
 
-        :param x: The case to classify.
+        :param case: The case to classify.
         :param current_conclusions: The current conclusions for the case.
         :return: The extra conclusions for the case.
         """
         extra_conclusions = {}
         while True:
-            category = self.ask_for_conclusion(x, current_conclusions)
+            category = self.ask_for_conclusion(CaseQuery(case), current_conclusions)
             if not category:
                 break
-            extra_conclusions[category] = self._get_conditions(x, category)
+            extra_conclusions[category] = self._get_conditions(case, category)
         return extra_conclusions
 
-    def ask_for_conclusion(self, case: Case, current_conclusions: Optional[List[Column]] = None,
-                           attribute_name: Optional[str] = None, attribute_type: Optional[Type] = None
-                           ) -> Optional[Union[CallableExpression, Column, Column]]:
+    def ask_for_conclusion(self, case_query: CaseQuery,
+                           current_conclusions: Optional[List[Any]] = None)\
+            -> Optional[Union[CallableExpression, Column, Column]]:
         """
         Ask the expert to provide a conclusion for the case.
 
-        :param case: The case to classify.
+        :param case_query: The case query containing the case to find a conclusion for.
         :param current_conclusions: The current conclusions for the case if any.
-        :param attribute_name: The name of the attribute to provide the conclusion for.
-        :param attribute_type: The type of the attribute to provide the conclusion for.
         :return: The conclusion for the case.
         """
+        case = case_query.case
+        attribute_name = case_query.attribute_name
+        attribute_type = case_query.attribute_type
         if self.use_loaded_answers:
             expert_input = self.all_expert_answers.pop(0)
         else:

@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import os
 import pickle
-from abc import abstractmethod, ABC
-from enum import Enum
 
 import sqlalchemy
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column, relationship
-from typing_extensions import Tuple, List, Dict, Set
+from typing_extensions import Tuple, List, Set
 from ucimlrepo import fetch_ucirepo
 
-from .datastructures import Case, Row, create_rows_from_dataframe, Category, Column
+from .datastructures import Case, create_rows_from_dataframe, Category, Column
 
 
 def load_cached_dataset(cache_file):

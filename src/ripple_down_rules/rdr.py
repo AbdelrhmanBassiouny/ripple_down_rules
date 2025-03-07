@@ -50,21 +50,18 @@ class RippleDownRules(ABC):
         pass
 
     @abstractmethod
-    def fit_case(self, case: Union[Case, SQLTable], target: Optional[Any] = None,
-                 expert: Optional[Expert] = None, attribute: Optional[Any] = None, **kwargs) -> Column:
+    def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) -> Column:
         """
         Fit the RDR on a case, and ask the expert for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category.
 
-        :param case: The case to classify.
-        :param target: The target category to compare the case with.
+        :param case_query: The query containing the case to classify and the target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
-        :param attribute: The attribute of the case to find a value for.
         :return: The category that the case belongs to.
         """
         pass
 
-    def fit(self, cases: List[Union[Case, SQLTable]], targets: Optional[CaseQuery] = None,
+    def fit(self, case_queries: List[CaseQuery],
             expert: Optional[Expert] = None,
             n_iter: int = None,
             animate_tree: bool = False,
@@ -72,13 +69,14 @@ class RippleDownRules(ABC):
         """
         Fit the classifier to a batch of cases and categories.
 
-        :param cases: The cases to fit the classifier to.
-        :param targets: The categories to fit the classifier to.
+        :param case_queries: The cases and categories to fit the classifier to.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param n_iter: The number of iterations to fit the classifier for.
         :param animate_tree: Whether to draw the tree while fitting the classifier.
         :param kwargs_for_fit_case: The keyword arguments to pass to the fit_case method.
         """
+        cases = [case_query.case for case_query in case_queries]
+        targets = [case.target for case in case_queries]
         if animate_tree:
             plt.ion()
         i = 0
@@ -90,11 +88,13 @@ class RippleDownRules(ABC):
             all_precision = []
             if not targets:
                 targets = [None] * len(cases)
-            for case, target in zip(cases, targets):
+            for case_query in case_queries:
+                case = case_query.case
+                target = case_query.target
                 if not target:
                     conclusions = self.classify(case) if self.start_rule and self.start_rule.conditions else []
-                    target = expert.ask_for_conclusion(case, conclusions)
-                pred_cat = self.fit_case(case, target, expert=expert, **kwargs_for_fit_case)
+                    target = expert.ask_for_conclusion(case_query, conclusions)
+                pred_cat = self.fit_case(case_query, expert=expert, **kwargs_for_fit_case)
                 pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
                 target = target if isinstance(target, list) else [target]
                 recall = [not yi or (yi in pred_cat) for yi in target]
@@ -169,18 +169,6 @@ class RippleDownRules(ABC):
             return copy(case)
 
     @staticmethod
-    def ask_for_target(case: Union[Case, SQLTable], expert: Expert, attribute: Optional[Any] = None):
-        """
-        Ask the expert for a target category for the case.
-
-        :param case: The case to classify.
-        :param expert: The expert to ask for differentiating features as new rule conditions.
-        :param attribute: The attribute of the case to find a value for.
-        """
-        attribute_name = get_attribute_name_from_value(case, attribute)
-        return expert.ask_for_conclusion(case, attribute_name=attribute_name, attribute_type=type(attribute))
-
-    @staticmethod
     def convert_to_case_and_get_new_attribute(case: Union[Case, SQLTable],
                                               attribute: Optional[Any] = None) -> Tuple[Union[Case, SQLTable], Any]:
         """
@@ -216,7 +204,7 @@ class SingleClassRDR(RippleDownRules):
         expert = expert if expert else Human(session=self.session)
         case, attribute = case_query.case, case_query.attribute
         if case_query.target is None:
-            target = RDR.ask_for_target(case, expert, attribute)
+            target = expert.ask_for_conclusion(case_query)
         else:
             target = case_query.target
 
@@ -289,25 +277,23 @@ class MultiClassRDR(RippleDownRules):
             evaluated_rule = next_rule
         return self.conclusions
 
-    def fit_case(self, case: Union[Case, SQLTable], target_query: CaseQuery,
-                 expert: Optional[Expert] = None,
+    def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None,
                  add_extra_conclusions: bool = False) -> List[Any]:
         """
         Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
          or missing by comparing the case with the target category if provided.
 
-        :param case: The case to classify.
-        :param target_query: The target category to compare the case with.
+        :param case_query: The query containing the case to classify and the target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions or for extra conclusions.
         :param add_extra_conclusions: Whether to add extra conclusions after classification is done.
         :return: The conclusions that the case belongs to.
         """
         expert = expert if expert else Human(session=self.session)
-        case, attribute = RDR.convert_to_case_and_get_new_attribute(case, target_query.attribute)
-        if target_query.target is None:
-            targets = [RDR.ask_for_target(case, expert, attribute)]
+        case = case_query.case
+        if case_query.target is None:
+            targets = [expert.ask_for_conclusion(case_query)]
         else:
-            targets = [target_query.target]
+            targets = [case_query.target]
         self.expert_accepted_conclusions = []
         user_conclusions = []
         for target in targets:
@@ -567,9 +553,7 @@ class GeneralRDR(RippleDownRules):
                 break
         return conclusions
 
-    def fit_case(self, case: Union[Case, SQLTable], targets: Optional[Any] = None,
-                 expert: Optional[Expert] = None, attributes: Optional[List[Any]] = None,
-                 **kwargs) -> List[Any]:
+    def fit_case(self, case_queries: List[CaseQuery], expert: Optional[Expert] = None, **kwargs) -> List[Any]:
         """
         Fit the GRDR on a case, if the target is a new type of category, a new RDR is created for it,
         else the existing RDR of that type will be fitted on the case, and then classification is done and all
@@ -578,26 +562,30 @@ class GeneralRDR(RippleDownRules):
         they are accepted by the expert, and the attribute of that category is represented in the case as a set of
         values.
 
-        :param case: The case to classify.
-        :param targets: The target categories to compare the case with.
+        :param case_queries: The queries containing the case to classify and the target categories to compare the case
+        with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
-        :param attributes: The attributes of the case to find values for.
         :return: The categories that the case belongs to.
         """
         expert = expert if expert else Human()
-        if not targets:
-            return self.classify(case)
-        targets = targets if isinstance(targets, list) else [targets]
-        if len(targets) == 0:
-            targets = [self.ask_for_target(case, expert)]
-        attributes = attributes if attributes else [None] * len(targets)
-        for target, attribute in zip(targets, attributes):
-            case_cp = self.copy_case(case)
+        case_queries = [case_queries] if not isinstance(case_queries, list) else case_queries
+        assert len(case_queries) > 0, "No case queries provided"
+        case = case_queries[0].case
+        assert all([case is case_query.case for case_query in case_queries]), ("fit_case requires only one case,"
+                                                                               " for multiple cases use fit instead")
+        case_query_cp = copy(case_queries[0])
+        case_cp = case_query_cp.case
+        for case_query in case_queries:
+            target = case_query.target
+            if not target:
+                target = expert.ask_for_conclusion(case_query)
+            attribute = case_query.attribute
+            case_query_cp = CaseQuery(case_cp, attribute_name=case_query.attribute_name, target=target)
             if type(target) not in self.start_rules_dict:
                 conclusions = self.classify(case)
                 self.update_case_with_same_type_conclusions(case_cp, conclusions, attribute)
                 new_rdr = self.initialize_new_rdr_for_attribute(target, case_cp)
-                new_conclusions = new_rdr.fit_case(case_cp, target, expert, **kwargs)
+                new_conclusions = new_rdr.fit_case(CaseQuery(case_cp, target=target), expert, **kwargs)
                 self.start_rules_dict[type(target)] = new_rdr
                 self.update_case_with_same_type_conclusions(case_cp, new_conclusions, attribute)
             elif not self.case_has_conclusion(case_cp, type(target)):
@@ -605,7 +593,8 @@ class GeneralRDR(RippleDownRules):
                     if type(target) is not rdr_type:
                         conclusions = rdr.classify(case_cp)
                     else:
-                        conclusions = self.start_rules_dict[type(target)].fit_case(case_cp, target, expert, **kwargs)
+                        conclusions = self.start_rules_dict[type(target)].fit_case(case_query_cp,
+                                                                                   expert, **kwargs)
                     rdr_attribute = get_property_by_type(case_cp, rdr_type)
                     self.update_case_with_same_type_conclusions(case_cp, conclusions, rdr_attribute)
 

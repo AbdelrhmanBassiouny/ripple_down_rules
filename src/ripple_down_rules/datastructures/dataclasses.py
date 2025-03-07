@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from copy import copy
 from dataclasses import dataclass
 
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Type
+from typing_extensions import Any, Optional, Type, Union
 
-from ripple_down_rules.datastructures import create_row, Case
-from ripple_down_rules.utils import get_attribute_name
+from .table import create_row, Case
+from ..utils import get_attribute_name
 
 
 @dataclass
@@ -24,7 +25,7 @@ class CaseQuery:
     """
     The attribute itself.
     """
-    target: Optional[Any] = None
+    targets: Optional[Any] = None
     """
     The target value of the attribute.
     """
@@ -53,8 +54,8 @@ class CaseQuery:
             case = create_row(case)
         self.case = case
 
-        self.attribute = getattr(self.case, self.attribute_name)
-        self.attribute_type = type(self.attribute)
+        self.attribute = getattr(self.case, self.attribute_name) if self.attribute_name else None
+        self.attribute_type = type(self.attribute) if self.attribute else None
         self.target = target
         self.relational_representation = relational_representation
 
@@ -70,3 +71,19 @@ class CaseQuery:
 
     def __repr__(self):
         return self.__str__()
+
+    def __copy__(self):
+        return CaseQuery(self.copy_case(self.case), attribute_name=self.attribute_name, target=self.target)
+
+    @staticmethod
+    def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:
+        """
+        Copy a case.
+
+        :param case: The case to copy.
+        :return: The copied case.
+        """
+        if isinstance(case, SQLTable):
+            return case
+        else:
+            return copy(case)

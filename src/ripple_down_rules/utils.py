@@ -37,7 +37,7 @@ def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
     return attr_value_type
 
 
-def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Any, Any, Tuple[Any]]:
+def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Any], Optional[Any], Tuple[Any]]:
     """
     Get the type hint for an attribute of an object.
 
@@ -45,6 +45,8 @@ def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Any, Any, Tuple[An
     :param obj: The object to get the attribute from.
     :return: The type hint of the attribute.
     """
+    if not hasattr(obj.__class__, attr_name):
+        return None, None, ()
     class_attr = getattr(obj.__class__, attr_name)
     if isinstance(class_attr, property):
         if not class_attr.fget:
@@ -116,7 +118,7 @@ def get_property_by_type(obj: Any, prop_type: Type) -> Optional[Any]:
     for name in dir(obj):
         if name.startswith("_") or callable(getattr(obj, name)):
             continue
-        if isinstance(getattr(obj.__class__, name), (MetaData, registry)):
+        if isinstance(getattr(obj, name), (MetaData, registry)):
             continue
         prop_value = getattr(obj, name)
         if isinstance(prop_value, prop_type):
@@ -142,7 +144,7 @@ def get_property_by_type(obj: Any, prop_type: Type) -> Optional[Any]:
                 return prop_value
 
 
-def get_attribute_name_from_value(obj: Any, attribute_value: Any) -> str:
+def get_attribute_name_from_value(obj: Any, attribute_value: Any) -> Optional[str]:
     """
     Get the name of an attribute from an object.
 
@@ -155,7 +157,6 @@ def get_attribute_name_from_value(obj: Any, attribute_value: Any) -> str:
         prop_value = getattr(obj, name)
         if prop_value is attribute_value:
             return name
-    return get_property_by_type(obj, attribute_value).__name__
 
 
 def get_attribute_values_transitively(obj: Any, attribute: Any) -> Any:

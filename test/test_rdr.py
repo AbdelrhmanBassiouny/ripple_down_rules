@@ -27,8 +27,8 @@ class TestRDR(TestCase):
             os.makedirs(cls.test_results_dir)
 
     def tearDown(self):
-        Row.registry = {}
-        Column.registry = {}
+        Row._registry = {}
+        Column._registry = {}
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -57,7 +57,8 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        scrdr.fit(self.all_cases, self.targets, expert=expert,
+        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        scrdr.fit(case_queries, expert=expert,
                   animate_tree=draw_tree)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/scrdr")
@@ -79,7 +80,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         mcrdr = MultiClassRDR()
-        cats = mcrdr.fit_case(self.all_cases[0], self.targets[0], expert=expert)
+        cats = mcrdr.fit_case(CaseQuery(self.all_cases[0], target=self.targets[0]), expert=expert)
 
         self.assertEqual(cats[0], self.targets[0])
 
@@ -97,8 +98,8 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR()
-        mcrdr.fit(self.all_cases, self.targets,
-                  expert=expert, animate_tree=draw_tree)
+        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_only")
         cats = mcrdr.classify(self.all_cases[50])
@@ -118,8 +119,8 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
-        mcrdr.fit(self.all_cases, self.targets,
-                  expert=expert, animate_tree=draw_tree)
+        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_plus_rule")
         cats = mcrdr.classify(self.all_cases[50])
@@ -139,8 +140,8 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRuleCombined)
-        mcrdr.fit(self.all_cases, self.targets,
-                  expert=expert, animate_tree=draw_tree)
+        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_plus_rule_combined")
         cats = mcrdr.classify(self.all_cases[50])
@@ -161,7 +162,7 @@ class TestRDR(TestCase):
             expert.load_answers(file_name)
 
         mcrdr = MultiClassRDR()
-        cats = mcrdr.fit_case(self.all_cases[0], self.targets[0],
+        cats = mcrdr.fit_case(CaseQuery(self.all_cases[0], target=self.targets[0]),
                               add_extra_conclusions=True, expert=expert)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_extra_classify")
@@ -180,14 +181,13 @@ class TestRDR(TestCase):
         save_answers = False
         expert = Human(use_loaded_answers=use_loaded_answers)
         mcrdr = MultiClassRDR()
-        mcrdr.fit(self.all_cases, self.targets,
-                  add_extra_conclusions=False, expert=expert, animate_tree=False)
+        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        mcrdr.fit(case_queries, add_extra_conclusions=False, expert=expert, animate_tree=False)
         expert = Human(use_loaded_answers=use_loaded_answers)
         file_name = self.expert_answers_dir + "/mcrdr_extra_expert_answers_fit"
         if use_loaded_answers:
             expert.load_answers(file_name)
-        mcrdr.fit(self.all_cases, self.targets,
-                  add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
+        mcrdr.fit(case_queries, add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
         cats = mcrdr.classify(self.all_cases[50])
         LivesOnlyOnLand = get_all_subclasses(Column)["LivesOnlyOnLand".lower()]
         self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
@@ -207,7 +207,8 @@ class TestRDR(TestCase):
         grdr = GeneralRDR()
 
         targets = [self.targets[0], Habitat.land]
-        cats = grdr.fit_case(self.all_cases[0], targets, expert=expert)
+        case_queries = [CaseQuery(self.all_cases[0], target=target) for target in targets]
+        cats = grdr.fit_case(case_queries, expert=expert)
         self.assertEqual(cats, targets)
 
         if save_answers:
@@ -248,7 +249,10 @@ class TestRDR(TestCase):
 
         n = 20
         habitat_targets = [get_habitat(x, t) for x, t in zip(self.all_cases[:n], self.targets[:n])]
-        grdr.fit(self.all_cases, habitat_targets, expert=expert,
+        case_queries = [CaseQuery(case, target=target)
+                        for case, targets in zip(self.all_cases[:n], habitat_targets)
+                        for target in targets]
+        grdr.fit(case_queries, expert=expert,
                  animate_tree=draw_tree, n_iter=n)
         for rule in grdr.start_rules:
             render_tree(rule, use_dot_exporter=True,
@@ -296,6 +300,7 @@ class TestRDR(TestCase):
         expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        scrdr.fit(self.all_cases, self.targets, expert=expert,
+        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        scrdr.fit(case_queries, expert=expert,
                   animate_tree=draw_tree)
         return scrdr
