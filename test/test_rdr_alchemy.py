@@ -29,10 +29,8 @@ class TestAlchemyRDR:
         X = zoo['features']
         y = zoo['targets']
         # get ids as list of strings
-
-        category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
-        category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
-        # X.loc[:, "species"] = [Species(category_id_to_name[i]) for i in y.values.flatten()]
+        names = zoo['ids'].values.flatten()
+        X.loc[:, "name"] = names
 
         engine = sqlalchemy.create_engine("sqlite:///:memory:")
         Base.metadata.create_all(engine)
@@ -42,6 +40,8 @@ class TestAlchemyRDR:
         cls.session = session
         query = select(Animal)
         cls.all_cases = cls.session.scalars(query).all()
+        category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
+        category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
         cls.targets = [Species(category_id_to_name[i]) for i in y.values.flatten()]
 
     def test_fit_scrdr(self):

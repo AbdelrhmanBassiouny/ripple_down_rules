@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-
-import typing_extensions
 from collections import UserDict
 from copy import deepcopy
+from dataclasses import dataclass
 
 import matplotlib
 import networkx as nx
@@ -13,15 +11,13 @@ from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
 from sqlalchemy import MetaData, inspect
-from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session, make_transient
+from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
     get_origin, get_args, Tuple, Optional, List, Union
 
-
 if TYPE_CHECKING:
     from .datastructures import Case
-
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 

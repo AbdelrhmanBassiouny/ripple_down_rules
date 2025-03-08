@@ -126,6 +126,7 @@ class Animal(MappedAsDataclass, Base):
     __tablename__ = "Animal"
 
     id: Mapped[int] = mapped_column(init=False, primary_key=True, autoincrement=True)
+    name: Mapped[str]
     hair: Mapped[bool]
     feathers: Mapped[bool]
     eggs: Mapped[bool]
