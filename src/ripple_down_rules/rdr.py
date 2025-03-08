@@ -581,7 +581,6 @@ class GeneralRDR(RippleDownRules):
             target = case_query.target
             if not target:
                 target = expert.ask_for_conclusion(case_query)
-            attribute = case_query.attribute
             case_query_cp = CaseQuery(case_cp, attribute_name=case_query.attribute_name, target=target)
             if type(target) not in self.start_rules_dict:
                 conclusions = self.classify(case)
@@ -589,7 +588,7 @@ class GeneralRDR(RippleDownRules):
                 new_rdr = self.initialize_new_rdr_for_attribute(target, case_cp)
                 new_conclusions = new_rdr.fit_case(case_query_cp, expert, **kwargs)
                 self.start_rules_dict[type(target)] = new_rdr
-                self.update_case_with_same_type_conclusions(case_cp, new_conclusions, attribute)
+                self.update_case_with_same_type_conclusions(case_cp, new_conclusions, type(target))
             elif not self.case_has_conclusion(case_cp, type(target)):
                 for rdr_type, rdr in self.start_rules_dict.items():
                     if type(target) is not rdr_type:
@@ -597,8 +596,7 @@ class GeneralRDR(RippleDownRules):
                     else:
                         conclusions = self.start_rules_dict[type(target)].fit_case(case_query_cp,
                                                                                    expert, **kwargs)
-                    rdr_attribute = get_attribute_by_type(case_cp, rdr_type)
-                    self.update_case_with_same_type_conclusions(case_cp, conclusions, rdr_attribute)
+                    self.update_case_with_same_type_conclusions(case_cp, conclusions, rdr_type)
 
         return self.classify(case)
 
@@ -618,13 +616,13 @@ class GeneralRDR(RippleDownRules):
 
     @staticmethod
     def update_case_with_same_type_conclusions(case: Union[Case, SQLTable],
-                                               conclusions: List[Any], attribute: Optional[Any] = None):
+                                               conclusions: List[Any], attribute_type: Optional[Any] = None):
         """
         Update the case with the conclusions.
 
         :param case: The case to update.
         :param conclusions: The conclusions to update the case with.
-        :param attribute: The attribute of the case to update.
+        :param attribute_type: The type of the attribute to update.
         """
         if not conclusions:
             return
@@ -632,11 +630,8 @@ class GeneralRDR(RippleDownRules):
         if len(conclusions) == 0:
             return
         if isinstance(case, SQLTable):
-            conclusions_type = type(conclusions[0])
-            # if attribute is None:
+            conclusions_type = type(conclusions[0]) if not attribute_type else attribute_type
             attr_name, attribute = get_attribute_by_type(case, conclusions_type)
-            # else:
-            #     attr_name = get_attribute_name_from_value(case, attribute)
             hint, origin, args = get_hint_for_attribute(attr_name, case)
             if isinstance(attribute, set) or origin == set:
                 attribute = set() if attribute is None else attribute
