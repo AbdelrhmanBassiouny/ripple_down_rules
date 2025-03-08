@@ -84,8 +84,7 @@ class RelationalRDRTestCase(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        table = Row.from_obj(self.robot)
-        cat = scrdr.fit_case(table, for_attribute=table.parts.contained_objects, expert=expert)
+        cat = scrdr.fit_case(CaseQuery(self.robot, self.robot.contained_objects), expert=expert)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + "/relational_scrdr_classify")
         assert cat == self.target.target
@@ -103,7 +102,7 @@ class RelationalRDRTestCase(TestCase):
         assert conditions(self.robot) == (self.robot.parts is not None and len(self.robot.parts) > 0)
 
     def test_parse_relational_conclusions(self):
-        user_input = "parts.contained_objects.filter_by()"
+        user_input = "parts.contained_objects"
         conclusion = CallableExpression(user_input, set)
         print(conclusion)
         print(conclusion(self.robot))

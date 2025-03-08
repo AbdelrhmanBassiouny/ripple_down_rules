@@ -28,7 +28,6 @@ class TestAlchemyRDR:
         # data (as pandas dataframes)
         X = zoo['features']
         y = zoo['targets']
-        # get ids as list of strings
         names = zoo['ids'].values.flatten()
         X.loc[:, "name"] = names
 
