@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import dataclass
 
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import Any, Optional, Type, Union
 
 from .table import create_row, Case
-from ..utils import get_attribute_name
+from ..utils import get_attribute_name, copy_orm_instance_with_relationships, copy_case
 
 
 @dataclass
@@ -73,20 +73,4 @@ class CaseQuery:
         return self.__str__()
 
     def __copy__(self):
-        return CaseQuery(self.copy_case(self.case), attribute_name=self.attribute_name, target=self.target)
-
-    @staticmethod
-    def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:
-        """
-        Copy a case.
-
-        :param case: The case to copy.
-        :return: The copied case.
-        """
-        if isinstance(case, SQLTable):
-            data = {c.name: getattr(case, c.name) for c in case.__table__.columns if c.name != "id"}
-            return case.__class__(**data)
-        else:
-            return copy(case)
-
-
+        return CaseQuery(copy_case(self.case), attribute_name=self.attribute_name, target=self.target)

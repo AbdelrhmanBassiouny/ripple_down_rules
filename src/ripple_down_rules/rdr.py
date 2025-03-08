@@ -5,13 +5,14 @@ from copy import copy
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
-from sqlalchemy.orm import DeclarativeBase as SQLTable, Session, MappedColumn
+from sqlalchemy.orm import DeclarativeBase as SQLTable, Session, make_transient
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Tuple
 
 from .datastructures import Case, MCRDRMode, CallableExpression, Column, create_row, CaseQuery
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
-from .utils import draw_tree, get_attribute_name_from_value, make_set, get_property_by_type
+from .utils import draw_tree, get_attribute_name_from_value, make_set, get_attribute_by_type, copy_case, \
+    get_hint_for_attribute
 
 
 class RippleDownRules(ABC):
@@ -147,11 +148,11 @@ class RippleDownRules(ABC):
         :return: Whether the case has a conclusion or not.
         """
         if isinstance(case, SQLTable):
-            prop = get_property_by_type(case, conclusion_type)
-            if hasattr(prop, "__iter__") and not isinstance(prop, str):
-                return len(prop) > 0
+            prop_name, prop_value = get_attribute_by_type(case, conclusion_type)
+            if hasattr(prop_value, "__iter__") and not isinstance(prop_value, str):
+                return len(prop_value) > 0
             else:
-                return prop is not None
+                return prop_value is not None
         else:
             return conclusion_type in case
 
@@ -164,6 +165,7 @@ class RippleDownRules(ABC):
         :return: The copied case.
         """
         if isinstance(case, SQLTable):
+            make_transient(case)
             return case
         else:
             return copy(case)
@@ -536,7 +538,7 @@ class GeneralRDR(RippleDownRules):
         :return: The categories that the case belongs to.
         """
         conclusions = []
-        case_cp = self.copy_case(case)
+        case_cp = copy_case(case)
         while True:
             added_attributes = False
             for cat_type, rdr in self.start_rules_dict.items():
@@ -547,8 +549,8 @@ class GeneralRDR(RippleDownRules):
                     pred_atts = pred_atts if isinstance(pred_atts, list) else [pred_atts]
                     pred_atts = [p for p in pred_atts if p not in conclusions]
                     added_attributes = True
-                    self.update_case_with_same_type_conclusions(case_cp, pred_atts, get_property_by_type(case_cp, cat_type))
                     conclusions.extend(pred_atts)
+                    self.update_case_with_same_type_conclusions(case_cp, pred_atts)
             if not added_attributes:
                 break
         return conclusions
@@ -583,7 +585,7 @@ class GeneralRDR(RippleDownRules):
             case_query_cp = CaseQuery(case_cp, attribute_name=case_query.attribute_name, target=target)
             if type(target) not in self.start_rules_dict:
                 conclusions = self.classify(case)
-                self.update_case_with_same_type_conclusions(case_cp, conclusions, attribute)
+                self.update_case_with_same_type_conclusions(case_cp, conclusions)
                 new_rdr = self.initialize_new_rdr_for_attribute(target, case_cp)
                 new_conclusions = new_rdr.fit_case(case_query_cp, expert, **kwargs)
                 self.start_rules_dict[type(target)] = new_rdr
@@ -595,7 +597,7 @@ class GeneralRDR(RippleDownRules):
                     else:
                         conclusions = self.start_rules_dict[type(target)].fit_case(case_query_cp,
                                                                                    expert, **kwargs)
-                    rdr_attribute = get_property_by_type(case_cp, rdr_type)
+                    rdr_attribute = get_attribute_by_type(case_cp, rdr_type)
                     self.update_case_with_same_type_conclusions(case_cp, conclusions, rdr_attribute)
 
         return self.classify(case)
@@ -606,7 +608,7 @@ class GeneralRDR(RippleDownRules):
         Initialize the appropriate RDR type for the target.
         """
         if isinstance(case, SQLTable):
-            prop = get_property_by_type(case, type(attribute))
+            prop = get_attribute_by_type(case, type(attribute))
             if hasattr(prop, "__iter__") and not isinstance(prop, str):
                 return MultiClassRDR()
             else:
@@ -631,13 +633,18 @@ class GeneralRDR(RippleDownRules):
             return
         if isinstance(case, SQLTable):
             conclusions_type = type(conclusions[0])
-            attribute = get_property_by_type(case, conclusions_type) if attribute is None else attribute
-            attr_name = get_attribute_name_from_value(case, attribute)
-            if isinstance(attribute, set):
+            # if attribute is None:
+            attr_name, attribute = get_attribute_by_type(case, conclusions_type)
+            # else:
+            #     attr_name = get_attribute_name_from_value(case, attribute)
+            hint, origin, args = get_hint_for_attribute(attr_name, case)
+            if isinstance(attribute, set) or origin == set:
+                attribute = set() if attribute is None else attribute
                 attribute.update(*[make_set(c) for c in conclusions])
-            elif isinstance(attribute, list):
+            elif isinstance(attribute, list) or origin == list:
+                attribute = [] if attribute is None else attribute
                 attribute.extend(conclusions)
-            elif len(conclusions) == 1:
+            elif len(conclusions) == 1 and hint == conclusions_type:
                 setattr(case, attr_name, conclusions.pop())
             else:
                 raise ValueError(f"Cannot add multiple conclusions to attribute {attr_name}")

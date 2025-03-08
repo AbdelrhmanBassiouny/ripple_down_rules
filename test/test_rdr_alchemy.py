@@ -1,15 +1,14 @@
 import os
 
 import sqlalchemy.orm
-from sqlalchemy.orm import DeclarativeBase as Table, MappedColumn as Column
 from sqlalchemy import select
+from sqlalchemy.orm import MappedColumn as Column
 from typing_extensions import List, Sequence
 
 from ripple_down_rules.datasets import Base, Animal, Species, get_dataset, Habitat, HabitatTable
-from ripple_down_rules.datastructures import RDRMode, PromptFor, CaseQuery
+from ripple_down_rules.datastructures import CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.prompt import prompt_user_for_expression
 from ripple_down_rules.utils import render_tree, make_set
 from test_rdr import TestRDR
 
@@ -45,31 +44,9 @@ class TestAlchemyRDR:
         cls.all_cases = cls.session.scalars(query).all()
         cls.targets = [Species(category_id_to_name[i]) for i in y.values.flatten()]
 
-    def test_setup(self):
-        r = self.session.scalars(select(Animal)).all()
-        assert len(r) == 101
-        # user_input = "hair == 1"
-        conditions = prompt_user_for_expression(r[0], PromptFor.Conditions, "species", bool, session=self.session)
-        print(conditions)
-        print(type(conditions))
-        print(conditions(r[0]))
-        print(type(conditions(r[0])))
-
-    def test_classify_scrdr(self):
-        expert = Human(use_loaded_answers=False)
-
-        query = select(Animal)
-        result = self.session.scalars(query).all()
-        scrdr = SingleClassRDR()
-        scrdr.table = Animal
-        scrdr.target_column = Animal.species
-
-        cat = scrdr.fit_case(result[0], target=result[0].species, expert=expert, session=self.session)
-        assert cat == result[0].species
-
     def test_fit_scrdr(self):
         use_loaded_answers = True
-        draw_tree = True
+        draw_tree = False
         filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers, session=self.session)
         if use_loaded_answers:
@@ -87,7 +64,7 @@ class TestAlchemyRDR:
 
     def test_fit_mcrdr_stop_only(self):
         use_loaded_answers = True
-        draw_tree = True
+        draw_tree = False
         expert, filename = self.get_expert_and_file_name(use_loaded_answers,
                                                          "mcrdr_expert_answers_stop_only_fit")
 
@@ -146,7 +123,7 @@ class TestAlchemyRDR:
                         filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
 
         cats = grdr.classify(self.all_cases[50])
-        assert cats == [self.targets[50], Habitat.land]
+        assert cats == [self.targets[50], HabitatTable(Habitat.land)]
 
         if save_answers:
             cwd = os.getcwd()
@@ -178,4 +155,4 @@ tests.setUpClass()
 # tests.test_classify_scrdr()
 # tests.test_fit_scrdr()
 # tests.test_fit_mcrdr_stop_only()
-tests.test_fit_grdr()
+# tests.test_fit_grdr()

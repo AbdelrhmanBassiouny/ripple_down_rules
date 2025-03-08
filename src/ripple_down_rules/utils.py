@@ -1,23 +1,73 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+
+import typing_extensions
 from collections import UserDict
+from copy import deepcopy
 
 import matplotlib
 import networkx as nx
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from sqlalchemy import MetaData
-from sqlalchemy.orm import Mapped, registry
+from sqlalchemy import MetaData, inspect
+from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session, make_transient
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
-    get_origin, get_args, Tuple, Optional, List
+    get_origin, get_args, Tuple, Optional, List, Union
+
 
 if TYPE_CHECKING:
-    pass
+    from .datastructures import Case
+
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+@dataclass
+class AttributeData:
+    """
+    A dataclass that holds attribute data.
+    """
+    name: Optional[str] = None
+    value: Optional[Any] = None
+    hint: Optional[Type] = None
+    origin: Optional[Type] = None
+    args: Optional[Tuple[Any]] = None
+
+
+def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:
+    """
+    Copy a case.
+
+    :param case: The case to copy.
+    :return: The copied case.
+    """
+    if isinstance(case, SQLTable):
+        return copy_orm_instance_with_relationships(case)
+    else:
+        return deepcopy(case)
+
+
+def copy_orm_instance(instance):
+    model = instance.__class__
+    session: Session = inspect(instance).session
+    new_instance: SQLTable = model(**{c.name: getattr(instance, c.name) for c in instance.__table__.columns
+                                      if c.name != "id"})
+    # session.expunge(new_instance)
+    make_transient(new_instance)
+    return new_instance
+
+
+def copy_orm_instance_with_relationships(instance):
+    instance_cp = copy_orm_instance(instance)
+    for rel in class_mapper(instance.__class__).relationships:
+        related_obj = getattr(instance, rel.key)
+        if related_obj is not None:
+            setattr(instance_cp, rel.key, related_obj)  # Copy relationship (optional)
+    return instance_cp
 
 
 def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
@@ -56,7 +106,10 @@ def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Any], Opt
         hint = get_type_hints(obj.__class__)[attr_name]
     origin = get_origin(hint)
     args = get_args(hint)
-    return hint, origin, args
+    if origin is Mapped:
+        return args[0], get_origin(args[0]), get_args(args[0])
+    else:
+        return hint, origin, args
 
 
 def table_rows_as_str(row_dict: Dict[str, Any], columns_per_row: int = 9):
@@ -102,13 +155,13 @@ def get_attribute_name(obj: Any, attribute: Optional[Any] = None, attribute_type
     if attribute_name is None and attribute is not None:
         attribute_name = get_attribute_name_from_value(obj, attribute)
     if attribute_name is None and attribute_type is not None:
-        attribute_name = get_attribute_name_from_value(obj, get_property_by_type(obj, attribute_type))
+        attribute_name = get_attribute_by_type(obj, attribute_type)[0]
     if attribute_name is None and possible_value is not None:
-        attribute_name = get_attribute_name_from_value(obj, get_property_by_type(obj, type(possible_value)))
+        attribute_name = get_attribute_by_type(obj, type(possible_value))[0]
     return attribute_name
 
 
-def get_property_by_type(obj: Any, prop_type: Type) -> Optional[Any]:
+def get_attribute_by_type(obj: Any, prop_type: Type) -> Tuple[Optional[str], Optional[Any]]:
     """
     Get a property from an object by type.
 
@@ -122,26 +175,25 @@ def get_property_by_type(obj: Any, prop_type: Type) -> Optional[Any]:
             continue
         prop_value = getattr(obj, name)
         if isinstance(prop_value, prop_type):
-            return prop_value
-        elif hasattr(prop_value, "__iter__") and not isinstance(prop_value, str):
+            return name, prop_value
+        if hasattr(prop_value, "__iter__") and not isinstance(prop_value, str):
             if len(prop_value) > 0 and any(isinstance(v, prop_type) for v in prop_value):
-                return prop_value
+                return name, prop_value
             else:
                 # get args of type hint
                 hint, origin, args = get_hint_for_attribute(name, obj)
-                if origin is Mapped:
-                    origin, args = get_origin(args[0]), get_args(args[0])
                 if origin in [list, set, tuple, dict, List, Set, Tuple, Dict]:
                     if prop_type is args[0]:
-                        return prop_value
+                        return name, prop_value
         else:
             # get the type hint of the attribute
             hint, origin, args = get_hint_for_attribute(name, obj)
-            if origin is Mapped:
+            if hint is prop_type:
+                return name, prop_value
+            elif origin in [list, set, tuple, dict, List, Set, Tuple, Dict]:
                 if prop_type is args[0]:
-                    return prop_value
-            if origin is prop_type:
-                return prop_value
+                    return name, prop_value
+    return None, None
 
 
 def get_attribute_name_from_value(obj: Any, attribute_value: Any) -> Optional[str]:
