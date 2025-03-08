@@ -51,22 +51,33 @@ def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:
         return deepcopy(case)
 
 
-def copy_orm_instance(instance):
-    model = instance.__class__
+def copy_orm_instance(instance: SQLTable) -> SQLTable:
+    """
+    Copy an ORM instance by expunging it from the session then deep copying it and adding it back to the session. This
+    is useful when you want to copy an instance and make changes to it without affecting the original instance.
+
+    :param instance: The instance to copy.
+    :return: The copied instance.
+    """
     session: Session = inspect(instance).session
-    new_instance: SQLTable = model(**{c.name: getattr(instance, c.name) for c in instance.__table__.columns
-                                      if c.name != "id"})
-    # session.expunge(new_instance)
-    make_transient(new_instance)
+    session.expunge(instance)
+    new_instance = deepcopy(instance)
+    session.add(instance)
     return new_instance
 
 
-def copy_orm_instance_with_relationships(instance):
+def copy_orm_instance_with_relationships(instance: SQLTable) -> SQLTable:
+    """
+    Copy an ORM instance with its relationships (i.e. its foreign keys).
+
+    :param instance: The instance to copy.
+    :return: The copied instance.
+    """
     instance_cp = copy_orm_instance(instance)
     for rel in class_mapper(instance.__class__).relationships:
         related_obj = getattr(instance, rel.key)
         if related_obj is not None:
-            setattr(instance_cp, rel.key, related_obj)  # Copy relationship (optional)
+            setattr(instance_cp, rel.key, related_obj)
     return instance_cp
 
 
