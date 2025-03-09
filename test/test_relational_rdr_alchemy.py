@@ -70,10 +70,6 @@ class PhysicalObject(Base):
     def parts(self) -> List[PhysicalObject]:
         return [has_part.right for has_part in self.has_part_relations]
 
-    # @parts.setter
-    # def parts(self, value: List[PhysicalObject]):
-    #     self.has_parts = [HasPart(left=self, right=part) for part in value]
-
     @property
     def part_of(self) -> List[PhysicalObject]:
         return [has_part.left for has_part in self.part_of_relations]
