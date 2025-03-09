@@ -36,7 +36,7 @@ class HasPart(Base):
     right: Mapped[PhysicalObject] = relationship(back_populates="part_of_relations", foreign_keys=[right_id])
 
     def __hash__(self):
-        return hash((self.left_id, self.right_id))
+        return hash(id(self))
 
 
 class ContainsObject(Base):
@@ -46,7 +46,7 @@ class ContainsObject(Base):
     right: Mapped[PhysicalObject] = relationship(back_populates="is_contained_in_relations", foreign_keys=[right_id])
 
     def __hash__(self):
-        return hash((self.left_id, self.right_id))
+        return hash(id(self))
 
 
 class PhysicalObject(Base):
@@ -94,7 +94,7 @@ class PhysicalObject(Base):
         }
 
     def __hash__(self):
-        return hash(self.id)
+        return hash(id(self))
 
 
 class RelationalRDRTestCase(TestCase):
@@ -109,12 +109,8 @@ class RelationalRDRTestCase(TestCase):
     part_d: PhysicalObject
     part_e: PhysicalObject
     part_f: PhysicalObject
-    a_cont_b: ContainsObject
-    a_cont_c: ContainsObject
-    c_cont_d: ContainsObject
-    d_cont_e: ContainsObject
-    e_cont_f: ContainsObject
     rob_has_parts: List[HasPart]
+    containments: List[ContainsObject]
 
     @classmethod
     def setUpClass(cls):
@@ -129,11 +125,12 @@ class RelationalRDRTestCase(TestCase):
         robot = PhysicalObject(name="pr2")
         rob_parts = [cls.part_a, cls.part_b, cls.part_c, cls.part_d]
         cls.rob_has_parts = [HasPart(left=robot, right=part) for part in rob_parts]
-        cls.a_cont_b = ContainsObject(left=cls.part_a, right=cls.part_b)
-        cls.a_cont_c = ContainsObject(left=cls.part_a, right=cls.part_c)
-        cls.c_cont_d = ContainsObject(left=cls.part_c, right=cls.part_d)
-        cls.d_cont_e = ContainsObject(left=cls.part_d, right=cls.part_e)
-        cls.e_cont_f = ContainsObject(left=cls.part_e, right=cls.part_f)
+        cls.containments = []
+        cls.containments.append(ContainsObject(left=cls.part_a, right=cls.part_b))
+        cls.containments.append(ContainsObject(left=cls.part_a, right=cls.part_c))
+        cls.containments.append(ContainsObject(left=cls.part_c, right=cls.part_d))
+        cls.containments.append(ContainsObject(left=cls.part_d, right=cls.part_e))
+        cls.containments.append(ContainsObject(left=cls.part_e, right=cls.part_f))
         cls.robot: PhysicalObject = robot
         cls.target = CaseQuery(robot, robot.contained_objects,
                                {cls.part_b, cls.part_c, cls.part_d, cls.part_e})
