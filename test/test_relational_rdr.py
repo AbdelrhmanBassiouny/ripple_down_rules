@@ -36,10 +36,6 @@ class Part(PhysicalObject):
 
 
 class Robot(PhysicalObject):
-    parts: List[Part] = None
-    """
-    The robot parts.
-    """
 
     def __init__(self, name: str, parts: Optional[List[Part]] = None):
         super().__init__(name)
@@ -57,6 +53,7 @@ class RelationalRDRTestCase(TestCase):
     part_c: Part
     part_d: Part
     part_e: Part
+    part_f: Part
 
     @classmethod
     def setUpClass(cls):
@@ -67,10 +64,12 @@ class RelationalRDRTestCase(TestCase):
         cls.part_c = Part(name="C")
         cls.part_d = Part(name="D")
         cls.part_e = Part(name="E")
+        cls.part_f = Part(name="F")
         robot = Robot("pr2", parts=[cls.part_a, cls.part_b, cls.part_c, cls.part_d])
         cls.part_a.contained_objects = {cls.part_b, cls.part_c}
         cls.part_c.contained_objects = {cls.part_d}
         cls.part_d.contained_objects = {cls.part_e}
+        cls.part_e.contained_objects = {cls.part_f}
         cls.robot: Robot = robot
         cls.target = CaseQuery(robot, robot.contained_objects,
                                {cls.part_b, cls.part_c, cls.part_d, cls.part_e})

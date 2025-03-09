@@ -9,7 +9,7 @@ from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING, Tuple
 
-from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint
+from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, make_list
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
@@ -137,8 +137,11 @@ class Row(UserDict, SubClassFactory):
         if name in self:
             if isinstance(self[name], set):
                 self[name].update(make_set(value))
+            elif isinstance(value, set):
+                value.update(make_set(self[name]))
+                super().__setitem__(name, value)
             else:
-                raise ValueError(f"Attribute {name} already exists in the case and is mutually exclusive.")
+                super().__setitem__(name, make_set(self[name]))
         else:
             setattr(self, name, value)
             super().__setitem__(name, value)

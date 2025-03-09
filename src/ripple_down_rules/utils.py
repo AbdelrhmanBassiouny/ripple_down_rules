@@ -280,6 +280,17 @@ def make_set(value: Any) -> Set:
     return {value}
 
 
+def make_list(value: Any) -> List:
+    """
+    Make a list from a value.
+
+    :param value: The value to make a list from.
+    """
+    if hasattr(value, "__iter__") and not isinstance(value, (str, type)):
+        return list(value)
+    return [value]
+
+
 def make_value_or_raise_error(value: Any) -> Any:
     """
     Make a value or raise an error if the value is not a single value.

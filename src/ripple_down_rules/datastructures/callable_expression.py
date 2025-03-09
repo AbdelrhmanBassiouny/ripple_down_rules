@@ -119,14 +119,21 @@ class CallableExpression:
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
+            context = {}
             if not isinstance(case, (Row, SQLTable)):
                 context = create_row(case, max_recursion_idx=3)
             elif isinstance(case, SQLTable):
-                context = case.__dict__
+                # context = case.__dict__
+                # for attr_name in dir(case):
+                #     if not attr_name.startswith("_") and not callable(getattr(case, attr_name)):
+                #         context[attr_name] = getattr(case, attr_name)
+                context = create_row(case, max_recursion_idx=3)
             elif isinstance(case, Row):
                 context = case
+            context.update(locals())
             assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)
+            # output = eval(self.code, globals(), context)
             if self.conclusion_type:
                 assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
                                                                   f" got {type(output)}")
