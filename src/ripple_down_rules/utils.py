@@ -371,7 +371,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
         logging.warning("No rules to render")
         return
     for pre, _, node in RenderTree(root):
-        print(f"{pre}{node.weight or ''} {node.__str__(sep='')}")
+        print(f"{pre}{node.weight if hasattr(node, 'weight') and node.weight else ''} {node.__str__()}")
     if use_dot_exporter:
         unique_node_names = get_unique_node_names_func(root)
 
