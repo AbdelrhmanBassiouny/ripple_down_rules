@@ -91,7 +91,11 @@ class SubClassFactory:
         :return: Boolean indicating whether the value is within the range or not.
         """
         if hasattr(value, "__iter__") and not isinstance(value, str):
-            return set(value).issubset(cls._value_range)
+            if all(isinstance(val_range, type) and isinstance(v, val_range)
+                   for v in value for val_range in cls._value_range):
+                return True
+            else:
+                return set(value).issubset(cls._value_range)
         elif isinstance(value, str):
             return value.lower() in cls._value_range
         else:
@@ -272,7 +276,7 @@ class Column(set, SubClassFactory):
         return hash(tuple(self.id_value_map.values()))
 
     def __str__(self):
-        return str({v for v in self})
+        return str({v for v in self}) if len(self) > 1 else str(next(iter(self)))
 
     def __instancecheck__(self, instance):
         return isinstance(instance, (set, self.__class__)) or super().__instancecheck__(instance)

@@ -242,14 +242,20 @@ class SingleClassRDR(RippleDownRules):
         """
         conclusion = self.start_rule.conclusion
         if isinstance(conclusion, CallableExpression):
-            conclusion_type = conclusion.conclusion_type
+            conclusion_types = [conclusion.conclusion_type]
+        elif isinstance(conclusion, Column):
+            conclusion_types = list(conclusion._value_range)
         else:
-            conclusion_type = type(conclusion)
-        conclusion_name = conclusion_type.__name__
+            conclusion_types = [type(conclusion)]
         imports = ("from typing_extensions import Union\n"
                    "from ripple_down_rules.datastructures import Case, SQLTable\n")
-        if conclusion_type.__module__ != "builtins":
-            imports += f"from {conclusion_type.__module__} import {conclusion_name}\n\n\n"
+        if len(conclusion_types) > 1:
+            conclusion_name = "Union[" + ", ".join([c.__name__ for c in conclusion_types]) + "]"
+        else:
+            conclusion_name = conclusion_types[0].__name__
+        for conclusion_type in conclusion_types:
+            if conclusion_type.__module__ != "builtins":
+                imports += f"from {conclusion_type.__module__} import {conclusion_name}\n\n\n"
         func_def = f"def classify_{conclusion_name.lower()}(case: Union[Case, SQLTable]) -> {conclusion_name}:\n"
         with open(filename, "w") as f:
             f.write(imports)

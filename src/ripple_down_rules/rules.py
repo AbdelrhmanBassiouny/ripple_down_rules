@@ -169,6 +169,8 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
     def conclusion_as_source_code(self, parent_indent: str = "") -> str:
         if isinstance(self.conclusion, CallableExpression):
             conclusion = self.conclusion.parsed_user_input
+        # elif isinstance(self.conclusion, Column):
+        #     conclusion = self.conclusion.name
         elif isinstance(self.conclusion, Enum):
             conclusion = str(self.conclusion)
         else:
