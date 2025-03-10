@@ -236,6 +236,40 @@ class SingleClassRDR(RippleDownRules):
         matched_rule = self.start_rule(case)
         return matched_rule if matched_rule else self.start_rule
 
+    def write_tree_of_rules_as_source_code_to_a_file(self, filename: str):
+        """
+        Write the tree of rules as source code to a file.
+        """
+        conclusion = self.start_rule.conclusion
+        if isinstance(conclusion, CallableExpression):
+            conclusion_type = conclusion.conclusion_type
+        else:
+            conclusion_type = type(conclusion)
+        conclusion_name = conclusion_type.__name__
+        imports = ("from typing_extensions import Union\n"
+                   "from ripple_down_rules.datastructures import Case, SQLTable\n")
+        if conclusion_type.__module__ != "builtins":
+            imports += f"from {conclusion_type.__module__} import {conclusion_name}\n\n\n"
+        func_def = f"def classify_{conclusion_name.lower()}(case: Union[Case, SQLTable]) -> {conclusion_name}:\n"
+        with open(filename, "w") as f:
+            f.write(imports)
+            f.write(func_def)
+            self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4)
+
+    def write_rules_as_source_code_to_file(self, rule: SingleClassRule, file, parent_indent: str = ""):
+        """
+        Write the rules as source code to a file.
+        """
+        if rule.conditions:
+            file.write(rule.condition_as_source_code(parent_indent))
+            if rule.refinement:
+                self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ")
+
+            file.write(rule.conclusion_as_source_code(parent_indent))
+
+            if rule.alternative:
+                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent)
+
 
 class MultiClassRDR(RippleDownRules):
     """

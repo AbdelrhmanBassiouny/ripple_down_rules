@@ -5,10 +5,10 @@ from unittest import TestCase
 
 from typing_extensions import List, Optional, Any
 
-from ripple_down_rules.datastructures import CaseQuery, CallableExpression, Row
+from ripple_down_rules.datastructures import CaseQuery, CallableExpression
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.utils import get_attribute_name_from_value, render_tree
+from ripple_down_rules.utils import render_tree
 
 
 class PhysicalObject:
@@ -94,14 +94,14 @@ class RelationalRDRTestCase(TestCase):
             expert.save_answers(file)
 
     def test_parse_relational_conditions(self):
-        user_input = "parts is not None and len(parts) > 0"
+        user_input = "case.parts is not None and len(case.parts) > 0"
         conditions = CallableExpression(user_input, bool)
         print(conditions)
         print(conditions(self.robot))
         assert conditions(self.robot) == (self.robot.parts is not None and len(self.robot.parts) > 0)
 
     def test_parse_relational_conclusions(self):
-        user_input = "parts.contained_objects"
+        user_input = "case.parts.contained_objects"
         conclusion = CallableExpression(user_input, set)
         print(conclusion)
         print(conclusion(self.robot))

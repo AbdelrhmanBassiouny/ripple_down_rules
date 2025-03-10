@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from enum import Enum
 
 from anytree import NodeMixin
 from typing_extensions import List, Optional, Self, Union
@@ -164,6 +165,27 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
             self.refinement = new_rule
         else:
             self.alternative = new_rule
+
+    def conclusion_as_source_code(self, parent_indent: str = "") -> str:
+        if isinstance(self.conclusion, CallableExpression):
+            conclusion = self.conclusion.parsed_user_input
+        elif isinstance(self.conclusion, Enum):
+            conclusion = str(self.conclusion)
+        else:
+            conclusion = self.conclusion
+        return f"{parent_indent}{' ' * 4}return {conclusion}\n"
+
+    def condition_as_source_code(self, parent_indent: str = "") -> str:
+        """
+        Get the source code representation of the rule.
+        """
+        # if isinstance(self.conclusion, CallableExpression):
+        #     conclusion = self.conclusion.user_input
+        # else:
+        #     conclusion = self.conclusion
+        if_clause = "elif" if self.weight == RDREdge.Alternative.value else "if"
+        return f"{parent_indent}{if_clause} {self.conditions.parsed_user_input}:\n"
+                # f"{parent_indent}    return {conclusion}\n")
 
 
 class MultiClassStopRule(Rule, HasAlternativeRule):

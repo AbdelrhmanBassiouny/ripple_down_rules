@@ -17,6 +17,7 @@ class TestRDR(TestCase):
     targets: List[str]
     test_results_dir: str = "./test_results"
     expert_answers_dir: str = "./test_expert_answers"
+    generated_rdrs_dir: str = "./test_generated_rdrs"
     cache_file: str = f"{test_results_dir}/zoo_dataset.pkl"
 
     @classmethod
@@ -60,6 +61,7 @@ class TestRDR(TestCase):
         case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
         scrdr.fit(case_queries, expert=expert,
                   animate_tree=draw_tree)
+        scrdr.write_tree_of_rules_as_source_code_to_a_file(self.generated_rdrs_dir + "/scrdr.py")
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/scrdr")
 

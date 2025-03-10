@@ -114,26 +114,25 @@ class CallableExpression:
         self.expression_tree: AST = expression_tree
         self.visitor = VariableVisitor()
         self.visitor.visit(expression_tree)
+        variables_str = self.visitor.variables
+        attributes_str = get_attributes_str(self.visitor)
+        for v in variables_str | attributes_str:
+            if not v.startswith("case."):
+                self.parsed_user_input = self.parsed_user_input.replace(v, f"case.{v}")
         self.compares_column_offset = [(c[0].col_offset, c[2].end_col_offset) for c in self.visitor.compares]
         self.code = compile_expression_to_code(expression_tree)
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
             context = {}
-            if not isinstance(case, (Row, SQLTable)):
-                context = create_row(case, max_recursion_idx=3)
-            elif isinstance(case, SQLTable):
-                # context = case.__dict__
-                # for attr_name in dir(case):
-                #     if not attr_name.startswith("_") and not callable(getattr(case, attr_name)):
-                #         context[attr_name] = getattr(case, attr_name)
-                context = create_row(case, max_recursion_idx=3)
-            elif isinstance(case, Row):
+            if not isinstance(case, Row):
+                case = create_row(case, max_recursion_idx=3)
+            else:
                 context = case
             context.update(locals())
             assert_context_contains_needed_information(case, context, self.visitor)
             output = eval(self.code, {"__builtins__": {"len": len}}, context)
-            # output = eval(self.code, globals(), context)
+            # output = eval(self.code)
             if self.conclusion_type:
                 assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
                                                                   f" got {type(output)}")
@@ -145,7 +144,7 @@ class CallableExpression:
         """
         Combine this callable expression with another callable expression using the 'and' operator.
         """
-        new_user_input = f"({self.parsed_user_input}) and ({other.parsed_user_input})"
+        new_user_input = f"({self.user_input}) and ({other.user_input})"
         return CallableExpression(new_user_input, conclusion_type=self.conclusion_type, session=self.session)
 
     def __str__(self):
@@ -192,6 +191,20 @@ def assert_context_contains_needed_information(case: Any, context: Dict[str, Any
             raise ValueError(f"Attribute {key} not found in the case {case}")
         found_variables.add(key)
 
+    found_attributes = get_attributes_str(visitor)
+    for attr in found_attributes:
+        if attr not in context:
+            raise ValueError(f"Attribute {attr} not found in the case {case}")
+    return found_variables, found_attributes
+
+
+def get_attributes_str(visitor: VariableVisitor) -> Set[str]:
+    """
+    Get the string representation of the attributes in the given visitor.
+
+    :param visitor: The visitor that visited the expression.
+    :return: The string representation of the attributes.
+    """
     found_attributes = set()
     for key, ast_attr in visitor.attributes.items():
         str_attr = ""
@@ -202,10 +215,8 @@ def assert_context_contains_needed_information(case: Any, context: Dict[str, Any
                 str_attr = key.attr
             key = key.value
         str_attr = f"{key.id}.{str_attr}" if len(str_attr) > 0 else f"{key.id}.{ast_attr.attr}"
-        if str_attr not in context:
-            raise ValueError(f"Attribute {key.id}.{ast_attr.attr} not found in the case {case}")
         found_attributes.add(str_attr)
-    return found_variables, found_attributes
+    return found_attributes
 
 
 def parse_string_to_expression(expression_str: str) -> AST:
