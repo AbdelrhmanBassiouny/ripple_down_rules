@@ -1,3 +1,4 @@
+import json
 from unittest import TestCase
 
 from typing_extensions import List
@@ -21,7 +22,8 @@ class TestJSONSerialization(TestCase):
     def test_json_serialization(self):
         scrdr = self.get_fit_scrdr()
         scrdr_json = scrdr.to_json()
-        print(scrdr_json)
+        # save the json to a file
+        json.dump()
 
     def get_fit_scrdr(self, draw_tree=False) -> SingleClassRDR:
         filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
