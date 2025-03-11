@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from abc import ABC
 from collections import UserDict
 from dataclasses import dataclass
@@ -31,9 +33,10 @@ class SubClassFactory:
     """
     A dictionary of all dynamically created subclasses of this class.
     """
+    _generated_classes_dir: str = os.path.dirname(os.path.abspath(__file__)) + "/generated"
 
     @classmethod
-    def create(cls, name: str, range_: set, **kwargs) -> Type[SubClassFactory]:
+    def create(cls, name: str, range_: set, default_values: bool = True, **kwargs) -> Type[SubClassFactory]:
         """
         Create a new custom set subclass.
 
@@ -45,13 +48,55 @@ class SubClassFactory:
         if existing_class:
             return existing_class
 
-        new_attribute_type: Type[SubClassFactory] = type(name, (cls,), {})
-        new_attribute_type._value_range = range_
-        for key, value in kwargs.items():
-            setattr(new_attribute_type, key, value)
+        new_attribute_type = cls._create_class_in_new_python_file_and_import_it(name, range_, default_values, **kwargs)
 
         cls.register(new_attribute_type)
+
         return new_attribute_type
+
+    @classmethod
+    def _create_class_in_new_python_file_and_import_it(cls, name: str, range_: set, default_values: bool = True,
+                                                       **kwargs) -> Type[SubClassFactory]:
+        imports = f"from {cls.__module__} import {cls.__name__}\n"
+        class_code = f"class {name}({cls.__name__}):\n"
+        kwargs.update({"_value_range": range_})
+        for key, value in kwargs.items():
+            if type(value).__module__ != "builtins":
+                imports += f"from {type(value).__module__} import {type(value).__name__}\n"
+            if isinstance(value, set):
+                for v in value:
+                    if isinstance(v, type):
+                        if v is type(None):
+                            imports += "from types import NoneType\n"
+                        elif v.__module__ != "builtins":
+                            imports += f"from {v.__module__} import {v.__name__}\n"
+                value_str = ", ".join([v.__name__ if isinstance(v, type) else v for v in value])
+                new_value = "{" + value_str + "}"
+            elif isinstance(value, type):
+                new_value = value.__name__
+            else:
+                new_value = value
+            if default_values or key == "_value_range":
+                class_code += f"    {key}: {type(value).__name__} = {new_value}\n"
+            else:
+                class_code += f"    {key}: {type(value).__name__}\n"
+        imports += "\n\n"
+        if issubclass(cls, Row):
+            folder_name = "row"
+        elif issubclass(cls, Column):
+            folder_name = "column"
+        else:
+            raise ValueError(f"Unknown class {cls}.")
+        # write the code to a file
+        with open(f"{cls._generated_classes_dir}/{folder_name}/{name.lower()}.py", "w") as f:
+            f.write(imports + class_code)
+
+        # import the class from the file
+        import_path = ".".join(cls.__module__.split(".")[:-1] + ["generated", folder_name, name.lower()])
+        time.sleep(0.2)
+        if "as_dict" in name:
+            print(import_path)
+        return __import__(import_path, fromlist=[name.lower()]).__dict__[name]
 
     @classmethod
     def _get_and_update_subclass(cls, name: str, range_: set) -> Optional[Type[SubClassFactory]]:
@@ -320,7 +365,7 @@ def create_rows_from_dataframe(df: DataFrame, name: Optional[str] = None) -> Lis
     col_names = list(df.columns)
     for row_id, row in df.iterrows():
         row = {col_name: row[col_name].item() for col_name in col_names}
-        row = Row.create(name or df.__class__.__name__, make_set(type(df)))(id_=row_id, **row)
+        row = Row.create(name or df.__class__.__name__, make_set(type(df)), default_values=False, **row)(id_=row_id, **row)
         rows.append(row)
     return rows
 

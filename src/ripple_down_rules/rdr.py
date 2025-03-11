@@ -208,6 +208,8 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
         """
         Write the tree of rules as source code to a file.
         """
+        case_type = self.start_rule.corner_case.__class__.__name__
+        case_module = self.start_rule.corner_case.__class__.__module__
         conclusion = self.start_rule.conclusion
         if isinstance(conclusion, CallableExpression):
             conclusion_types = [conclusion.conclusion_type]
@@ -215,16 +217,18 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
             conclusion_types = list(conclusion._value_range)
         else:
             conclusion_types = [type(conclusion)]
-        imports = ("from typing_extensions import Union\n"
-                   "from ripple_down_rules.datastructures import Case, SQLTable\n")
+        imports = ""
+        if case_module != "builtins":
+            imports += f"from {case_module} import {case_type}\n"
         if len(conclusion_types) > 1:
             conclusion_name = "Union[" + ", ".join([c.__name__ for c in conclusion_types]) + "]"
         else:
             conclusion_name = conclusion_types[0].__name__
         for conclusion_type in conclusion_types:
             if conclusion_type.__module__ != "builtins":
-                imports += f"from {conclusion_type.__module__} import {conclusion_name}\n\n\n"
-        func_def = f"def classify_{conclusion_name.lower()}(case: Union[Case, SQLTable]) -> {conclusion_name}:\n"
+                imports += f"from {conclusion_type.__module__} import {conclusion_name}\n"
+        imports += "\n\n"
+        func_def = f"def classify_{conclusion_name.lower()}(case: {case_type}) -> {conclusion_name}:\n"
         with open(filename, "w") as f:
             f.write(imports)
             f.write(func_def)
