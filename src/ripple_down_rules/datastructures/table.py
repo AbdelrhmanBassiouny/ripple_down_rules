@@ -7,16 +7,17 @@ from enum import Enum
 from pandas import DataFrame
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
-from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING, Tuple
+from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING, Tuple, Self
 
-from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, make_list
+from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, make_list, \
+    SubclassJSONSerializer
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
     from .callable_expression import CallableExpression
 
 
-class SubClassFactory:
+class SubClassFactory(SubclassJSONSerializer):
     """
     A custom set class that is used to add other attributes to the set. This is similar to a table where the set is the
     table, the attributes are the columns, and the values are the rows.
@@ -172,6 +173,14 @@ class Row(UserDict, SubClassFactory):
     def __instancecheck__(self, instance):
         return isinstance(instance, (dict, UserDict, Row)) or super().__instancecheck__(instance)
 
+    def to_json(self) -> Dict[str, Any]:
+        return {**SubclassJSONSerializer.to_json(self),
+                **{k: v.to_json() if isinstance(v, SubClassFactory) else v for k, v in self.items()}}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Row:
+        return cls(id_=data["id"], **data)
+
 
 @dataclass
 class ColumnValue:
@@ -280,6 +289,14 @@ class Column(set, SubClassFactory):
 
     def __instancecheck__(self, instance):
         return isinstance(instance, (set, self.__class__)) or super().__instancecheck__(instance)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**SubclassJSONSerializer.to_json(self),
+                **{str(id_): v for id_, v in self.id_value_map.items()}}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Column:
+        return cls({ColumnValue(int(id_), v) for id_, v in data.items()})
 
 
 def create_rows_from_dataframe(df: DataFrame, name: Optional[str] = None) -> List[Row]:

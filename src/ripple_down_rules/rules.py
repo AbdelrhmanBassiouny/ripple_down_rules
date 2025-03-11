@@ -4,13 +4,14 @@ from abc import ABC, abstractmethod
 from enum import Enum
 
 from anytree import NodeMixin
-from typing_extensions import List, Optional, Self, Union
+from typing_extensions import List, Optional, Self, Union, Dict, Any
 
-from .datastructures import CallableExpression, Case, Column
+from .datastructures import CallableExpression, Case, SQLTable
 from .datastructures.enums import RDREdge, Stop
+from .utils import SubclassJSONSerializer
 
 
-class Rule(NodeMixin, ABC):
+class Rule(NodeMixin, SubclassJSONSerializer, ABC):
     fired: Optional[bool] = None
     """
     Whether the rule has fired or not.
@@ -19,7 +20,7 @@ class Rule(NodeMixin, ABC):
     def __init__(self, conditions: Optional[CallableExpression] = None,
                  conclusion: Optional[CallableExpression] = None,
                  parent: Optional[Rule] = None,
-                 corner_case: Optional[Case] = None,
+                 corner_case: Optional[Union[Case, SQLTable]] = None,
                  weight: Optional[str] = None):
         """
         A rule in the ripple down rules classifier.
@@ -166,28 +167,46 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         else:
             self.alternative = new_rule
 
-    def conclusion_as_source_code(self, parent_indent: str = "") -> str:
+    def write_conclusion_as_source_code(self, parent_indent: str = "") -> str:
+        """
+        Get the source code representation of the conclusion of the rule.
+
+        :param parent_indent: The indentation of the parent rule.
+        """
         if isinstance(self.conclusion, CallableExpression):
             conclusion = self.conclusion.parsed_user_input
-        # elif isinstance(self.conclusion, Column):
-        #     conclusion = self.conclusion.name
         elif isinstance(self.conclusion, Enum):
             conclusion = str(self.conclusion)
         else:
             conclusion = self.conclusion
         return f"{parent_indent}{' ' * 4}return {conclusion}\n"
 
-    def condition_as_source_code(self, parent_indent: str = "") -> str:
+    def write_condition_as_source_code(self, parent_indent: str = "") -> str:
         """
-        Get the source code representation of the rule.
+        Get the source code representation of the conditions of the rule.
+
+        :param parent_indent: The indentation of the parent rule.
         """
-        # if isinstance(self.conclusion, CallableExpression):
-        #     conclusion = self.conclusion.user_input
-        # else:
-        #     conclusion = self.conclusion
         if_clause = "elif" if self.weight == RDREdge.Alternative.value else "if"
         return f"{parent_indent}{if_clause} {self.conditions.parsed_user_input}:\n"
-                # f"{parent_indent}    return {conclusion}\n")
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**SubclassJSONSerializer.to_json(self),
+                "conditions": self.conditions.to_json(),
+                "conclusion": self.conclusion.to_json(),
+                "parent": self.parent.to_json() if self.parent else None,
+                "corner_case": self.corner_case.to_json() if self.corner_case else None,
+                "weight": self.weight}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        return cls(conditions=CallableExpression.from_json(data["conditions"]),
+                   conclusion=CallableExpression.from_json(data["conclusion"]),
+                   parent=SingleClassRule.from_json(data["parent"]),
+                   corner_case=Case.from_json(data["corner_case"]),
+                   weight=data["weight"])
+
+
 
 
 class MultiClassStopRule(Rule, HasAlternativeRule):

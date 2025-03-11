@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import ast
 import logging
 from _ast import AST
 
-from sqlalchemy.orm import Session, DeclarativeBase as SQLTable
+from sqlalchemy.orm import Session
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .table import create_row, Row
+from ..utils import SubclassJSONSerializer, get_full_class_name
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -48,7 +51,7 @@ class VariableVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-class CallableExpression:
+class CallableExpression(SubclassJSONSerializer):
     """
     A callable that is constructed from a string statement written by an expert.
     """
@@ -158,6 +161,14 @@ class CallableExpression:
                 all_binary_ops.append(user_input[prev_e:e])
             prev_e = e
         return "\n".join(all_binary_ops) if len(all_binary_ops) > 0 else user_input
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**SubclassJSONSerializer.to_json(self),
+                "user_input": self.user_input, "conclusion_type": get_full_class_name(self.conclusion_type)}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> CallableExpression:
+        return cls(user_input=data["user_input"], conclusion_type=data["conclusion_type"])
 
 
 def compile_expression_to_code(expression_tree: AST) -> Any:

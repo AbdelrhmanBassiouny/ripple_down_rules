@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from abc import abstractmethod
 from collections import UserDict
 from copy import deepcopy
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
-    get_origin, get_args, Tuple, Optional, List, Union
+    get_origin, get_args, Tuple, Optional, List, Union, Self
 
 if TYPE_CHECKING:
     from .datastructures import Case
@@ -22,16 +23,63 @@ if TYPE_CHECKING:
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
-@dataclass
-class AttributeData:
+def get_full_class_name(cls):
     """
-    A dataclass that holds attribute data.
+    Returns the full name of a class, including the module name.
+    Copied from: https://github.com/tomsch420/random-events/blob/master/src/random_events/utils.py#L6C1-L21C101
+
+    :param cls: The class.
+    :return: The full name of the class
     """
-    name: Optional[str] = None
-    value: Optional[Any] = None
-    hint: Optional[Type] = None
-    origin: Optional[Type] = None
-    args: Optional[Tuple[Any]] = None
+    return cls.__module__ + "." + cls.__name__
+
+
+def recursive_subclasses(cls):
+    """
+    Copied from: https://github.com/tomsch420/random-events/blob/master/src/random_events/utils.py#L6C1-L21C101
+    :param cls: The class.
+    :return: A list of the classes subclasses.
+    """
+    return cls.__subclasses__() + [g for s in cls.__subclasses__() for g in recursive_subclasses(s)]
+
+
+class SubclassJSONSerializer:
+    """
+    Copied from: https://github.com/tomsch420/random-events/blob/master/src/random_events/utils.py#L6C1-L21C101
+    Class for automatic (de)serialization of subclasses.
+    Classes that inherit from this class can be serialized and deserialized automatically by calling this classes
+    'from_json' method.
+    """
+
+    def to_json(self) -> Dict[str, Any]:
+        return {"_type": get_full_class_name(self.__class__)}
+
+    @classmethod
+    @abstractmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        """
+        Create a variable from a json dict.
+        This method is called from the from_json method after the correct subclass is determined and should be
+        overwritten by the respective subclass.
+
+        :param data: The json dict
+        :return: The deserialized object
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> Self:
+        """
+        Create the correct instanceof the subclass from a json dict.
+
+        :param data: The json dict
+        :return: The correct instance of the subclass
+        """
+        for subclass in recursive_subclasses(SubclassJSONSerializer):
+            if get_full_class_name(subclass) == data["_type"]:
+                return subclass._from_json(data)
+
+        raise ValueError("Unknown type {}".format(data["_type"]))
 
 
 def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:

@@ -6,13 +6,13 @@ from copy import copy
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
-from typing_extensions import List, Optional, Dict, Type, Union, Any
+from typing_extensions import List, Optional, Dict, Type, Union, Any, Self
 
 from .datastructures import Case, MCRDRMode, CallableExpression, Column, CaseQuery
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree, make_set, get_attribute_by_type, copy_case, \
-    get_hint_for_attribute
+    get_hint_for_attribute, SubclassJSONSerializer
 
 
 class RippleDownRules(ABC):
@@ -160,9 +160,7 @@ class RippleDownRules(ABC):
 RDR = RippleDownRules
 
 
-class SingleClassRDR(RippleDownRules):
-    table: Type[SQLTable]
-    target_column: Column
+class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) -> Column:
         """
@@ -237,14 +235,25 @@ class SingleClassRDR(RippleDownRules):
         Write the rules as source code to a file.
         """
         if rule.conditions:
-            file.write(rule.condition_as_source_code(parent_indent))
+            file.write(rule.write_condition_as_source_code(parent_indent))
             if rule.refinement:
                 self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ")
 
-            file.write(rule.conclusion_as_source_code(parent_indent))
+            file.write(rule.write_conclusion_as_source_code(parent_indent))
 
             if rule.alternative:
                 self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {**SubclassJSONSerializer.to_json(self), "start_rule": self.start_rule.to_json()}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        """
+        Create an instance of the class from a json
+        """
+        start_rule = SingleClassRule.from_json(data["start_rule"])
+        return cls(start_rule)
 
 
 class MultiClassRDR(RippleDownRules):
