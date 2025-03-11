@@ -37,6 +37,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self.parent = parent
         self.weight: Optional[str] = weight
         self.conditions = conditions if conditions else None
+        self.json_serialization: Optional[Dict[str, Any]] = None
 
     def _post_detach(self, parent):
         """
@@ -191,22 +192,26 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         return f"{parent_indent}{if_clause} {self.conditions.parsed_user_input}:\n"
 
     def to_json(self) -> Dict[str, Any]:
-        return {**SubclassJSONSerializer.to_json(self),
-                "conditions": self.conditions.to_json(),
-                "conclusion": self.conclusion.to_json(),
-                "parent": self.parent.to_json() if self.parent else None,
-                "corner_case": self.corner_case.to_json() if self.corner_case else None,
-                "weight": self.weight}
+        self.json_serialization = {**SubclassJSONSerializer.to_json(self),
+                                   "conditions": self.conditions.to_json(),
+                                   "conclusion": self.conclusion.to_json(),
+                                   "parent": self.parent.json_serialization if self.parent else None,
+                                   "corner_case": self.corner_case.to_json() if self.corner_case else None,
+                                   "weight": self.weight,
+                                   "refinement": self.refinement.to_json() if self.refinement is not None else None,
+                                   "alternative": self.alternative.to_json() if self.alternative is not None else None}
+        return self.json_serialization
 
     @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
-        return cls(conditions=CallableExpression.from_json(data["conditions"]),
-                   conclusion=CallableExpression.from_json(data["conclusion"]),
-                   parent=SingleClassRule.from_json(data["parent"]),
-                   corner_case=Case.from_json(data["corner_case"]),
-                   weight=data["weight"])
-
-
+    def _from_json(cls, data: Dict[str, Any]) -> SingleClassRule:
+        loaded_rule = cls(conditions=CallableExpression.from_json(data["conditions"]),
+                          conclusion=CallableExpression.from_json(data["conclusion"]),
+                          parent=SingleClassRule.from_json(data["parent"]),
+                          corner_case=Case.from_json(data["corner_case"]),
+                          weight=data["weight"])
+        loaded_rule.refinement = SingleClassRule.from_json(data["refinement"])
+        loaded_rule.alternative = SingleClassRule.from_json(data["alternative"])
+        return loaded_rule
 
 
 class MultiClassStopRule(Rule, HasAlternativeRule):

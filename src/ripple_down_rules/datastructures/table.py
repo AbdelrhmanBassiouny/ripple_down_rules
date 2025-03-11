@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from collections import UserDict
 from dataclasses import dataclass
 from enum import Enum
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
     from .callable_expression import CallableExpression
 
 
-class SubClassFactory(SubclassJSONSerializer):
+class SubClassFactory:
     """
     A custom set class that is used to add other attributes to the set. This is similar to a table where the set is the
     table, the attributes are the columns, and the values are the rows.
@@ -106,7 +107,7 @@ class SubClassFactory(SubclassJSONSerializer):
         return isinstance(instance, (SubClassFactory, *self._value_range))
 
 
-class Row(UserDict, SubClassFactory):
+class Row(UserDict, SubClassFactory, SubclassJSONSerializer):
     """
     A collection of attributes that represents a set of constraints on a case. This is a dictionary where the keys are
     the names of the attributes and the values are the attributes. All are stored in lower case.
@@ -175,7 +176,7 @@ class Row(UserDict, SubClassFactory):
 
     def to_json(self) -> Dict[str, Any]:
         return {**SubclassJSONSerializer.to_json(self),
-                **{k: v.to_json() if isinstance(v, SubClassFactory) else v for k, v in self.items()}}
+                **{k: v.to_json() if isinstance(v, SubclassJSONSerializer) else v for k, v in self.items()}}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Row:
@@ -183,7 +184,7 @@ class Row(UserDict, SubClassFactory):
 
 
 @dataclass
-class ColumnValue:
+class ColumnValue(SubclassJSONSerializer):
     """
     A column value is a value in a column.
     """
@@ -204,8 +205,16 @@ class ColumnValue:
     def __hash__(self):
         return self.id
 
+    def to_json(self) -> Dict[str, Any]:
+        return {**SubclassJSONSerializer.to_json(self),
+                "id": self.id, "value": self.value}
 
-class Column(set, SubClassFactory):
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> ColumnValue:
+        return cls(id=data["id"], value=data["value"])
+
+
+class Column(set, SubClassFactory, SubclassJSONSerializer):
     nullable: bool = True
     """
     A boolean indicating whether the column can be None or not.
@@ -292,7 +301,7 @@ class Column(set, SubClassFactory):
 
     def to_json(self) -> Dict[str, Any]:
         return {**SubclassJSONSerializer.to_json(self),
-                **{str(id_): v for id_, v in self.id_value_map.items()}}
+                **{id_: v.to_json() if isinstance(v, SubclassJSONSerializer) else v for id_, v in self.id_value_map.items()}}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Column:

@@ -12,18 +12,19 @@ from ripple_down_rules.rdr import SingleClassRDR
 class TestJSONSerialization(TestCase):
     all_cases: List[Case]
     targets: List[str]
-    cache_file: str = "./test_results/zoo_dataset.pkl"
+    cache_dir: str = "./test_results"
     expert_answers_dir: str = "./test_expert_answers"
 
     @classmethod
     def setUpClass(cls):
-        cls.all_cases, cls.targets = load_zoo_dataset(cls.cache_file)
+        cls.all_cases, cls.targets = load_zoo_dataset(cls.cache_dir + "/zoo_dataset.pkl")
 
     def test_json_serialization(self):
         scrdr = self.get_fit_scrdr()
         scrdr_json = scrdr.to_json()
         # save the json to a file
-        json.dump()
+        with open(f"{self.cache_dir}/scrdr.json", "w") as f:
+            json.dump(scrdr_json, f, indent=4)
 
     def get_fit_scrdr(self, draw_tree=False) -> SingleClassRDR:
         filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
