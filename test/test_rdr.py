@@ -62,7 +62,7 @@ class TestRDR(TestCase):
         case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
         scrdr.fit(case_queries, expert=expert,
                   animate_tree=draw_tree)
-        scrdr.write_tree_of_rules_as_source_code_to_a_file(self.generated_rdrs_dir + "/scrdr.py")
+        scrdr.write_to_python_file(self.generated_rdrs_dir + "/scrdr.py")
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/scrdr")
 
