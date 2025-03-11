@@ -204,7 +204,7 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
         matched_rule = self.start_rule(case)
         return matched_rule if matched_rule else self.start_rule
 
-    def write_tree_of_rules_as_source_code_to_a_file(self, filename: str):
+    def write_to_python_file(self, filename: str):
         """
         Write the tree of rules as source code to a file.
         """
