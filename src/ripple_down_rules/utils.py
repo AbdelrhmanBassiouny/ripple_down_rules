@@ -102,7 +102,7 @@ def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Any], Opt
     :param obj: The object to get the attribute from.
     :return: The type hint of the attribute.
     """
-    if not hasattr(obj.__class__, attr_name):
+    if attr_name is None or not hasattr(obj.__class__, attr_name):
         return None, None, ()
     class_attr = getattr(obj.__class__, attr_name)
     if isinstance(class_attr, property):

@@ -15,7 +15,7 @@ class TestDDL(unittest.TestCase):
         self.session = sqlalchemy.orm.Session(engine)
 
     def test_animal(self):
-        a1 = Animal(hair=True, feathers=False, eggs=True, milk=False, airborne=False, aquatic=False, predator=False,
+        a1 = Animal(name="animal", hair=True, feathers=False, eggs=True, milk=False, airborne=False, aquatic=False, predator=False,
                     toothed=True, backbone=True, breathes=True, venomous=False, fins=False, legs=4, tail=True,
                     domestic=False, catsize=True, species=Species.mammal)
         print(a1.habitats)

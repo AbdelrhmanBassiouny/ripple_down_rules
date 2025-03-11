@@ -24,8 +24,9 @@ class TestRDR(TestCase):
     def setUpClass(cls):
         # fetch dataset
         cls.all_cases, cls.targets = load_zoo_dataset(cache_file=cls.cache_file)
-        if not os.path.exists(cls.test_results_dir):
-            os.makedirs(cls.test_results_dir)
+        for test_dir in [cls.test_results_dir, cls.expert_answers_dir, cls.generated_rdrs_dir]:
+            if not os.path.exists(test_dir):
+                os.makedirs(test_dir)
 
     def tearDown(self):
         Row._registry = {}

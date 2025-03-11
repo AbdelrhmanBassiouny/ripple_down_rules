@@ -5,13 +5,13 @@ from copy import copy
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
-from sqlalchemy.orm import DeclarativeBase as SQLTable, Session, make_transient
-from typing_extensions import List, Optional, Dict, Type, Union, Any, Tuple
+from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
+from typing_extensions import List, Optional, Dict, Type, Union, Any
 
-from .datastructures import Case, MCRDRMode, CallableExpression, Column, create_row, CaseQuery
+from .datastructures import Case, MCRDRMode, CallableExpression, Column, CaseQuery
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
-from .utils import draw_tree, get_attribute_name_from_value, make_set, get_attribute_by_type, copy_case, \
+from .utils import draw_tree, make_set, get_attribute_by_type, copy_case, \
     get_hint_for_attribute
 
 
@@ -155,36 +155,6 @@ class RippleDownRules(ABC):
                 return prop_value is not None
         else:
             return conclusion_type in case
-
-    @staticmethod
-    def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:
-        """
-        Copy a case.
-
-        :param case: The case to copy.
-        :return: The copied case.
-        """
-        if isinstance(case, SQLTable):
-            make_transient(case)
-            return case
-        else:
-            return copy(case)
-
-    @staticmethod
-    def convert_to_case_and_get_new_attribute(case: Union[Case, SQLTable],
-                                              attribute: Optional[Any] = None) -> Tuple[Union[Case, SQLTable], Any]:
-        """
-        Convert the case to a row object and get the new attribute.
-
-        :param case: The case to convert.
-        :param attribute: The attribute of the case to find a value for.
-        :return: The converted case and the new attribute.
-        """
-        if not isinstance(case, (Case, SQLTable)):
-            attribute_name = get_attribute_name_from_value(case, attribute) if attribute else None
-            case = create_row(case)
-            attribute = getattr(case, attribute_name) if attribute_name else None
-        return case, attribute
 
 
 RDR = RippleDownRules

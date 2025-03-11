@@ -119,20 +119,15 @@ class CallableExpression:
         for v in variables_str | attributes_str:
             if not v.startswith("case."):
                 self.parsed_user_input = self.parsed_user_input.replace(v, f"case.{v}")
+        self.expression_tree = parse_string_to_expression(self.parsed_user_input)
         self.compares_column_offset = [(c[0].col_offset, c[2].end_col_offset) for c in self.visitor.compares]
-        self.code = compile_expression_to_code(expression_tree)
+        self.code = compile_expression_to_code(self.expression_tree)
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            context = {}
             if not isinstance(case, Row):
                 case = create_row(case, max_recursion_idx=3)
-            else:
-                context = case
-            context.update(locals())
-            assert_context_contains_needed_information(case, context, self.visitor)
-            output = eval(self.code, {"__builtins__": {"len": len}}, context)
-            # output = eval(self.code)
+            output = eval(self.code)
             if self.conclusion_type:
                 assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
                                                                   f" got {type(output)}")
@@ -188,7 +183,7 @@ def assert_context_contains_needed_information(case: Any, context: Dict[str, Any
     found_variables = set()
     for key in visitor.variables:
         if key not in context:
-            raise ValueError(f"Attribute {key} not found in the case {case}")
+            raise ValueError(f"Variable {key} not found in the case {case}")
         found_variables.add(key)
 
     found_attributes = get_attributes_str(visitor)

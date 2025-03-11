@@ -1,4 +1,5 @@
 import os
+from unittest import TestCase
 
 import sqlalchemy.orm
 from sqlalchemy import select
@@ -10,10 +11,9 @@ from ripple_down_rules.datastructures import CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree, make_set
-from test_rdr import TestRDR
 
 
-class TestAlchemyRDR:
+class TestAlchemyRDR(TestCase):
     session: sqlalchemy.orm.Session
     test_results_dir: str = "./test_results"
     expert_answers_dir: str = "./test_expert_answers"
@@ -23,7 +23,7 @@ class TestAlchemyRDR:
 
     @classmethod
     def setUpClass(cls):
-        zoo = get_dataset(111, TestRDR.cache_file)
+        zoo = get_dataset(111, cls.cache_file)
 
         # data (as pandas dataframes)
         X = zoo['features']
@@ -147,11 +147,8 @@ class TestAlchemyRDR:
         return expert, filename
 
 
-tests = TestAlchemyRDR()
-tests.setUpClass()
-# tests.test_setup()
-# tests.test_alchemy_rules()
-# tests.test_classify_scrdr()
+# tests = TestAlchemyRDR()
+# tests.setUpClass()
 # tests.test_fit_scrdr()
 # tests.test_fit_mcrdr_stop_only()
 # tests.test_fit_grdr()
