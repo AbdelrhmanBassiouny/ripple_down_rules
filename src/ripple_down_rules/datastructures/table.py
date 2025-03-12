@@ -36,19 +36,25 @@ class SubClassFactory:
     _generated_classes_dir: str = os.path.dirname(os.path.abspath(__file__)) + "/generated"
 
     @classmethod
-    def create(cls, name: str, range_: set, default_values: bool = True, **kwargs) -> Type[SubClassFactory]:
+    def create(cls, name: str, range_: set, class_attributes: Optional[Dict[str, Any]] = None,
+               default_values: bool = True,
+               attributes_type_hints: Optional[Dict[str, Type]] = None) -> Type[SubClassFactory]:
         """
-        Create a new custom set subclass.
+        Create a new subclass.
 
-        :param name: The name of the column.
-        :param range_: The range of the column values.
-        :return: The new column type.
+        :param name: The name of the subclass.
+        :param range_: The range of the subclass values.
+        :param class_attributes: The attributes of the new subclass.
+        :param default_values: Boolean indicating whether to add default values to the subclass attributes or not.
+        :param attributes_type_hints: The type hints of the subclass attributes.
+        :return: The new subclass.
         """
         existing_class = cls._get_and_update_subclass(name, range_)
         if existing_class:
             return existing_class
 
-        new_attribute_type = cls._create_class_in_new_python_file_and_import_it(name, range_, default_values, **kwargs)
+        new_attribute_type = cls._create_class_in_new_python_file_and_import_it(name, range_, default_values,
+                                                                                class_attributes, attributes_type_hints)
 
         cls.register(new_attribute_type)
 
@@ -56,30 +62,51 @@ class SubClassFactory:
 
     @classmethod
     def _create_class_in_new_python_file_and_import_it(cls, name: str, range_: set, default_values: bool = True,
-                                                       **kwargs) -> Type[SubClassFactory]:
-        imports = f"from {cls.__module__} import {cls.__name__}\n"
-        class_code = f"class {name}({cls.__name__}):\n"
-        kwargs.update({"_value_range": range_})
-        for key, value in kwargs.items():
-            if type(value).__module__ != "builtins":
-                imports += f"from {type(value).__module__} import {type(value).__name__}\n"
+                                                       class_attributes: Optional[Dict[str, Any]] = None,
+                                                       attributes_type_hints: Optional[Dict[str, Type]] = None)\
+            -> Type[SubClassFactory]:
+        def get_type_import(value_type: Any) -> Tuple[str, str]:
+            if value_type is type(None):
+                return "from types import NoneType\n", "NoneType"
+            elif value_type.__module__ != "builtins":
+                value_type_alias = f"{value_type.__name__}_"
+                return f"from {value_type.__module__} import {value_type.__name__} as {value_type_alias}\n", value_type_alias
+            else:
+                return "", value_type.__name__
+        attributes_type_hints = attributes_type_hints or {}
+        parent_class_alias = cls.__name__ + "_"
+        imports = f"from {cls.__module__} import {cls.__name__} as {parent_class_alias}\n"
+        class_code = f"class {name}({parent_class_alias}):\n"
+        class_attributes.update({"_value_range": range_})
+        for key, value in class_attributes.items():
+            if value is not None:
+                new_import, value_type_name = get_type_import(type(value))
+            elif key in attributes_type_hints:
+                new_import, value_type_name = get_type_import(attributes_type_hints[key])
+            else:
+                new_import, value_type_name = "from typing_extensions import Any", "Any"
+            imports += new_import
             if isinstance(value, set):
+                value_names = []
                 for v in value:
                     if isinstance(v, type):
-                        if v is type(None):
-                            imports += "from types import NoneType\n"
-                        elif v.__module__ != "builtins":
-                            imports += f"from {v.__module__} import {v.__name__}\n"
-                value_str = ", ".join([v.__name__ if isinstance(v, type) else v for v in value])
+                        new_import, v_name = get_type_import(v)
+                        imports += new_import
+                    else:
+                        v_name = str(v)
+                    value_names.append(v_name)
+                value_str = ", ".join(value_names)
                 new_value = "{" + value_str + "}"
             elif isinstance(value, type):
-                new_value = value.__name__
+                new_import, value_name = get_type_import(value)
+                new_value = value_name
+                value_type_name = value_name
             else:
                 new_value = value
             if default_values or key == "_value_range":
-                class_code += f"    {key}: {type(value).__name__} = {new_value}\n"
+                class_code += f"    {key}: {value_type_name} = {new_value}\n"
             else:
-                class_code += f"    {key}: {type(value).__name__}\n"
+                class_code += f"    {key}: {value_type_name}\n"
         imports += "\n\n"
         if issubclass(cls, Row):
             folder_name = "row"
@@ -93,9 +120,7 @@ class SubClassFactory:
 
         # import the class from the file
         import_path = ".".join(cls.__module__.split(".")[:-1] + ["generated", folder_name, name.lower()])
-        time.sleep(0.2)
-        if "as_dict" in name:
-            print(import_path)
+        time.sleep(0.3)
         return __import__(import_path, fromlist=[name.lower()]).__dict__[name]
 
     @classmethod
@@ -294,7 +319,7 @@ class Column(set, SubClassFactory, SubclassJSONSerializer):
     @classmethod
     def create(cls, name: str, range_: set,
                nullable: bool = True, mutually_exclusive: bool = False) -> Type[SubClassFactory]:
-        return super().create(name, range_, **{"nullable": nullable, "mutually_exclusive": mutually_exclusive})
+        return super().create(name, range_, {"nullable": nullable, "mutually_exclusive": mutually_exclusive})
 
     @classmethod
     def create_from_enum(cls, category: Type[Enum], nullable: bool = True,
@@ -365,8 +390,8 @@ def create_rows_from_dataframe(df: DataFrame, name: Optional[str] = None) -> Lis
     col_names = list(df.columns)
     for row_id, row in df.iterrows():
         row = {col_name: row[col_name].item() for col_name in col_names}
-        row = Row.create(name or df.__class__.__name__, make_set(type(df)), default_values=False, **row)(id_=row_id, **row)
-        rows.append(row)
+        row_cls = Row.create(name or df.__class__.__name__, make_set(type(df)), row, default_values=False)
+        rows.append(row_cls(id_=row_id, **row))
     return rows
 
 
@@ -384,17 +409,21 @@ def create_row(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
     """
     if isinstance(obj, Row):
         return obj
-    row = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)))(id_=id(obj))
     if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
             or (obj.__class__ in [MetaData, registry])):
-        return row
+        return Row(id_=id(obj), **{obj_name or obj.__class__.__name__: make_set(obj) if parent_is_iterable else obj})
+    row = Row(id_=id(obj))
+    attributes_type_hints = {}
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
             continue
         attr_value = getattr(obj, attr)
-        chained_name = f"{obj_name}.{attr}" if obj_name else attr
-        row = create_or_update_row_from_attribute(attr_value, attr, obj, chained_name, recursion_idx,
+        row = create_or_update_row_from_attribute(attr_value, attr, obj, attr, recursion_idx,
                                                   max_recursion_idx, parent_is_iterable, row)
+        attributes_type_hints[attr] = get_value_type_from_type_hint(attr, obj)
+    row_cls = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)), row, default_values=False,
+                         attributes_type_hints=attributes_type_hints)
+    row = row_cls(id_=id(obj), **row)
     return row
 
 
@@ -415,7 +444,8 @@ def create_or_update_row_from_attribute(attr_value: Any, name: str, obj: Any, ob
     :param row: The row to update.
     :return: A reference column and its table.
     """
-    row = row if row is not None else Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)))(id_=id(obj))
+    if row is None:
+        row = Row(id_=id(obj))
     if isinstance(attr_value, (dict, UserDict)):
         row.update({f"{obj_name}.{k}": v for k, v in attr_value.items()})
     if hasattr(attr_value, "__iter__") and not isinstance(attr_value, str):
@@ -424,11 +454,10 @@ def create_or_update_row_from_attribute(attr_value: Any, name: str, obj: Any, ob
                                                                          max_recursion_idx=max_recursion_idx)
         row[obj_name] = column
     else:
-        attr_row = create_row(attr_value, recursion_idx=recursion_idx + 1,
-                              max_recursion_idx=max_recursion_idx,
-                              obj_name=obj_name, parent_is_iterable=False)
         row[obj_name] = make_set(attr_value) if parent_is_iterable else attr_value
-    row.update(attr_row)
+    if row.__class__.__name__ == "Row":
+        row_cls = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)), row, default_values=False)
+        row = row_cls(id_=id(obj), **row)
     return row
 
 
@@ -452,15 +481,18 @@ def create_column_and_row_from_iterable_attribute(attr_value: Any, name: str, ob
         range_ = make_set(get_value_type_from_type_hint(name, obj))
     if not range_:
         raise ValueError(f"Could not determine the range of {name} in {obj}.")
-    attr_row = Row.create(name or list(range_)[0].__name__, range_)(id_=id(attr_value))
+    attr_row = Row(id_=id(attr_value))
     column = Column.create(name, range_).from_obj(values, row_obj=obj)
+    attributes_type_hints = {}
     for idx, val in enumerate(values):
         sub_attr_row = create_row(val, recursion_idx=recursion_idx,
                                   max_recursion_idx=max_recursion_idx,
                                   obj_name=obj_name, parent_is_iterable=True)
         attr_row.update(sub_attr_row)
+    # attr_row_cls = Row.create(name or list(range_)[0].__name__, range_, attr_row, default_values=False)
+    # attr_row = attr_row_cls(id_=id(attr_value), **attr_row)
     for sub_attr, val in attr_row.items():
-        setattr(column, sub_attr.replace(f"{obj_name}.", ""), val)
+        setattr(column, sub_attr, val)
     return column, attr_row
 
 

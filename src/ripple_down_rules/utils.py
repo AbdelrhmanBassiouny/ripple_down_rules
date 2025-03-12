@@ -133,10 +133,16 @@ def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
     :param obj: The object to get the attributes from.
     """
     hint, origin, args = get_hint_for_attribute(attr_name, obj)
-    if not origin:
+    if not origin and not hint:
+        if hasattr(obj, attr_name):
+            attr_value = getattr(obj, attr_name)
+            if attr_value is not None:
+                return type(attr_value)
         raise ValueError(f"Couldn't get type for Attribute {attr_name}, please provide a type hint")
     if origin in [list, set, tuple, type, dict]:
         attr_value_type = args[0]
+    elif hint:
+        attr_value_type = hint
     else:
         raise ValueError(f"Attribute {attr_name} has unsupported type {hint}.")
     return attr_value_type
@@ -158,7 +164,10 @@ def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Any], Opt
             raise ValueError(f"Attribute {attr_name} has no getter.")
         hint = get_type_hints(class_attr.fget)['return']
     else:
-        hint = get_type_hints(obj.__class__)[attr_name]
+        try:
+            hint = get_type_hints(obj.__class__)[attr_name]
+        except KeyError:
+            hint = type(class_attr)
     origin = get_origin(hint)
     args = get_args(hint)
     if origin is Mapped:
