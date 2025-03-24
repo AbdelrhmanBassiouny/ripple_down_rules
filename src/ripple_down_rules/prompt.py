@@ -22,8 +22,15 @@ def prompt_user_for_expression(case: Union[Case, SQLTable], prompt_for: PromptFo
     :param session: The sqlalchemy orm session.
     :return: A callable expression that takes a case and executes user expression on it.
     """
-    user_input, expression_tree = prompt_user_about_case(case, prompt_for, target_name)
-    callable_expression = CallableExpression(user_input, output_type, expression_tree=expression_tree, session=session)
+    while True:
+        user_input, expression_tree = prompt_user_about_case(case, prompt_for, target_name)
+        callable_expression = CallableExpression(user_input, output_type, expression_tree=expression_tree, session=session)
+        try:
+            callable_expression(case)
+            break
+        except Exception as e:
+            logging.error(e)
+            print(e)
     return user_input, callable_expression
 
 

@@ -364,6 +364,8 @@ class Column(set, SubClassFactory, SubclassJSONSerializer):
         return hash(tuple(self.id_value_map.values()))
 
     def __str__(self):
+        if len(self) == 0:
+            return "None"
         return str({v for v in self}) if len(self) > 1 else str(next(iter(self)))
 
     def __instancecheck__(self, instance):
