@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 
-from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
+from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, Session
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any
 
 from .datastructures import (Case, PromptFor, CallableExpression, Column, CaseQuery)
@@ -168,7 +168,7 @@ class Human(Expert):
 
     def ask_for_conclusion(self, case_query: CaseQuery,
                            current_conclusions: Optional[List[Any]] = None)\
-            -> Optional[Union[CallableExpression, Column, Column]]:
+            -> Optional[CallableExpression]:
         """
         Ask the expert to provide a conclusion for the case.
 
@@ -181,14 +181,13 @@ class Human(Expert):
         attribute_type = case_query.attribute_type
         if self.use_loaded_answers:
             expert_input = self.all_expert_answers.pop(0)
-            conclusion = CallableExpression(expert_input, conclusion_type=attribute_type, session=self.session)(case)
+            expression = CallableExpression(expert_input, conclusion_type=attribute_type, session=self.session)
         else:
             show_current_and_corner_cases(case, current_conclusions=current_conclusions)
             expert_input, expression = prompt_user_for_expression(case, PromptFor.Conclusion, attribute_name,
                                                                   attribute_type)
             self.all_expert_answers.append(expert_input)
-            conclusion = expression(case)
-        return conclusion
+        return expression
 
     def create_category_instance(self, cat_name: str, cat_value: Union[str, int, float, set]) -> Column:
         """

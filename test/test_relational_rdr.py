@@ -86,7 +86,7 @@ class RelationalRDRTestCase(TestCase):
         cat = scrdr.fit_case(CaseQuery(self.robot, self.robot.contained_objects), expert=expert)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + "/relational_scrdr_classify")
-        assert cat == self.target.target
+        assert cat(self.robot) == self.target.target
 
         if save_answers:
             cwd = os.getcwd()

@@ -51,7 +51,8 @@ class RippleDownRules(ABC):
         pass
 
     @abstractmethod
-    def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) -> Column:
+    def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs)\
+            -> Union[Column, CallableExpression]:
         """
         Fit the RDR on a case, and ask the expert for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category.
@@ -162,7 +163,8 @@ RDR = RippleDownRules
 
 class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
 
-    def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) -> Column:
+    def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
+            -> Union[Column, CallableExpression]:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
@@ -303,7 +305,7 @@ class MultiClassRDR(RippleDownRules):
         return self.conclusions
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None,
-                 add_extra_conclusions: bool = False) -> List[Any]:
+                 add_extra_conclusions: bool = False) -> List[Union[Column, CallableExpression]]:
         """
         Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
          or missing by comparing the case with the target category if provided.
@@ -578,7 +580,8 @@ class GeneralRDR(RippleDownRules):
                 break
         return conclusions
 
-    def fit_case(self, case_queries: List[CaseQuery], expert: Optional[Expert] = None, **kwargs) -> List[Any]:
+    def fit_case(self, case_queries: List[CaseQuery], expert: Optional[Expert] = None, **kwargs)\
+            -> List[Union[Column, CallableExpression]]:
         """
         Fit the GRDR on a case, if the target is a new type of category, a new RDR is created for it,
         else the existing RDR of that type will be fitted on the case, and then classification is done and all
