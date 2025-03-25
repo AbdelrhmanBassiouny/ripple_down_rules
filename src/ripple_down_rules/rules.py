@@ -114,6 +114,8 @@ class HasAlternativeRule:
         Set the alternative rule of the rule. It is important that no rules should be retracted or changed,
         only new rules should be added.
         """
+        if new_rule is None:
+            return
         if self.furthest_alternative:
             self.furthest_alternative[-1].alternative = new_rule
         else:
@@ -139,6 +141,8 @@ class HasRefinementRule:
         Set the refinement rule of the rule. It is important that no rules should be retracted or changed,
         only new rules should be added.
         """
+        if new_rule is None:
+            return
         new_rule.top_rule = self
         if self.refinement:
             self.refinement.alternative = new_rule

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import logging
 from abc import abstractmethod
 from collections import UserDict
@@ -21,6 +22,17 @@ if TYPE_CHECKING:
     from .datastructures import Case
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def get_type_from_string(type_path: str):
+    """
+    Get a type from a string describing its path using the format "module_path.ClassName".
+
+    :param type_path: The path to the type.
+    """
+    module_path, class_name = type_path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)
 
 
 def get_full_class_name(cls):
@@ -75,9 +87,15 @@ class SubclassJSONSerializer:
         :param data: The json dict
         :return: The correct instance of the subclass
         """
+        if data is None:
+            return None
+        if get_full_class_name(cls) == data["_type"]:
+            return cls._from_json(data)
         for subclass in recursive_subclasses(SubclassJSONSerializer):
             if get_full_class_name(subclass) == data["_type"]:
-                return subclass._from_json(data)
+                subclass_data = deepcopy(data)
+                subclass_data.pop("_type")
+                return subclass._from_json(subclass_data)
 
         raise ValueError("Unknown type {}".format(data["_type"]))
 

@@ -1,1 +1,1 @@
-["milk==1", "aquatic==1", "feathers==1", "backbone==0,breathes==0", "backbone==0,fins==0", "feathers==1", "eggs==1,backbone==0,breathes==1", "fins==0", "feathers==0,milk==0,backbone==1,tail==1,fins==0,airborne==0", "feathers==0,milk==0,airborne==0,backbone==0,fins==0", "tail==1", "legs==0", "legs>0,breathes==1"]
+["milk == 1", "aquatic == 1", "feathers == 1", "backbone == 0, breathes == 0", "fins == 0", "feathers == 1", "eggs == 1, backbone == 0", "backbone == 1", "backbone == 1, tail == 1", "backbone == 0, eggs == 0", "breathes == 0", "legs == 0"]

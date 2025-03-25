@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .table import create_row, Row
-from ..utils import SubclassJSONSerializer, get_full_class_name
+from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -168,7 +168,7 @@ class CallableExpression(SubclassJSONSerializer):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> CallableExpression:
-        return cls(user_input=data["user_input"], conclusion_type=data["conclusion_type"])
+        return cls(user_input=data["user_input"], conclusion_type=get_type_from_string(data["conclusion_type"]))
 
 
 def compile_expression_to_code(expression_tree: AST) -> Any:

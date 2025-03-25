@@ -4,6 +4,7 @@ import os
 import time
 from abc import ABC
 from collections import UserDict
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 
@@ -77,6 +78,7 @@ class SubClassFactory:
         parent_class_alias = cls.__name__ + "_"
         imports = f"from {cls.__module__} import {cls.__name__} as {parent_class_alias}\n"
         class_code = f"class {name}({parent_class_alias}):\n"
+        class_attributes = deepcopy(class_attributes) if class_attributes else {}
         class_attributes.update({"_value_range": range_})
         for key, value in class_attributes.items():
             if value is not None:
@@ -245,12 +247,15 @@ class Row(UserDict, SubClassFactory, SubclassJSONSerializer):
         return isinstance(instance, (dict, UserDict, Row)) or super().__instancecheck__(instance)
 
     def to_json(self) -> Dict[str, Any]:
+        serializable = {k: v for k, v in self.items() if not k.startswith("_")}
+        serializable["_id"] = self.id
         return {**SubclassJSONSerializer.to_json(self),
-                **{k: v.to_json() if isinstance(v, SubclassJSONSerializer) else v for k, v in self.items()}}
+                **{k: v.to_json() if isinstance(v, SubclassJSONSerializer) else v for k, v in serializable.items()}}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Row:
-        return cls(id_=data["id"], **data)
+        id_ = data.pop("_id")
+        return cls(id_=id_, **data)
 
 
 @dataclass
@@ -377,7 +382,7 @@ class Column(set, SubClassFactory, SubclassJSONSerializer):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Column:
-        return cls({ColumnValue(int(id_), v) for id_, v in data.items()})
+        return cls({ColumnValue.from_json(v) for id_, v in data.items()})
 
 
 def create_rows_from_dataframe(df: DataFrame, name: Optional[str] = None) -> List[Row]:
