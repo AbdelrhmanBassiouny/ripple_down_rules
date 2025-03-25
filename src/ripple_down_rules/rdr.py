@@ -111,15 +111,17 @@ class RippleDownRules(ABC):
                 if animate_tree and self.start_rule.size > num_rules:
                     num_rules = self.start_rule.size
                     self.update_figures()
-                i += 1
-                all_predicted = targets and all_pred == len(targets)
-                num_iter_reached = n_iter and i >= n_iter
-                stop_iterating = all_predicted or num_iter_reached
-                if stop_iterating:
-                    break
+            i += 1
+            all_pred = [1 if p == t else 0
+                        for case, target in zip(cases, targets) for p, t in zip(self.classify(case), target)]
+            all_predicted = targets and sum(all_pred) == len(targets)
+            num_iter_reached = n_iter and i >= n_iter
+            stop_iterating = all_predicted or num_iter_reached
+            if stop_iterating:
+                break
             print(f"Recall: {sum(all_recall) / len(all_recall)}")
             print(f"Precision: {sum(all_precision) / len(all_precision)}")
-            print(f"Accuracy: {all_pred}/{n_iter}")
+            print(f"Accuracy: {all_pred}/{len(targets)}")
         print(f"Finished training in {i} iterations")
         if animate_tree:
             plt.ioff()
