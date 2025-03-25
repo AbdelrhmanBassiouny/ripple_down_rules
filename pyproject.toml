@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ripple_down_rules"
-version = "0.0.2"
+version = "0.0.3"
 description = "Implements the various versions of Ripple Down Rules (RDR) for knowledge representation and reasoning."
 readme = "README.md"
 authors = [{ name = "Abdelrhman Bassiouny", email = "abassiou@uni-bremen.de" }]
@@ -15,8 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 keywords = ["robotics", "knowledge", "reasoning", "representation"]
-dependencies = ["neem_pycram_interface==1.0.167",
-]
+dependencies = []
 requires-python = ">=3.8"
 
 [project.urls]
