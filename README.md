@@ -22,6 +22,7 @@ Fit the SCRDR to the data, then classify one of the data cases to check if its c
 and render the tree to a file:
 
 ```Python
+from ripple_down_rules.datastructures import CaseQuery
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.utils import render_tree
@@ -31,8 +32,8 @@ all_cases, targets = load_zoo_dataset()
 scrdr = SingleClassRDR()
 
 # Fit the SCRDR to the data
-scrdr.fit(all_cases, targets,
-          animate_tree=True, n_iter=10)
+case_queries = [CaseQuery(case, target=target) for case, target in zip(all_cases, targets)]
+scrdr.fit(case_queries, animate_tree=True)
 
 # Render the tree to a file
 render_tree(scrdr.start_rule, use_dot_exporter=True, filename="scrdr")

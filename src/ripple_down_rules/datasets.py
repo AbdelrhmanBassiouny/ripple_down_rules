@@ -6,7 +6,7 @@ import pickle
 import sqlalchemy
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column, relationship
-from typing_extensions import Tuple, List, Set
+from typing_extensions import Tuple, List, Set, Optional
 from ucimlrepo import fetch_ucirepo
 
 from .datastructures import Case, create_rows_from_dataframe, Category, Column
@@ -38,9 +38,9 @@ def save_dataset_to_cache(dataset, cache_file):
     print("Dataset cached successfully.")
 
 
-def get_dataset(dataset_id, cache_file):
+def get_dataset(dataset_id, cache_file: Optional[str] = None):
     """Fetches dataset from cache or downloads it if not available."""
-    dataset = load_cached_dataset(cache_file)
+    dataset = load_cached_dataset(cache_file) if cache_file else None
     if dataset is None:
         print("Downloading dataset...")
         dataset = fetch_ucirepo(id=dataset_id)
@@ -50,16 +50,23 @@ def get_dataset(dataset_id, cache_file):
             print("Error: Failed to fetch dataset.")
             return None
 
-        save_dataset_to_cache(dataset, cache_file)
+        if cache_file:
+            save_dataset_to_cache(dataset, cache_file)
+
+        dataset = {
+            "features": dataset.data.features,
+            "targets": dataset.data.targets,
+            "ids": dataset.data.ids,
+        }
 
     return dataset
 
 
-def load_zoo_dataset(cache_file: str) -> Tuple[List[Case], List[Species]]:
+def load_zoo_dataset(cache_file: Optional[str] = None) -> Tuple[List[Case], List[Species]]:
     """
     Load the zoo dataset.
 
-    :param cache_file: the cache file.
+    :param cache_file: the cache file to store the dataset or load it from.
     :return: all cases and targets.
     """
     # fetch dataset
