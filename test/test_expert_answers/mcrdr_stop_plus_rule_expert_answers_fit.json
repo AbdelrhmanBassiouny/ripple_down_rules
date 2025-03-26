@@ -18,5 +18,7 @@
   "breathes==0",
   "legs==0",
   "fins==1",
-  "eggs==1"
+  "eggs==1",
+  "aquatic == 1 and legs > 0",
+  "tail == 1 and backbone == 1"
 ]

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from copy import copy
+from copy import copy, deepcopy
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
-from typing_extensions import List, Optional, Dict, Type, Union, Any, Self
+from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple
 
 from .datastructures import Case, MCRDRMode, CallableExpression, Column, CaseQuery
 from .experts import Expert, Human
@@ -51,7 +51,7 @@ class RippleDownRules(ABC):
         pass
 
     @abstractmethod
-    def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs)\
+    def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
             -> Union[Column, CallableExpression]:
         """
         Fit the RDR on a case, and ask the expert for refinements or alternatives if the classification is incorrect by
@@ -86,8 +86,6 @@ class RippleDownRules(ABC):
         num_rules: int = 0
         while not stop_iterating:
             all_pred = 0
-            all_recall = []
-            all_precision = []
             if not targets:
                 targets = [None] * len(cases)
             for case_query in case_queries:
@@ -97,14 +95,7 @@ class RippleDownRules(ABC):
                     conclusions = self.classify(case) if self.start_rule and self.start_rule.conditions else []
                     target = expert.ask_for_conclusion(case_query, conclusions)
                 pred_cat = self.fit_case(case_query, expert=expert, **kwargs_for_fit_case)
-                pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
-                target = target if isinstance(target, list) else [target]
-                recall = [not yi or (yi in pred_cat) for yi in target]
-                y_type = [type(yi) for yi in target]
-                precision = [(pred in target) or (type(pred) not in y_type) for pred in pred_cat]
-                match = all(recall) and all(precision)
-                all_recall.extend(recall)
-                all_precision.extend(precision)
+                match = self.is_matching(pred_cat, target)
                 if not match:
                     print(f"Predicted: {pred_cat} but expected: {target}")
                 all_pred += int(match)
@@ -112,20 +103,42 @@ class RippleDownRules(ABC):
                     num_rules = self.start_rule.size
                     self.update_figures()
             i += 1
-            all_pred = [1 if p == t else 0
-                        for case, target in zip(cases, targets) for p, t in zip(self.classify(case), target)]
-            all_predicted = targets and sum(all_pred) == len(targets)
+            all_predictions = [1 if self.is_matching(self.classify(case), target) else 0
+                               for case, target in zip(cases, targets)]
+            all_pred = sum(all_predictions)
+            print(f"Accuracy: {all_pred}/{len(targets)}")
+            all_predicted = targets and all_pred == len(targets)
             num_iter_reached = n_iter and i >= n_iter
             stop_iterating = all_predicted or num_iter_reached
             if stop_iterating:
                 break
-            print(f"Recall: {sum(all_recall) / len(all_recall)}")
-            print(f"Precision: {sum(all_precision) / len(all_precision)}")
-            print(f"Accuracy: {all_pred}/{len(targets)}")
         print(f"Finished training in {i} iterations")
         if animate_tree:
             plt.ioff()
             plt.show()
+
+    @staticmethod
+    def calculate_precision_and_recall(pred_cat: List[Column], target: List[Column]) -> Tuple[List[bool], List[bool]]:
+        """
+        :param pred_cat: The predicted category.
+        :param target: The target category.
+        :return: The precision and recall of the classifier.
+        """
+        pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
+        target = target if isinstance(target, list) else [target]
+        recall = [not yi or (yi in pred_cat) for yi in target]
+        target_types = [type(yi) for yi in target]
+        precision = [(pred in target) or (type(pred) not in target_types) for pred in pred_cat]
+        return precision, recall
+
+    def is_matching(self, pred_cat: List[Column], target: List[Column]) -> bool:
+        """
+        :param pred_cat: The predicted category.
+        :param target: The target category.
+        :return: Whether the classifier is matching or not.
+        """
+        precision, recall = self.calculate_precision_and_recall(pred_cat, target)
+        return all(recall) and all(precision)
 
     def update_figures(self):
         """
@@ -501,6 +514,7 @@ class MultiClassRDR(RippleDownRules):
             same_type_conclusions = [c for c in self.conclusions if type(c) == type(evaluated_rule.conclusion)]
             combined_conclusion = evaluated_rule.conclusion if isinstance(evaluated_rule.conclusion, set) \
                 else {evaluated_rule.conclusion}
+            combined_conclusion = deepcopy(combined_conclusion)
             for c in same_type_conclusions:
                 combined_conclusion.update(c if isinstance(c, set) else make_set(c))
                 self.conclusions.remove(c)
@@ -582,7 +596,7 @@ class GeneralRDR(RippleDownRules):
                 break
         return conclusions
 
-    def fit_case(self, case_queries: List[CaseQuery], expert: Optional[Expert] = None, **kwargs)\
+    def fit_case(self, case_queries: List[CaseQuery], expert: Optional[Expert] = None, **kwargs) \
             -> List[Union[Column, CallableExpression]]:
         """
         Fit the GRDR on a case, if the target is a new type of category, a new RDR is created for it,

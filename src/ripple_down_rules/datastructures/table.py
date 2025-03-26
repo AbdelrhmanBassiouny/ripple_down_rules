@@ -4,7 +4,7 @@ import os
 import time
 from abc import ABC
 from collections import UserDict
-from copy import deepcopy
+from copy import deepcopy, copy
 from dataclasses import dataclass
 from enum import Enum
 
@@ -78,7 +78,7 @@ class SubClassFactory:
         parent_class_alias = cls.__name__ + "_"
         imports = f"from {cls.__module__} import {cls.__name__} as {parent_class_alias}\n"
         class_code = f"class {name}({parent_class_alias}):\n"
-        class_attributes = deepcopy(class_attributes) if class_attributes else {}
+        class_attributes = copy(class_attributes) if class_attributes else {}
         class_attributes.update({"_value_range": range_})
         for key, value in class_attributes.items():
             if value is not None:

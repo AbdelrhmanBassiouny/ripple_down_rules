@@ -102,7 +102,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
         mcrdr = MultiClassRDR()
         case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
-        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree, n_iter=1)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_only")
         cats = mcrdr.classify(self.all_cases[50])
@@ -117,13 +117,22 @@ class TestRDR(TestCase):
         use_loaded_answers = True
         draw_tree = False
         save_answers = False
+        append = False
         filename = self.expert_answers_dir + "/mcrdr_stop_plus_rule_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
         case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
-        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
+        try:
+            mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
+        # catch pop from empty list error
+        except IndexError as e:
+            if append:
+                expert.use_loaded_answers = False
+                mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
+            else:
+                raise e
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_plus_rule")
         cats = mcrdr.classify(self.all_cases[50])
@@ -132,19 +141,28 @@ class TestRDR(TestCase):
         if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
-            expert.save_answers(file)
+            expert.save_answers(file, append=append)
 
     def test_fit_mcrdr_stop_plus_rule_combined(self):
         use_loaded_answers = True
         save_answers = False
         draw_tree = False
+        append = False
         filename = self.expert_answers_dir + "/mcrdr_stop_plus_rule_combined_expert_answers_fit"
         expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRuleCombined)
         case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
-        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
+        try:
+            mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
+        # catch pop from empty list error
+        except IndexError as e:
+            if append:
+                expert.use_loaded_answers = False
+                mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
+            else:
+                raise e
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_plus_rule_combined")
         cats = mcrdr.classify(self.all_cases[50])
@@ -153,7 +171,7 @@ class TestRDR(TestCase):
         if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
-            expert.save_answers(file)
+            expert.save_answers(file, append=append)
 
     @skip("Extra conclusions loaded answers are not working with new prompt interface")
     def test_classify_mcrdr_with_extra_conclusions(self):

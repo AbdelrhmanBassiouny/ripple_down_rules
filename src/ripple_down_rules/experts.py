@@ -97,14 +97,23 @@ class Human(Expert):
         self.use_loaded_answers = use_loaded_answers
         self.session = session
 
-    def save_answers(self, path: str):
+    def save_answers(self, path: str, append: bool = False):
         """
         Save the expert answers to a file.
 
         :param path: The path to save the answers to.
+        :param append: A flag to indicate if the answers should be appended to the file or not.
         """
-        with open(path + '.json', "w") as f:
-            json.dump(self.all_expert_answers, f)
+        if append:
+            # read the file and append the new answers
+            with open(path + '.json', "r") as f:
+                all_answers = json.load(f)
+                all_answers.extend(self.all_expert_answers)
+            with open(path + '.json', "w") as f:
+                json.dump(all_answers, f)
+        else:
+            with open(path + '.json', "w") as f:
+                json.dump(self.all_expert_answers, f)
 
     def load_answers(self, path: str):
         """
