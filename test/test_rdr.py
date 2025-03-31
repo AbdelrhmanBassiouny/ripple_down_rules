@@ -3,7 +3,7 @@ from unittest import TestCase, skip
 
 from typing_extensions import List
 
-from ripple_down_rules.datasets import HabitatCol as Habitat, SpeciesCol as Species
+from ripple_down_rules.datasets import Habitat, SpeciesCol as Species
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import Case, MCRDRMode, \
     Row, Column, Category, CaseQuery
@@ -253,19 +253,19 @@ class TestRDR(TestCase):
         def get_habitat(x: Row, t: Category):
             all_habs = []
             if t == Species.mammal and x["aquatic"] == 0:
-                all_habs.append(Habitat.land)
+                all_habs.append({Habitat.land})
             elif t == Species.bird:
-                all_habs.append(Habitat.land)
+                all_habs.append({Habitat.land})
                 if x["airborne"] == 1:
-                    all_habs[-1].update(Habitat.air)
+                    all_habs[-1].update({Habitat.air})
                 if x["aquatic"] == 1:
-                    all_habs[-1].update(Habitat.water)
+                    all_habs[-1].update({Habitat.water})
             elif t == Species.fish:
-                all_habs.append(Habitat.water)
+                all_habs.append({Habitat.water})
             elif t == Species.molusc:
-                all_habs.append(Habitat.land)
+                all_habs.append({Habitat.land})
                 if x["aquatic"] == 1:
-                    all_habs[-1].update(Habitat.water)
+                    all_habs[-1].update({Habitat.water})
             return all_habs + [t]
 
         n = 20

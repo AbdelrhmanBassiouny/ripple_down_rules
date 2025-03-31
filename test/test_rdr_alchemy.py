@@ -116,7 +116,7 @@ class TestAlchemyRDR(TestCase):
         for case, attributes, targets in zip(self.all_cases[:n], all_attributes, habitat_targets):
             for attr, target in zip(attributes, targets):
                 case_queries.append(CaseQuery(case, attr, target=target))
-        grdr.fit(case_queries, expert=expert, animate_tree=draw_tree, n_iter=n)
+        grdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         for rule in grdr.start_rules:
             render_tree(rule, use_dot_exporter=True,
                         filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")

@@ -24,6 +24,24 @@ if TYPE_CHECKING:
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
+def make_list(value: Any) -> List:
+    """
+    Make a list from a value.
+
+    :param value: The value to make a list from.
+    """
+    return list(value) if is_iterable(value) else [value]
+
+
+def is_iterable(obj: Any) -> bool:
+    """
+    Check if an object is iterable.
+
+    :param obj: The object to check.
+    """
+    return hasattr(obj, "__iter__") and not isinstance(obj, (str, type))
+
+
 def get_type_from_string(type_path: str):
     """
     Get a type from a string describing its path using the format "module_path.ClassName".
@@ -350,20 +368,7 @@ def make_set(value: Any) -> Set:
 
     :param value: The value to make a set from.
     """
-    if hasattr(value, "__iter__") and not isinstance(value, (str, type)):
-        return set(value)
-    return {value}
-
-
-def make_list(value: Any) -> List:
-    """
-    Make a list from a value.
-
-    :param value: The value to make a list from.
-    """
-    if hasattr(value, "__iter__") and not isinstance(value, (str, type)):
-        return list(value)
-    return [value]
+    return set(value) if is_iterable(value) else {value}
 
 
 def make_value_or_raise_error(value: Any) -> Any:

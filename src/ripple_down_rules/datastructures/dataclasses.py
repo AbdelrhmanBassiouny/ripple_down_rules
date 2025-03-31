@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from copy import copy, deepcopy
 from dataclasses import dataclass
 
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Type, Union
+from typing_extensions import Any, Optional, Type
 
 from .table import create_row, Case
-from ..utils import get_attribute_name, copy_orm_instance_with_relationships, copy_case
+from ..utils import get_attribute_name, copy_case
 
 
 @dataclass

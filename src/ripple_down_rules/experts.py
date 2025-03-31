@@ -9,7 +9,7 @@ from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, 
 from .datastructures import (Case, PromptFor, CallableExpression, Column, CaseQuery)
 from .datastructures.table import show_current_and_corner_cases
 from .prompt import prompt_user_for_expression, prompt_user_about_case
-from .utils import get_all_subclasses
+from .utils import get_all_subclasses, is_iterable
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -125,7 +125,7 @@ class Human(Expert):
             self.all_expert_answers = json.load(f)
 
     def ask_for_conditions(self, case: Case,
-                           targets: Union[List[Column], List[Column]],
+                           targets: Union[List[Column], List[SQLColumn]],
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         if not self.use_loaded_answers:

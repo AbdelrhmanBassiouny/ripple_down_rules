@@ -219,10 +219,10 @@ class Row(UserDict, SubClassFactory, SubclassJSONSerializer):
                 value.update(make_set(self[name]))
                 super().__setitem__(name, value)
             else:
-                super().__setitem__(name, make_set(self[name]))
+                super().__setitem__(name, make_set([self[name], value]))
         else:
-            setattr(self, name, value)
             super().__setitem__(name, value)
+        setattr(self, name, self[name])
 
     def __contains__(self, item):
         if isinstance(item, (type, Enum)):
@@ -428,9 +428,10 @@ def create_row(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
         row = create_or_update_row_from_attribute(attr_value, attr, obj, attr, recursion_idx,
                                                   max_recursion_idx, parent_is_iterable, row)
         attributes_type_hints[attr] = get_value_type_from_type_hint(attr, obj)
-    row_cls = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)), row, default_values=False,
-                         attributes_type_hints=attributes_type_hints)
-    row = row_cls(id_=id(obj), **row)
+    if recursion_idx == 0:
+        row_cls = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)), row, default_values=False,
+                             attributes_type_hints=attributes_type_hints)
+        row = row_cls(id_=id(obj), **row)
     return row
 
 
@@ -462,9 +463,6 @@ def create_or_update_row_from_attribute(attr_value: Any, name: str, obj: Any, ob
         row[obj_name] = column
     else:
         row[obj_name] = make_set(attr_value) if parent_is_iterable else attr_value
-    if row.__class__.__name__ == "Row":
-        row_cls = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)), row, default_values=False)
-        row = row_cls(id_=id(obj), **row)
     return row
 
 
@@ -490,14 +488,11 @@ def create_column_and_row_from_iterable_attribute(attr_value: Any, name: str, ob
         raise ValueError(f"Could not determine the range of {name} in {obj}.")
     attr_row = Row(id_=id(attr_value))
     column = Column.create(name, range_).from_obj(values, row_obj=obj)
-    attributes_type_hints = {}
     for idx, val in enumerate(values):
         sub_attr_row = create_row(val, recursion_idx=recursion_idx,
                                   max_recursion_idx=max_recursion_idx,
                                   obj_name=obj_name, parent_is_iterable=True)
         attr_row.update(sub_attr_row)
-    # attr_row_cls = Row.create(name or list(range_)[0].__name__, range_, attr_row, default_values=False)
-    # attr_row = attr_row_cls(id_=id(attr_value), **attr_row)
     for sub_attr, val in attr_row.items():
         setattr(column, sub_attr, val)
     return column, attr_row

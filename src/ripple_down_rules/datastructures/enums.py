@@ -17,7 +17,7 @@ class Category(str, Enum):
 
     @property
     def as_dict(self):
-        return {self.__class__.__name__.lower(): self.value}
+        return {self.__class__.__name__.lower(): self}
 
 
 class Stop(Category):

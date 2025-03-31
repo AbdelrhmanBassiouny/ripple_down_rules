@@ -12,7 +12,7 @@ from .datastructures import Case, MCRDRMode, CallableExpression, Column, CaseQue
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree, make_set, get_attribute_by_type, copy_case, \
-    get_hint_for_attribute, SubclassJSONSerializer
+    get_hint_for_attribute, SubclassJSONSerializer, is_iterable, make_list
 
 
 class RippleDownRules(ABC):
@@ -124,10 +124,12 @@ class RippleDownRules(ABC):
         :param target: The target category.
         :return: The precision and recall of the classifier.
         """
-        pred_cat = pred_cat if isinstance(pred_cat, list) else [pred_cat]
-        target = target if isinstance(target, list) else [target]
+        pred_cat = pred_cat if is_iterable(pred_cat) else [pred_cat]
+        target = target if is_iterable(target) else [target]
         recall = [not yi or (yi in pred_cat) for yi in target]
         target_types = [type(yi) for yi in target]
+        if len(pred_cat) > 1:
+            print(pred_cat)
         precision = [(pred in target) or (type(pred) not in target_types) for pred in pred_cat]
         return precision, recall
 
@@ -358,7 +360,7 @@ class MultiClassRDR(RippleDownRules):
                         self.add_conclusion(evaluated_rule)
 
                 if not next_rule:
-                    if target not in self.conclusions:
+                    if not make_set(target).intersection(make_set(self.conclusions)):
                         # Nothing fired and there is a target that should have been in the conclusions
                         self.add_rule_for_case(case, target, expert)
                         # Have to check all rules again to make sure only this new rule fires
@@ -509,16 +511,16 @@ class MultiClassRDR(RippleDownRules):
         """
         conclusion_types = [type(c) for c in self.conclusions]
         if type(evaluated_rule.conclusion) not in conclusion_types:
-            self.conclusions.append(evaluated_rule.conclusion)
+            self.conclusions.extend(make_list(evaluated_rule.conclusion))
         else:
             same_type_conclusions = [c for c in self.conclusions if type(c) == type(evaluated_rule.conclusion)]
             combined_conclusion = evaluated_rule.conclusion if isinstance(evaluated_rule.conclusion, set) \
                 else {evaluated_rule.conclusion}
-            combined_conclusion = deepcopy(combined_conclusion)
+            combined_conclusion = copy(combined_conclusion)
             for c in same_type_conclusions:
                 combined_conclusion.update(c if isinstance(c, set) else make_set(c))
                 self.conclusions.remove(c)
-            self.conclusions.extend(combined_conclusion)
+            self.conclusions.extend(make_list(combined_conclusion))
 
     def add_top_rule(self, conditions: CallableExpression, conclusion: Any, corner_case: Union[Case, SQLTable]):
         """
@@ -587,11 +589,11 @@ class GeneralRDR(RippleDownRules):
                     continue
                 pred_atts = rdr.classify(case_cp)
                 if pred_atts:
-                    pred_atts = pred_atts if isinstance(pred_atts, list) else [pred_atts]
+                    pred_atts = make_list(pred_atts)
                     pred_atts = [p for p in pred_atts if p not in conclusions]
                     added_attributes = True
                     conclusions.extend(pred_atts)
-                    self.update_case_with_same_type_conclusions(case_cp, pred_atts)
+                    GeneralRDR.update_case(case_cp, pred_atts)
             if not added_attributes:
                 break
         return conclusions
@@ -624,21 +626,27 @@ class GeneralRDR(RippleDownRules):
             if not target:
                 target = expert.ask_for_conclusion(case_query)
             case_query_cp = CaseQuery(case_cp, attribute_name=case_query.attribute_name, target=target)
-            if type(target) not in self.start_rules_dict:
+            if is_iterable(target) and not isinstance(target, Column):
+                target_type = type(make_list(target)[0])
+                assert all([type(t) is target_type for t in target]), ("All targets of a case query must be of the same"
+                                                                       " type")
+            else:
+                target_type = type(target)
+            if target_type not in self.start_rules_dict:
                 conclusions = self.classify(case)
-                self.update_case_with_same_type_conclusions(case_cp, conclusions)
+                self.update_case(case_cp, conclusions)
                 new_rdr = self.initialize_new_rdr_for_attribute(target, case_cp)
                 new_conclusions = new_rdr.fit_case(case_query_cp, expert, **kwargs)
-                self.start_rules_dict[type(target)] = new_rdr
-                self.update_case_with_same_type_conclusions(case_cp, new_conclusions, type(target))
-            elif not self.case_has_conclusion(case_cp, type(target)):
+                self.start_rules_dict[target_type] = new_rdr
+                self.update_case(case_cp, new_conclusions, target_type)
+            elif not self.case_has_conclusion(case_cp, target_type):
                 for rdr_type, rdr in self.start_rules_dict.items():
-                    if type(target) is not rdr_type:
+                    if target_type is not rdr_type:
                         conclusions = rdr.classify(case_cp)
                     else:
-                        conclusions = self.start_rules_dict[type(target)].fit_case(case_query_cp,
+                        conclusions = self.start_rules_dict[target_type].fit_case(case_query_cp,
                                                                                    expert, **kwargs)
-                    self.update_case_with_same_type_conclusions(case_cp, conclusions, rdr_type)
+                    self.update_case(case_cp, conclusions, rdr_type)
 
         return self.classify(case)
 
@@ -653,12 +661,14 @@ class GeneralRDR(RippleDownRules):
                 return MultiClassRDR()
             else:
                 return SingleClassRDR()
-        else:
+        elif isinstance(attribute, Column):
             return SingleClassRDR() if attribute.mutually_exclusive else MultiClassRDR()
+        else:
+            return MultiClassRDR() if is_iterable(attribute) else SingleClassRDR()
 
     @staticmethod
-    def update_case_with_same_type_conclusions(case: Union[Case, SQLTable],
-                                               conclusions: List[Any], attribute_type: Optional[Any] = None):
+    def update_case(case: Union[Case, SQLTable],
+                    conclusions: List[Any], attribute_type: Optional[Any] = None):
         """
         Update the case with the conclusions.
 
@@ -668,7 +678,7 @@ class GeneralRDR(RippleDownRules):
         """
         if not conclusions:
             return
-        conclusions = [conclusions] if not isinstance(conclusions, list) else conclusions
+        conclusions = [conclusions] if not isinstance(conclusions, list) else list(conclusions)
         if len(conclusions) == 0:
             return
         if isinstance(case, SQLTable):
@@ -677,7 +687,8 @@ class GeneralRDR(RippleDownRules):
             hint, origin, args = get_hint_for_attribute(attr_name, case)
             if isinstance(attribute, set) or origin == set:
                 attribute = set() if attribute is None else attribute
-                attribute.update(*[make_set(c) for c in conclusions])
+                for c in conclusions:
+                    attribute.update(make_set(c))
             elif isinstance(attribute, list) or origin == list:
                 attribute = [] if attribute is None else attribute
                 attribute.extend(conclusions)
@@ -686,7 +697,8 @@ class GeneralRDR(RippleDownRules):
             else:
                 raise ValueError(f"Cannot add multiple conclusions to attribute {attr_name}")
         else:
-            case.update(*[c.as_dict for c in make_set(conclusions)])
+            for c in make_set(conclusions):
+                case.update(c.as_dict)
 
     @property
     def names_of_all_types(self) -> List[str]:
