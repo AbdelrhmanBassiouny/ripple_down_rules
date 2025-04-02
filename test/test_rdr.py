@@ -10,7 +10,7 @@ from ripple_down_rules.datastructures import Case, MCRDRMode, \
     Case, CaseAttribute, Category, CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import render_tree, get_all_subclasses
+from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set
 
 
 class TestRDR(TestCase):
@@ -72,11 +72,20 @@ class TestRDR(TestCase):
 
     def test_write_scrdr_to_python_file(self):
         scrdr = self.get_fit_scrdr()
-        scrdr.write_to_python_file(self.generated_rdrs_dir + "/scrdr.py")
-        classify_species_scrdr = importlib.import_module(f"{self.generated_rdrs_dir.strip('./')}.scrdr")
+        scrdr.write_to_python_file(self.generated_rdrs_dir)
+        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, target in zip(self.all_cases, self.targets):
-            cat = classify_species_scrdr.classify_species(case)
+            cat = classify_species_scrdr(case)
             self.assertEqual(cat, target)
+
+    def test_write_mcrdr_to_python_file(self):
+        mcrdr = self.get_fit_mcrdr()
+        mcrdr.write_to_python_file(self.generated_rdrs_dir)
+        classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
+        for case in self.all_cases:
+            cat_1 = mcrdr.classify(case)
+            cat_2 = classify_species_mcrdr(case)
+            self.assertEqual(make_set(cat_1), make_set(cat_2))
 
     def test_classify_mcrdr(self):
         use_loaded_answers = True
@@ -329,3 +338,12 @@ class TestRDR(TestCase):
         scrdr.fit(case_queries, expert=expert,
                   animate_tree=draw_tree)
         return scrdr
+
+    def get_fit_mcrdr(self, draw_tree: bool = False):
+        filename = self.expert_answers_dir + "/mcrdr_expert_answers_stop_only_fit"
+        expert = Human(use_loaded_answers=True)
+        expert.load_answers(filename)
+        mcrdr = MultiClassRDR()
+        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree, n_iter=1)
+        return mcrdr

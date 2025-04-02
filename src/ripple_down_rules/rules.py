@@ -70,6 +70,54 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         """
         pass
 
+    def write_conclusion_as_source_code(self, parent_indent: str = "") -> str:
+        """
+        Get the source code representation of the conclusion of the rule.
+
+        :param parent_indent: The indentation of the parent rule.
+        """
+        if isinstance(self.conclusion, CallableExpression):
+            conclusion = self.conclusion.parsed_user_input
+        elif isinstance(self.conclusion, Enum):
+            conclusion = str(self.conclusion)
+        else:
+            conclusion = self.conclusion
+        return self._conclusion_source_code_clause(conclusion, parent_indent=parent_indent)
+
+    @abstractmethod
+    def _conclusion_source_code_clause(self, conclusion: Any, parent_indent: str = "") -> str:
+        pass
+
+    def write_condition_as_source_code(self, parent_indent: str = "") -> str:
+        """
+        Get the source code representation of the conditions of the rule.
+
+        :param parent_indent: The indentation of the parent rule.
+        """
+        if_clause = self._if_statement_source_code_clause()
+        return f"{parent_indent}{if_clause} {self.conditions.parsed_user_input}:\n"
+
+    @abstractmethod
+    def _if_statement_source_code_clause(self) -> str:
+        pass
+
+    def _to_json(self) -> Dict[str, Any]:
+        json_serialization = {"conditions": self.conditions.to_json(),
+                              "conclusion": self.conclusion.to_json(),
+                              "parent": self.parent.json_serialization if self.parent else None,
+                              "corner_case": self.corner_case.to_json() if self.corner_case else None,
+                              "weight": self.weight}
+        return json_serialization
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Rule:
+        loaded_rule = cls(conditions=CallableExpression.from_json(data["conditions"]),
+                          conclusion=CallableExpression.from_json(data["conclusion"]),
+                          parent=cls.from_json(data["parent"]),
+                          corner_case=Case.from_json(data["corner_case"]),
+                          weight=data["weight"])
+        return loaded_rule
+
     @property
     def name(self):
         """
@@ -172,49 +220,24 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         else:
             self.alternative = new_rule
 
-    def write_conclusion_as_source_code(self, parent_indent: str = "") -> str:
-        """
-        Get the source code representation of the conclusion of the rule.
-
-        :param parent_indent: The indentation of the parent rule.
-        """
-        if isinstance(self.conclusion, CallableExpression):
-            conclusion = self.conclusion.parsed_user_input
-        elif isinstance(self.conclusion, Enum):
-            conclusion = str(self.conclusion)
-        else:
-            conclusion = self.conclusion
-        return f"{parent_indent}{' ' * 4}return {conclusion}\n"
-
-    def write_condition_as_source_code(self, parent_indent: str = "") -> str:
-        """
-        Get the source code representation of the conditions of the rule.
-
-        :param parent_indent: The indentation of the parent rule.
-        """
-        if_clause = "elif" if self.weight == RDREdge.Alternative.value else "if"
-        return f"{parent_indent}{if_clause} {self.conditions.parsed_user_input}:\n"
-
     def _to_json(self) -> Dict[str, Any]:
-        self.json_serialization = {"conditions": self.conditions.to_json(),
-                                   "conclusion": self.conclusion.to_json(),
-                                   "parent": self.parent.json_serialization if self.parent else None,
-                                   "corner_case": self.corner_case.to_json() if self.corner_case else None,
-                                   "weight": self.weight,
+        self.json_serialization = {**super(SingleClassRule, self)._to_json(),
                                    "refinement": self.refinement.to_json() if self.refinement is not None else None,
                                    "alternative": self.alternative.to_json() if self.alternative is not None else None}
         return self.json_serialization
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> SingleClassRule:
-        loaded_rule = cls(conditions=CallableExpression.from_json(data["conditions"]),
-                          conclusion=CallableExpression.from_json(data["conclusion"]),
-                          parent=SingleClassRule.from_json(data["parent"]),
-                          corner_case=Case.from_json(data["corner_case"]),
-                          weight=data["weight"])
+        loaded_rule = super(SingleClassRule, cls)._from_json(data)
         loaded_rule.refinement = SingleClassRule.from_json(data["refinement"])
         loaded_rule.alternative = SingleClassRule.from_json(data["alternative"])
         return loaded_rule
+
+    def _conclusion_source_code_clause(self, conclusion: Any, parent_indent: str = "") -> str:
+        return f"{parent_indent}{' ' * 4}return {conclusion}\n"
+
+    def _if_statement_source_code_clause(self) -> str:
+        return "elif" if self.weight == RDREdge.Alternative.value else "if"
 
 
 class MultiClassStopRule(Rule, HasAlternativeRule):
@@ -240,6 +263,25 @@ class MultiClassStopRule(Rule, HasAlternativeRule):
         else:
             return self.top_rule.alternative
 
+    def _to_json(self) -> Dict[str, Any]:
+        self.json_serialization = {**Rule._to_json(self),
+                                   "top_rule": self.top_rule.to_json(),
+                                   "alternative": self.alternative.to_json() if self.alternative is not None else None}
+        return self.json_serialization
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> MultiClassStopRule:
+        loaded_rule = Rule._from_json(data)
+        loaded_rule.top_rule = MultiClassTopRule.from_json(data["top_rule"])
+        loaded_rule.alternative = MultiClassStopRule.from_json(data["alternative"])
+        return loaded_rule
+
+    def _conclusion_source_code_clause(self, conclusion: Any, parent_indent: str = "") -> str:
+        return f"{parent_indent}{' ' * 4}pass\n"
+
+    def _if_statement_source_code_clause(self) -> str:
+        return "elif" if self.weight == RDREdge.Alternative.value else "if"
+
 
 class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
     """
@@ -261,3 +303,25 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
             self.refinement = MultiClassStopRule(conditions, corner_case=x, parent=self)
         elif not self.fired:
             self.alternative = MultiClassTopRule(conditions, target, corner_case=x, parent=self)
+
+    def _to_json(self) -> Dict[str, Any]:
+        self.json_serialization = {**Rule._to_json(self),
+                                   "refinement": self.refinement.to_json() if self.refinement is not None else None,
+                                   "alternative": self.alternative.to_json() if self.alternative is not None else None}
+        return self.json_serialization
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> MultiClassTopRule:
+        loaded_rule = Rule._from_json(data)
+        loaded_rule.refinement = MultiClassStopRule.from_json(data["refinement"])
+        loaded_rule.alternative = MultiClassTopRule.from_json(data["alternative"])
+        return loaded_rule
+
+    def _conclusion_source_code_clause(self, conclusion: Any, parent_indent: str = "") -> str:
+        statement = f"{parent_indent}{' ' * 4}conclusions.add({conclusion})\n"
+        if self.alternative is None:
+            statement += f"{parent_indent}return conclusions\n"
+        return statement
+
+    def _if_statement_source_code_clause(self) -> str:
+        return "if"

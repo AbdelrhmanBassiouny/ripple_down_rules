@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import importlib
 from abc import ABC, abstractmethod
 from copy import copy, deepcopy
+from types import ModuleType
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
-from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple
+from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple, Callable
 
 from .datastructures import Case, MCRDRMode, CallableExpression, CaseAttribute, CaseQuery
 from .experts import Expert, Human
-from .rules import Rule, SingleClassRule, MultiClassTopRule
+from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .utils import draw_tree, make_set, get_attribute_by_type, copy_case, \
     get_hint_for_attribute, SubclassJSONSerializer, is_iterable, make_list
 
@@ -176,7 +178,90 @@ class RippleDownRules(ABC):
 RDR = RippleDownRules
 
 
-class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
+class RDRWithCodeWriter(RDR, ABC):
+
+    @abstractmethod
+    def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = ""):
+        """
+        Write the rules as source code to a file.
+
+        :param rule: The rule to write as source code.
+        :param file: The file to write the source code to.
+        :param parent_indent: The indentation of the parent rule.
+        """
+        pass
+
+    def write_to_python_file(self, file_path: str):
+        """
+        Write the tree of rules as source code to a file.
+
+        :param file_path: The path to the file to write the source code to.
+        """
+        func_def = f"def classify(case: {self.case_type.__name__}) -> {self._get_conclusion_type_hint()}:\n"
+        with open(file_path + f"/{self.generated_python_file_name}.py", "w") as f:
+            f.write(self._get_imports())
+            f.write(func_def)
+            f.write(f"{' '*4}if not isinstance(case, Case):\n"
+                    f"{' '*4}    case = create_case(case, recursion_idx=3)\n""")
+            self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4)
+
+    @abstractmethod
+    def _get_conclusion_type_hint(self) -> str:
+        """
+        :return: The type hint of the conclusion of the rdr as a string.
+        """
+        pass
+
+    def _get_imports(self) -> str:
+        """
+        :return: The imports for the generated python file of the RDR as a string.
+        """
+        imports = ""
+        if self.case_type.__module__ != "builtins":
+            imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
+        if self.conclusion_type.__module__ != "builtins":
+            imports += f"from {self.conclusion_type.__module__} import {self.conclusion_type.__name__}\n"
+        imports += "from ripple_down_rules.datastructures import Case, create_case\n"
+        imports += "\n\n"
+        return imports
+
+    def get_rdr_classifier_from_python_file(self, package_name) -> Callable[[Any], Any]:
+        """
+        :param package_name: The name of the package that contains the RDR classifier function.
+        :return: The module that contains the rdr classifier function.
+        """
+        return importlib.import_module(f"{package_name.strip('./')}.{self.generated_python_file_name}").classify
+
+    @property
+    def generated_python_file_name(self) -> str:
+        return f"{self.conclusion_type.__name__.lower()}_{self.__class__.__name__}"
+
+    @property
+    def python_file_name(self):
+        return f"{self.start_rule.conclusion.__name__.lower()}_rdr"
+
+    @property
+    def case_type(self) -> Type:
+        """
+        :return: The type of the case (input) to the RDR classifier.
+        """
+        if isinstance(self.start_rule.corner_case, Case):
+            return self.start_rule.corner_case._type
+        else:
+            return type(self.start_rule.corner_case)
+
+    @property
+    def conclusion_type(self) -> Type:
+        """
+        :return: The type of the conclusion of the RDR classifier.
+        """
+        if isinstance(self.start_rule.conclusion, CallableExpression):
+            return self.start_rule.conclusion.conclusion_type
+        else:
+            return type(self.start_rule.conclusion)
+
+
+class SingleClassRDR(RDRWithCodeWriter, SubclassJSONSerializer):
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
             -> Union[CaseAttribute, CallableExpression]:
@@ -221,43 +306,6 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
         matched_rule = self.start_rule(case)
         return matched_rule if matched_rule else self.start_rule
 
-    def write_to_python_file(self, filename: str):
-        """
-        Write the tree of rules as source code to a file.
-        """
-        case = self.start_rule.corner_case
-        if isinstance(case, Case):
-            case_type = case._type
-        else:
-            case_type = type(case)
-        case_module = case_type.__module__
-        conclusion = self.start_rule.conclusion
-        if isinstance(conclusion, CallableExpression):
-            conclusion_types = [conclusion.conclusion_type]
-        elif isinstance(conclusion, CaseAttribute):
-            conclusion_types = list(conclusion._value_range)
-        else:
-            conclusion_types = [type(conclusion)]
-        imports = ""
-        if case_module != "builtins":
-            imports += f"from {case_module} import {case_type.__name__}\n"
-        if len(conclusion_types) > 1:
-            conclusion_name = "Union[" + ", ".join([c.__name__ for c in conclusion_types]) + "]"
-        else:
-            conclusion_name = conclusion_types[0].__name__
-        for conclusion_type in conclusion_types:
-            if conclusion_type.__module__ != "builtins":
-                imports += f"from {conclusion_type.__module__} import {conclusion_name}\n"
-        imports += "from ripple_down_rules.datastructures import Case, create_case\n"
-        imports += "\n\n"
-        func_def = f"def classify_{conclusion_name.lower()}(case: {case_type.__name__}) -> {conclusion_name}:\n"
-        with open(filename, "w") as f:
-            f.write(imports)
-            f.write(func_def)
-            f.write(f"{' '*4}if not isinstance(case, Case):\n"
-                    f"{' '*4}    case = create_case(case, recursion_idx=3)\n""")
-            self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4)
-
     def write_rules_as_source_code_to_file(self, rule: SingleClassRule, file, parent_indent: str = ""):
         """
         Write the rules as source code to a file.
@@ -272,6 +320,9 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
             if rule.alternative:
                 self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent)
 
+    def _get_conclusion_type_hint(self) -> str:
+        return self.conclusion_type.__name__
+
     def _to_json(self) -> Dict[str, Any]:
         return {"start_rule": self.start_rule.to_json()}
 
@@ -284,7 +335,7 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
         return cls(start_rule)
 
 
-class MultiClassRDR(RippleDownRules):
+class MultiClassRDR(RDRWithCodeWriter):
     """
     A multi class ripple down rules classifier, which can draw multiple conclusions for a case.
     This is done by going through all rules and checking if they fire or not, and adding stopping rules if needed,
@@ -377,6 +428,33 @@ class MultiClassRDR(RippleDownRules):
                             next_rule = self.last_top_rule
                 evaluated_rule = next_rule
         return self.conclusions
+
+    def write_rules_as_source_code_to_file(self, rule: Union[MultiClassTopRule, MultiClassStopRule],
+                                           file, parent_indent: str = ""):
+        """
+        Write the rules as source code to a file.
+        """
+        if rule == self.start_rule:
+            file.write(f"{parent_indent}conclusions = set()\n")
+        if rule.conditions:
+            file.write(rule.write_condition_as_source_code(parent_indent))
+            conclusion_indent = parent_indent
+            if hasattr(rule, "refinement") and rule.refinement:
+                self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ")
+                conclusion_indent = parent_indent + " "*4
+                file.write(f"{conclusion_indent}else:\n")
+            file.write(rule.write_conclusion_as_source_code(conclusion_indent))
+
+            if rule.alternative:
+                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent)
+
+    def _get_conclusion_type_hint(self) -> str:
+        return f"Set[{self.conclusion_type.__name__}]"
+
+    def _get_imports(self) -> str:
+        imports = super()._get_imports().strip('\n')
+        imports += "\nfrom typing_extensions import Set\n\n"
+        return imports
 
     def update_start_rule(self, case: Union[Case, SQLTable], target: Any, expert: Expert):
         """
