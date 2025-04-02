@@ -1,3 +1,4 @@
+import importlib
 import os
 from unittest import TestCase, skip
 
@@ -58,7 +59,6 @@ class TestRDR(TestCase):
         case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
         scrdr.fit(case_queries, expert=expert,
                   animate_tree=draw_tree)
-        scrdr.write_to_python_file(self.generated_rdrs_dir + "/scrdr.py")
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/scrdr")
 
@@ -69,6 +69,14 @@ class TestRDR(TestCase):
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
+
+    def test_write_scrdr_to_python_file(self):
+        scrdr = self.get_fit_scrdr()
+        scrdr.write_to_python_file(self.generated_rdrs_dir + "/scrdr.py")
+        classify_species_scrdr = importlib.import_module(f"{self.generated_rdrs_dir.strip('./')}.scrdr")
+        for case, target in zip(self.all_cases, self.targets):
+            cat = classify_species_scrdr.classify_species(case)
+            self.assertEqual(cat, target)
 
     def test_classify_mcrdr(self):
         use_loaded_answers = True
