@@ -7,7 +7,7 @@ from _ast import AST
 from sqlalchemy.orm import Session
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
-from .table import create_row, Row
+from .case import create_case, Case
 from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string
 
 
@@ -128,8 +128,8 @@ class CallableExpression(SubclassJSONSerializer):
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            if not isinstance(case, Row):
-                case = create_row(case, max_recursion_idx=3)
+            if not isinstance(case, Case):
+                case = create_case(case, max_recursion_idx=3)
             output = eval(self.code)
             if self.conclusion_type:
                 assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"

@@ -6,7 +6,7 @@ from typing_extensions import List
 from ripple_down_rules.datasets import Habitat, Species
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import Case, MCRDRMode, \
-    Row, Column, Category, CaseQuery
+    Case, CaseAttribute, Category, CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree, get_all_subclasses
@@ -183,7 +183,7 @@ class TestRDR(TestCase):
                               add_extra_conclusions=True, expert=expert)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_extra_classify")
-        LivesOnlyOnLand = get_all_subclasses(Column)["LivesOnlyOnLand".lower()]
+        LivesOnlyOnLand = get_all_subclasses(CaseAttribute)["LivesOnlyOnLand".lower()]
         self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
 
         if save_answers:
@@ -206,7 +206,7 @@ class TestRDR(TestCase):
             expert.load_answers(file_name)
         mcrdr.fit(case_queries, add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
         cats = mcrdr.classify(self.all_cases[50])
-        LivesOnlyOnLand = get_all_subclasses(Column)["LivesOnlyOnLand".lower()]
+        LivesOnlyOnLand = get_all_subclasses(CaseAttribute)["LivesOnlyOnLand".lower()]
         self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_extra")
@@ -246,7 +246,7 @@ class TestRDR(TestCase):
 
         grdr = GeneralRDR({type(fit_scrdr.start_rule.conclusion): fit_scrdr})
 
-        def get_habitat(x: Row, t: Category):
+        def get_habitat(x: Case, t: Category):
             all_habs = []
             if t == Species.mammal and x["aquatic"] == 0:
                 all_habs.append({Habitat.land})

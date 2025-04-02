@@ -9,7 +9,7 @@ from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column, relationshi
 from typing_extensions import Tuple, List, Set, Optional
 from ucimlrepo import fetch_ucirepo
 
-from .datastructures import Case, create_rows_from_dataframe, Category, Column
+from .datastructures import Case, create_cases_from_dataframe, Category, CaseAttribute
 
 
 def load_cached_dataset(cache_file):
@@ -77,7 +77,7 @@ def load_zoo_dataset(cache_file: Optional[str] = None) -> Tuple[List[Case], List
     y = zoo['targets']
     # get ids as list of strings
     ids = zoo['ids'].values.flatten()
-    all_cases = create_rows_from_dataframe(X, "Animal")
+    all_cases = create_cases_from_dataframe(X)
 
     category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
     category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}

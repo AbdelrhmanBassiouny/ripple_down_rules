@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import Any, Optional, Type
 
-from .table import create_row, Case
+from .case import create_case, Case
 from ..utils import get_attribute_name, copy_case
 
 
@@ -50,7 +50,7 @@ class CaseQuery:
         self.attribute_name = attribute_name
 
         if not isinstance(case, (Case, SQLTable)):
-            case = create_row(case, max_recursion_idx=3)
+            case = create_case(case, max_recursion_idx=3)
         self.case = case
 
         self.attribute = getattr(self.case, self.attribute_name) if self.attribute_name else None

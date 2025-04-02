@@ -8,7 +8,7 @@ from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple
 
-from .datastructures import Case, MCRDRMode, CallableExpression, Column, CaseQuery
+from .datastructures import Case, MCRDRMode, CallableExpression, CaseAttribute, CaseQuery
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule
 from .utils import draw_tree, make_set, get_attribute_by_type, copy_case, \
@@ -23,7 +23,7 @@ class RippleDownRules(ABC):
     """
     The figure to draw the tree on.
     """
-    expert_accepted_conclusions: Optional[List[Column]] = None
+    expert_accepted_conclusions: Optional[List[CaseAttribute]] = None
     """
     The conclusions that the expert has accepted, such that they are not asked again.
     """
@@ -37,11 +37,11 @@ class RippleDownRules(ABC):
         self.session = session
         self.fig: Optional[plt.Figure] = None
 
-    def __call__(self, case: Union[Case, SQLTable]) -> Column:
+    def __call__(self, case: Union[Case, SQLTable]) -> CaseAttribute:
         return self.classify(case)
 
     @abstractmethod
-    def classify(self, case: Union[Case, SQLTable]) -> Optional[Column]:
+    def classify(self, case: Union[Case, SQLTable]) -> Optional[CaseAttribute]:
         """
         Classify a case.
 
@@ -52,7 +52,7 @@ class RippleDownRules(ABC):
 
     @abstractmethod
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
-            -> Union[Column, CallableExpression]:
+            -> Union[CaseAttribute, CallableExpression]:
         """
         Fit the RDR on a case, and ask the expert for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category.
@@ -118,7 +118,7 @@ class RippleDownRules(ABC):
             plt.show()
 
     @staticmethod
-    def calculate_precision_and_recall(pred_cat: List[Column], target: List[Column]) -> Tuple[List[bool], List[bool]]:
+    def calculate_precision_and_recall(pred_cat: List[CaseAttribute], target: List[CaseAttribute]) -> Tuple[List[bool], List[bool]]:
         """
         :param pred_cat: The predicted category.
         :param target: The target category.
@@ -131,7 +131,7 @@ class RippleDownRules(ABC):
         precision = [(pred in target) or (type(pred) not in target_types) for pred in pred_cat]
         return precision, recall
 
-    def is_matching(self, pred_cat: List[Column], target: List[Column]) -> bool:
+    def is_matching(self, pred_cat: List[CaseAttribute], target: List[CaseAttribute]) -> bool:
         """
         :param pred_cat: The predicted category.
         :param target: The target category.
@@ -179,7 +179,7 @@ RDR = RippleDownRules
 class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
-            -> Union[Column, CallableExpression]:
+            -> Union[CaseAttribute, CallableExpression]:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
@@ -207,7 +207,7 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
 
         return self.classify(case)
 
-    def classify(self, case: Case) -> Optional[Column]:
+    def classify(self, case: Case) -> Optional[CaseAttribute]:
         """
         Classify a case by recursively evaluating the rules until a rule fires or the last rule is reached.
         """
@@ -225,18 +225,22 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
         """
         Write the tree of rules as source code to a file.
         """
-        case_type = self.start_rule.corner_case.__class__.__name__
-        case_module = self.start_rule.corner_case.__class__.__module__
+        case = self.start_rule.corner_case
+        if isinstance(case, Case):
+            case_type = case._type
+        else:
+            case_type = type(case)
+        case_module = case_type.__module__
         conclusion = self.start_rule.conclusion
         if isinstance(conclusion, CallableExpression):
             conclusion_types = [conclusion.conclusion_type]
-        elif isinstance(conclusion, Column):
+        elif isinstance(conclusion, CaseAttribute):
             conclusion_types = list(conclusion._value_range)
         else:
             conclusion_types = [type(conclusion)]
         imports = ""
         if case_module != "builtins":
-            imports += f"from {case_module} import {case_type}\n"
+            imports += f"from {case_module} import {case_type.__name__}\n"
         if len(conclusion_types) > 1:
             conclusion_name = "Union[" + ", ".join([c.__name__ for c in conclusion_types]) + "]"
         else:
@@ -244,11 +248,14 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
         for conclusion_type in conclusion_types:
             if conclusion_type.__module__ != "builtins":
                 imports += f"from {conclusion_type.__module__} import {conclusion_name}\n"
+        imports += "from ripple_down_rules.datastructures import Case, create_case\n"
         imports += "\n\n"
-        func_def = f"def classify_{conclusion_name.lower()}(case: {case_type}) -> {conclusion_name}:\n"
+        func_def = f"def classify_{conclusion_name.lower()}(case: {case_type.__name__}) -> {conclusion_name}:\n"
         with open(filename, "w") as f:
             f.write(imports)
             f.write(func_def)
+            f.write(f"{' '*4}if not isinstance(case, Case):\n"
+                    f"{' '*4}    case = create_case(case, recursion_idx=3)\n""")
             self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4)
 
     def write_rules_as_source_code_to_file(self, rule: SingleClassRule, file, parent_indent: str = ""):
@@ -287,7 +294,7 @@ class MultiClassRDR(RippleDownRules):
     """
     The evaluated rules in the classifier for one case.
     """
-    conclusions: Optional[List[Column]] = None
+    conclusions: Optional[List[CaseAttribute]] = None
     """
     The conclusions that the case belongs to.
     """
@@ -320,7 +327,7 @@ class MultiClassRDR(RippleDownRules):
         return self.conclusions
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None,
-                 add_extra_conclusions: bool = False) -> List[Union[Column, CallableExpression]]:
+                 add_extra_conclusions: bool = False) -> List[Union[CaseAttribute, CallableExpression]]:
         """
         Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
          or missing by comparing the case with the target category if provided.
@@ -448,7 +455,7 @@ class MultiClassRDR(RippleDownRules):
         :param target: The target category to compare the conclusion with.
         :return: Whether the conclusion is of the same class as the target category but has a different value.
         """
-        return conclusion.__class__ == target.__class__ and target.__class__ != Column
+        return conclusion.__class__ == target.__class__ and target.__class__ != CaseAttribute
 
     def conclusion_is_correct(self, case: Union[Case, SQLTable], target: Any, expert: Expert, evaluated_rule: Rule,
                               add_extra_conclusions: bool) -> bool:
@@ -597,7 +604,7 @@ class GeneralRDR(RippleDownRules):
         return conclusions
 
     def fit_case(self, case_queries: List[CaseQuery], expert: Optional[Expert] = None, **kwargs) \
-            -> List[Union[Column, CallableExpression]]:
+            -> List[Union[CaseAttribute, CallableExpression]]:
         """
         Fit the GRDR on a case, if the target is a new type of category, a new RDR is created for it,
         else the existing RDR of that type will be fitted on the case, and then classification is done and all
@@ -624,7 +631,7 @@ class GeneralRDR(RippleDownRules):
             if not target:
                 target = expert.ask_for_conclusion(case_query)
             case_query_cp = CaseQuery(case_cp, attribute_name=case_query.attribute_name, target=target)
-            if is_iterable(target) and not isinstance(target, Column):
+            if is_iterable(target) and not isinstance(target, CaseAttribute):
                 target_type = type(make_list(target)[0])
                 assert all([type(t) is target_type for t in target]), ("All targets of a case query must be of the same"
                                                                        " type")
@@ -659,7 +666,7 @@ class GeneralRDR(RippleDownRules):
                 return MultiClassRDR()
             else:
                 return SingleClassRDR()
-        elif isinstance(attribute, Column):
+        elif isinstance(attribute, CaseAttribute):
             return SingleClassRDR() if attribute.mutually_exclusive else MultiClassRDR()
         else:
             return MultiClassRDR() if is_iterable(attribute) else SingleClassRDR()

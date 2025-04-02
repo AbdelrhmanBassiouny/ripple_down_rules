@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, Session
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any
 
-from .datastructures import (Case, PromptFor, CallableExpression, Column, CaseQuery)
-from .datastructures.table import show_current_and_corner_cases
+from .datastructures import (Case, PromptFor, CallableExpression, CaseAttribute, CaseQuery)
+from .datastructures.case import show_current_and_corner_cases
 from .prompt import prompt_user_for_expression, prompt_user_about_case
 from .utils import get_all_subclasses, is_iterable
 
@@ -30,13 +30,13 @@ class Expert(ABC):
     """
     A flag to indicate if the expert should use loaded answers or not.
     """
-    known_categories: Optional[Dict[str, Type[Column]]] = None
+    known_categories: Optional[Dict[str, Type[CaseAttribute]]] = None
     """
     The known categories (i.e. Column types) to use.
     """
 
     @abstractmethod
-    def ask_for_conditions(self, x: Case, targets: List[Column], last_evaluated_rule: Optional[Rule] = None) \
+    def ask_for_conditions(self, x: Case, targets: List[CaseAttribute], last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
@@ -50,8 +50,8 @@ class Expert(ABC):
         pass
 
     @abstractmethod
-    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[Column]) \
-            -> Dict[Column, CallableExpression]:
+    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[CaseAttribute]) \
+            -> Dict[CaseAttribute, CallableExpression]:
         """
         Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
         that category.
@@ -63,9 +63,9 @@ class Expert(ABC):
         pass
 
     @abstractmethod
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Column,
-                                     targets: Optional[List[Column]] = None,
-                                     current_conclusions: Optional[List[Column]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, x: Case, conclusion: CaseAttribute,
+                                     targets: Optional[List[CaseAttribute]] = None,
+                                     current_conclusions: Optional[List[CaseAttribute]] = None) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
@@ -125,14 +125,14 @@ class Human(Expert):
             self.all_expert_answers = json.load(f)
 
     def ask_for_conditions(self, case: Case,
-                           targets: Union[List[Column], List[SQLColumn]],
+                           targets: Union[List[CaseAttribute], List[SQLColumn]],
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         if not self.use_loaded_answers:
             show_current_and_corner_cases(case, targets, last_evaluated_rule=last_evaluated_rule)
         return self._get_conditions(case, targets)
 
-    def _get_conditions(self, case: Case, targets: List[Column]) \
+    def _get_conditions(self, case: Case, targets: List[CaseAttribute]) \
             -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
@@ -157,8 +157,8 @@ class Human(Expert):
                 self.all_expert_answers.append(user_input)
         return condition
 
-    def ask_for_extra_conclusions(self, case: Case, current_conclusions: List[Column]) \
-            -> Dict[Column, CallableExpression]:
+    def ask_for_extra_conclusions(self, case: Case, current_conclusions: List[CaseAttribute]) \
+            -> Dict[CaseAttribute, CallableExpression]:
         """
         Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
         that category.
@@ -198,7 +198,7 @@ class Human(Expert):
             self.all_expert_answers.append(expert_input)
         return expression
 
-    def get_category_type(self, cat_name: str) -> Optional[Type[Column]]:
+    def get_category_type(self, cat_name: str) -> Optional[Type[CaseAttribute]]:
         """
         Get the category type from the known categories.
 
@@ -206,8 +206,8 @@ class Human(Expert):
         :return: The category type.
         """
         cat_name = cat_name.lower()
-        self.known_categories = get_all_subclasses(Column) if not self.known_categories else self.known_categories
-        self.known_categories.update(Column.registry)
+        self.known_categories = get_all_subclasses(CaseAttribute) if not self.known_categories else self.known_categories
+        self.known_categories.update(CaseAttribute.registry)
         category_type = None
         if cat_name in self.known_categories:
             category_type = self.known_categories[cat_name]
@@ -222,9 +222,9 @@ class Human(Expert):
         question = f"Can a case have multiple values of the new category {category_name}? (y/n):"
         return not self.ask_yes_no_question(question)
 
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Column,
-                                     targets: Optional[List[Column]] = None,
-                                     current_conclusions: Optional[List[Column]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, x: Case, conclusion: CaseAttribute,
+                                     targets: Optional[List[CaseAttribute]] = None,
+                                     current_conclusions: Optional[List[CaseAttribute]] = None) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
