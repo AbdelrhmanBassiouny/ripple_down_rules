@@ -395,9 +395,8 @@ def create_rows_from_dataframe(df: DataFrame, name: Optional[str] = None) -> Lis
     col_names = list(df.columns)
     for row_id, row in df.iterrows():
         row = {col_name: row[col_name].item() for col_name in col_names}
-        # row_cls = Row.create(name or df.__class__.__name__, make_set(type(df)), row, default_values=False)
-        # rows.append(row_cls(id_=row_id, **row))
-        rows.append(Row(id_=row_id, **row))
+        row_cls = Row.create(name or df.__class__.__name__, make_set(type(df)), row, default_values=False)
+        rows.append(row_cls(id_=row_id, **row))
     return rows
 
 
@@ -419,18 +418,18 @@ def create_row(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
             or (obj.__class__ in [MetaData, registry])):
         return Row(id_=id(obj), **{obj_name or obj.__class__.__name__: make_set(obj) if parent_is_iterable else obj})
     row = Row(id_=id(obj))
-    # attributes_type_hints = {}
+    attributes_type_hints = {}
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
             continue
         attr_value = getattr(obj, attr)
         row = create_or_update_row_from_attribute(attr_value, attr, obj, attr, recursion_idx,
                                                   max_recursion_idx, parent_is_iterable, row)
-        # attributes_type_hints[attr] = get_value_type_from_type_hint(attr, obj)
-    # if recursion_idx == 0:
-    #     row_cls = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)), row, default_values=False,
-    #                          attributes_type_hints=attributes_type_hints)
-    #     row = row_cls(id_=id(obj), **row)
+        attributes_type_hints[attr] = get_value_type_from_type_hint(attr, obj)
+    if recursion_idx == 0:
+        row_cls = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)), row, default_values=False,
+                             attributes_type_hints=attributes_type_hints)
+        row = row_cls(id_=id(obj), **row)
     return row
 
 
@@ -486,8 +485,7 @@ def create_column_and_row_from_iterable_attribute(attr_value: Any, name: str, ob
     if not range_:
         raise ValueError(f"Could not determine the range of {name} in {obj}.")
     attr_row = Row(id_=id(attr_value))
-    # column = Column.create(name, range_).from_obj(values, row_obj=obj)
-    column = Column.from_obj(values, row_obj=obj)
+    column = Column.create(name, range_).from_obj(values, row_obj=obj)
     for idx, val in enumerate(values):
         sub_attr_row = create_row(val, recursion_idx=recursion_idx,
                                   max_recursion_idx=max_recursion_idx,
