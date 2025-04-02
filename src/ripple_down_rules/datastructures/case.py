@@ -219,6 +219,8 @@ def create_case(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
     :param parent_is_iterable: Boolean indicating whether the parent object is iterable or not.
     :return: The case that represents the object.
     """
+    if isinstance(obj, DataFrame):
+        return create_cases_from_dataframe(obj)
     if isinstance(obj, Case):
         return obj
     if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
