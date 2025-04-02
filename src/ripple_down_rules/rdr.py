@@ -128,8 +128,6 @@ class RippleDownRules(ABC):
         target = target if is_iterable(target) else [target]
         recall = [not yi or (yi in pred_cat) for yi in target]
         target_types = [type(yi) for yi in target]
-        if len(pred_cat) > 1:
-            print(pred_cat)
         precision = [(pred in target) or (type(pred) not in target_types) for pred in pred_cat]
         return precision, recall
 

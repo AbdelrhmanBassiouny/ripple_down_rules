@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import logging
 from abc import abstractmethod
 from collections import UserDict
@@ -81,6 +82,18 @@ class SubclassJSONSerializer:
     'from_json' method.
     """
 
+    def to_json_file(self, filename: str):
+        """
+        Save the object to a json file.
+        """
+        data = self.to_json()
+        # save the json to a file
+        if not filename.endswith(".json"):
+            filename += ".json"
+        with open(filename, "w") as f:
+            json.dump(data, f, indent=4)
+        return data
+
     def to_json(self) -> Dict[str, Any]:
         return {"_type": get_full_class_name(self.__class__), **self._to_json()}
 
@@ -105,6 +118,19 @@ class SubclassJSONSerializer:
         raise NotImplementedError()
 
     @classmethod
+    def from_json_file(cls, filename: str):
+        """
+        Create an instance of the subclass from the data in the given json file.
+
+        :param filename: The filename of the json file.
+        """
+        if not filename.endswith(".json"):
+            filename += ".json"
+        with open(filename, "r") as f:
+            scrdr_json = json.load(f)
+        return cls.from_json(scrdr_json)
+
+    @classmethod
     def from_json(cls, data: Dict[str, Any]) -> Self:
         """
         Create the correct instanceof the subclass from a json dict.
@@ -123,6 +149,9 @@ class SubclassJSONSerializer:
                 return subclass._from_json(subclass_data)
 
         raise ValueError("Unknown type {}".format(data["_type"]))
+
+    save = to_json_file
+    load = from_json_file
 
 
 def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:

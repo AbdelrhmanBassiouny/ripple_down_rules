@@ -28,10 +28,6 @@ class TestRDR(TestCase):
             if not os.path.exists(test_dir):
                 os.makedirs(test_dir)
 
-    def tearDown(self):
-        Row._registry = {}
-        Column._registry = {}
-
     def test_classify_scrdr(self):
         use_loaded_answers = True
         save_answers = False

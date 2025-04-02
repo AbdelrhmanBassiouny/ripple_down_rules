@@ -19,17 +19,11 @@ class TestJSONSerialization(TestCase):
     def setUpClass(cls):
         cls.all_cases, cls.targets = load_zoo_dataset(cls.cache_dir + "/zoo_dataset.pkl")
 
-    def test_json_serialization(self):
+    def test_scrdr_json_serialization(self):
         scrdr = self.get_fit_scrdr()
-        scrdr_json = scrdr.to_json()
-        # save the json to a file
-        with open(f"{self.cache_dir}/scrdr.json", "w") as f:
-            json.dump(scrdr_json, f, indent=4)
-
-        # load the json from the file
-        with open(f"{self.cache_dir}/scrdr.json", "r") as f:
-            scrdr_json = json.load(f)
-        scrdr = SingleClassRDR.from_json(scrdr_json)
+        filename = f"{self.cache_dir}/scrdr.json"
+        scrdr.save(filename)
+        scrdr = SingleClassRDR.load(filename)
         for case, target in zip(self.all_cases, self.targets):
             cat = scrdr.classify(case)
             self.assertEqual(cat, target)
