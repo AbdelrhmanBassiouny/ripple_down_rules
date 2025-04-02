@@ -21,165 +21,7 @@ if TYPE_CHECKING:
     from .callable_expression import CallableExpression
 
 
-class SubClassFactory:
-    """
-    A custom set class that is used to add other attributes to the set. This is similar to a table where the set is the
-    table, the attributes are the columns, and the values are the rows.
-    """
-    _value_range: set
-    """
-    The range of the attribute, this can be a set of possible values or a range of numeric values (int, float).
-    """
-    _registry: Dict[(str, type), Type[SubClassFactory]] = {}
-    """
-    A dictionary of all dynamically created subclasses of this class.
-    """
-    _generated_classes_dir: str = os.path.dirname(os.path.abspath(__file__)) + "/generated"
-
-    @classmethod
-    def create(cls, name: str, range_: set, class_attributes: Optional[Dict[str, Any]] = None,
-               default_values: bool = True,
-               attributes_type_hints: Optional[Dict[str, Type]] = None) -> Type[SubClassFactory]:
-        """
-        Create a new subclass.
-
-        :param name: The name of the subclass.
-        :param range_: The range of the subclass values.
-        :param class_attributes: The attributes of the new subclass.
-        :param default_values: Boolean indicating whether to add default values to the subclass attributes or not.
-        :param attributes_type_hints: The type hints of the subclass attributes.
-        :return: The new subclass.
-        """
-        existing_class = cls._get_and_update_subclass(name, range_)
-        if existing_class:
-            return existing_class
-
-        new_attribute_type = cls._create_class_in_new_python_file_and_import_it(name, range_, default_values,
-                                                                                class_attributes, attributes_type_hints)
-
-        cls.register(new_attribute_type)
-
-        return new_attribute_type
-
-    @classmethod
-    def _create_class_in_new_python_file_and_import_it(cls, name: str, range_: set, default_values: bool = True,
-                                                       class_attributes: Optional[Dict[str, Any]] = None,
-                                                       attributes_type_hints: Optional[Dict[str, Type]] = None)\
-            -> Type[SubClassFactory]:
-        def get_type_import(value_type: Any) -> Tuple[str, str]:
-            if value_type is type(None):
-                return "from types import NoneType\n", "NoneType"
-            elif value_type.__module__ != "builtins":
-                value_type_alias = f"{value_type.__name__}_"
-                return f"from {value_type.__module__} import {value_type.__name__} as {value_type_alias}\n", value_type_alias
-            else:
-                return "", value_type.__name__
-        attributes_type_hints = attributes_type_hints or {}
-        parent_class_alias = cls.__name__ + "_"
-        imports = f"from {cls.__module__} import {cls.__name__} as {parent_class_alias}\n"
-        class_code = f"class {name}({parent_class_alias}):\n"
-        class_attributes = copy(class_attributes) if class_attributes else {}
-        class_attributes.update({"_value_range": range_})
-        for key, value in class_attributes.items():
-            if value is not None:
-                new_import, value_type_name = get_type_import(type(value))
-            elif key in attributes_type_hints:
-                new_import, value_type_name = get_type_import(attributes_type_hints[key])
-            else:
-                new_import, value_type_name = "from typing_extensions import Any", "Any"
-            imports += new_import
-            if isinstance(value, set):
-                value_names = []
-                for v in value:
-                    if isinstance(v, type):
-                        new_import, v_name = get_type_import(v)
-                        imports += new_import
-                    else:
-                        v_name = str(v)
-                    value_names.append(v_name)
-                value_str = ", ".join(value_names)
-                new_value = "{" + value_str + "}"
-            elif isinstance(value, type):
-                new_import, value_name = get_type_import(value)
-                new_value = value_name
-                value_type_name = value_name
-            else:
-                new_value = value
-            if default_values or key == "_value_range":
-                class_code += f"    {key}: {value_type_name} = {new_value}\n"
-            else:
-                class_code += f"    {key}: {value_type_name}\n"
-        imports += "\n\n"
-        if issubclass(cls, Row):
-            folder_name = "row"
-        elif issubclass(cls, Column):
-            folder_name = "column"
-        else:
-            raise ValueError(f"Unknown class {cls}.")
-        # write the code to a file
-        with open(f"{cls._generated_classes_dir}/{folder_name}/{name.lower()}.py", "w") as f:
-            f.write(imports + class_code)
-
-        # import the class from the file
-        import_path = ".".join(cls.__module__.split(".")[:-1] + ["generated", folder_name, name.lower()])
-        time.sleep(0.3)
-        return __import__(import_path, fromlist=[name.lower()]).__dict__[name]
-
-    @classmethod
-    def _get_and_update_subclass(cls, name: str, range_: set) -> Optional[Type[SubClassFactory]]:
-        """
-        Get a subclass of the attribute class and update its range if necessary.
-
-        :param name: The name of the column.
-        :param range_: The range of the column values.
-        """
-        key = (name.lower(), cls)
-        if key in cls._registry:
-            if not cls._registry[key].is_within_range(range_):
-                if isinstance(cls._registry[key]._value_range, set):
-                    cls._registry[key]._value_range.update(range_)
-                else:
-                    raise ValueError(f"Range of {key} is different from {cls._registry[key]._value_range}.")
-            return cls._registry[key]
-
-    @classmethod
-    def register(cls, subclass: Type[SubClassFactory]):
-        """
-        Register a subclass of the attribute class, this is used to be able to dynamically create Attribute subclasses.
-
-        :param subclass: The subclass to register.
-        """
-        if not issubclass(subclass, SubClassFactory):
-            raise ValueError(f"{subclass} is not a subclass of CustomSet.")
-        if subclass not in cls._registry:
-            cls._registry[(subclass.__name__.lower(), cls)] = subclass
-        else:
-            raise ValueError(f"{subclass} is already registered.")
-
-    @classmethod
-    def is_within_range(cls, value: Any) -> bool:
-        """
-        Check if a value is within the range of the custom set.
-
-        :param value: The value to check.
-        :return: Boolean indicating whether the value is within the range or not.
-        """
-        if hasattr(value, "__iter__") and not isinstance(value, str):
-            if all(isinstance(val_range, type) and isinstance(v, val_range)
-                   for v in value for val_range in cls._value_range):
-                return True
-            else:
-                return set(value).issubset(cls._value_range)
-        elif isinstance(value, str):
-            return value.lower() in cls._value_range
-        else:
-            return value in cls._value_range
-
-    def __instancecheck__(self, instance):
-        return isinstance(instance, (SubClassFactory, *self._value_range))
-
-
-class Row(UserDict, SubClassFactory, SubclassJSONSerializer):
+class Row(UserDict, SubclassJSONSerializer):
     """
     A collection of attributes that represents a set of constraints on a case. This is a dictionary where the keys are
     the names of the attributes and the values are the attributes. All are stored in lower case.
@@ -243,9 +85,6 @@ class Row(UserDict, SubClassFactory, SubclassJSONSerializer):
     def __hash__(self):
         return self.id_
 
-    def __instancecheck__(self, instance):
-        return isinstance(instance, (dict, UserDict, Row)) or super().__instancecheck__(instance)
-
     def _to_json(self) -> Dict[str, Any]:
         serializable = {k: v for k, v in self.items() if not k.startswith("_")}
         serializable["_id"] = self.id_
@@ -287,7 +126,7 @@ class ColumnValue(SubclassJSONSerializer):
         return cls(id=data["id"], value=data["value"])
 
 
-class Column(set, SubClassFactory, SubclassJSONSerializer):
+class Column(set, SubclassJSONSerializer):
     nullable: bool = True
     """
     A boolean indicating whether the column can be None or not.
@@ -318,21 +157,6 @@ class Column(set, SubClassFactory, SubclassJSONSerializer):
         if len(values) > 0 and not isinstance(next(iter(values)), ColumnValue):
             values = {ColumnValue(id(values), v) for v in values}
         return values
-
-    @classmethod
-    def create(cls, name: str, range_: set,
-               nullable: bool = True, mutually_exclusive: bool = False) -> Type[SubClassFactory]:
-        return super().create(name, range_, {"nullable": nullable, "mutually_exclusive": mutually_exclusive})
-
-    @classmethod
-    def create_from_enum(cls, category: Type[Enum], nullable: bool = True,
-                         mutually_exclusive: bool = False) -> Type[SubClassFactory]:
-        new_cls = cls.create(category.__name__.lower(), {category}, nullable=nullable,
-                             mutually_exclusive=mutually_exclusive)
-        for value in category:
-            value_column = cls.create(category.__name__.lower(), {value}, mutually_exclusive=mutually_exclusive)(value)
-            setattr(new_cls, value.name, value_column)
-        return new_cls
 
     @classmethod
     def from_obj(cls, values: Set[Any], row_obj: Optional[Any] = None) -> Column:
@@ -371,9 +195,6 @@ class Column(set, SubClassFactory, SubclassJSONSerializer):
             return "None"
         return str({v for v in self}) if len(self) > 1 else str(next(iter(self)))
 
-    def __instancecheck__(self, instance):
-        return isinstance(instance, (set, self.__class__)) or super().__instancecheck__(instance)
-
     def _to_json(self) -> Dict[str, Any]:
         return {id_: v.to_json() if isinstance(v, SubclassJSONSerializer) else v
                 for id_, v in self.id_value_map.items()}
@@ -395,8 +216,6 @@ def create_rows_from_dataframe(df: DataFrame, name: Optional[str] = None) -> Lis
     col_names = list(df.columns)
     for row_id, row in df.iterrows():
         row = {col_name: row[col_name].item() for col_name in col_names}
-        # row_cls = Row.create(name or df.__class__.__name__, make_set(type(df)), row, default_values=False)
-        # rows.append(row_cls(id_=row_id, **row))
         rows.append(Row(id_=row_id, **row))
     return rows
 
@@ -419,18 +238,12 @@ def create_row(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
             or (obj.__class__ in [MetaData, registry])):
         return Row(id_=id(obj), **{obj_name or obj.__class__.__name__: make_set(obj) if parent_is_iterable else obj})
     row = Row(id_=id(obj))
-    # attributes_type_hints = {}
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
             continue
         attr_value = getattr(obj, attr)
         row = create_or_update_row_from_attribute(attr_value, attr, obj, attr, recursion_idx,
                                                   max_recursion_idx, parent_is_iterable, row)
-        # attributes_type_hints[attr] = get_value_type_from_type_hint(attr, obj)
-    # if recursion_idx == 0:
-    #     row_cls = Row.create(obj_name or obj.__class__.__name__, make_set(type(obj)), row, default_values=False,
-    #                          attributes_type_hints=attributes_type_hints)
-    #     row = row_cls(id_=id(obj), **row)
     return row
 
 
@@ -486,7 +299,6 @@ def create_column_and_row_from_iterable_attribute(attr_value: Any, name: str, ob
     if not range_:
         raise ValueError(f"Could not determine the range of {name} in {obj}.")
     attr_row = Row(id_=id(attr_value))
-    # column = Column.create(name, range_).from_obj(values, row_obj=obj)
     column = Column.from_obj(values, row_obj=obj)
     for idx, val in enumerate(values):
         sub_attr_row = create_row(val, recursion_idx=recursion_idx,

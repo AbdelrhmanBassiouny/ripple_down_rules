@@ -198,19 +198,6 @@ class Human(Expert):
             self.all_expert_answers.append(expert_input)
         return expression
 
-    def create_category_instance(self, cat_name: str, cat_value: Union[str, int, float, set]) -> Column:
-        """
-        Create a new category instance.
-
-        :param cat_name: The name of the category.
-        :param cat_value: The value of the category.
-        :return: A new instance of the category.
-        """
-        category_type = self.get_category_type(cat_name)
-        if not category_type:
-            category_type = self.create_new_category_type(cat_name)
-        return category_type(cat_value)
-
     def get_category_type(self, cat_name: str) -> Optional[Type[Column]]:
         """
         Get the category type from the known categories.
@@ -224,19 +211,6 @@ class Human(Expert):
         category_type = None
         if cat_name in self.known_categories:
             category_type = self.known_categories[cat_name]
-        return category_type
-
-    def create_new_category_type(self, cat_name: str) -> Type[Column]:
-        """
-        Create a new category type.
-
-        :param cat_name: The name of the category.
-        :return: A new category type.
-        """
-        if self.ask_if_category_is_mutually_exclusive(cat_name):
-            category_type: Type[Column] = Column.create(cat_name, set(), mutually_exclusive=True)
-        else:
-            category_type: Type[Column] = Column.create(cat_name, set())
         return category_type
 
     def ask_if_category_is_mutually_exclusive(self, category_name: str) -> bool:
