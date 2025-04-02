@@ -81,7 +81,8 @@ def load_zoo_dataset(cache_file: Optional[str] = None) -> Tuple[List[Case], List
 
     category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
     category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
-    targets = [getattr(SpeciesCol, category_id_to_name[i]) for i in y.values.flatten()]
+    # targets = [getattr(SpeciesCol, category_id_to_name[i]) for i in y.values.flatten()]
+    targets = [Species.from_str(category_id_to_name[i]) for i in y.values.flatten()]
     return all_cases, targets
 
 
@@ -104,8 +105,8 @@ class Habitat(Category):
     air = "air"
 
 
-SpeciesCol = Column.create_from_enum(Species, mutually_exclusive=True)
-HabitatCol = Column.create_from_enum(Habitat, mutually_exclusive=False)
+# SpeciesCol = Column.create_from_enum(Species, mutually_exclusive=True)
+# HabitatCol = Column.create_from_enum(Habitat, mutually_exclusive=False)
 
 
 class Base(sqlalchemy.orm.DeclarativeBase):

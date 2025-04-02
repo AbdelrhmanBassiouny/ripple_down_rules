@@ -5,6 +5,7 @@ import sqlalchemy.orm
 from sqlalchemy import select
 from sqlalchemy.orm import MappedColumn as Column
 from typing_extensions import List, Sequence
+import pandas as pd
 
 from ripple_down_rules.datasets import Base, Animal, Species, get_dataset, Habitat, HabitatTable
 from ripple_down_rules.datastructures import CaseQuery
@@ -23,25 +24,34 @@ class TestAlchemyRDR(TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # load dataset
         zoo = get_dataset(111, cls.cache_file)
 
-        # data (as pandas dataframes)
+        # get data and targets (as pandas dataframes)
         X = zoo['features']
         y = zoo['targets']
         names = zoo['ids'].values.flatten()
         X.loc[:, "name"] = names
 
-        engine = sqlalchemy.create_engine("sqlite:///:memory:")
-        Base.metadata.create_all(engine)
-        session = sqlalchemy.orm.Session(engine)
-        session.bulk_insert_mappings(Animal, X.to_dict(orient="records"))
-        session.commit()
-        cls.session = session
+        cls._init_session_and_insert_data(X)
+
+        # init cases
         query = select(Animal)
         cls.all_cases = cls.session.scalars(query).all()
+
+        # init targets
         category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
         category_id_to_name = {i + 1: name for i, name in enumerate(category_names)}
         cls.targets = [Species(category_id_to_name[i]) for i in y.values.flatten()]
+
+    @classmethod
+    def _init_session_and_insert_data(cls, data: pd.DataFrame):
+        engine = sqlalchemy.create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        session = sqlalchemy.orm.Session(engine)
+        session.bulk_insert_mappings(Animal, data.to_dict(orient="records"))
+        session.commit()
+        cls.session = session
 
     def test_fit_scrdr(self):
         use_loaded_answers = True

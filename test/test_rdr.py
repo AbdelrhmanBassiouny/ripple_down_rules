@@ -3,7 +3,7 @@ from unittest import TestCase, skip
 
 from typing_extensions import List
 
-from ripple_down_rules.datasets import Habitat, SpeciesCol as Species
+from ripple_down_rules.datasets import Habitat, Species
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import Case, MCRDRMode, \
     Row, Column, Category, CaseQuery

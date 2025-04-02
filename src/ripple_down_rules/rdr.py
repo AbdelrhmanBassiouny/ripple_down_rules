@@ -267,8 +267,8 @@ class SingleClassRDR(RippleDownRules, SubclassJSONSerializer):
             if rule.alternative:
                 self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent)
 
-    def to_json(self) -> Dict[str, Any]:
-        return {**SubclassJSONSerializer.to_json(self), "start_rule": self.start_rule.to_json()}
+    def _to_json(self) -> Dict[str, Any]:
+        return {"start_rule": self.start_rule.to_json()}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:

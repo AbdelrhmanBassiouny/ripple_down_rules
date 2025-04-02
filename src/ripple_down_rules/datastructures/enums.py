@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from enum import auto, Enum
 
-from typing_extensions import List
+from typing_extensions import List, Dict, Any
+
+from ripple_down_rules.utils import SubclassJSONSerializer
 
 
-class Category(str, Enum):
+class Category(str, SubclassJSONSerializer, Enum):
 
     @classmethod
     def from_str(cls, value: str) -> Category:
@@ -17,7 +19,14 @@ class Category(str, Enum):
 
     @property
     def as_dict(self):
-        return {self.__class__.__name__.lower(): self}
+        return {self.__class__.__name__.lower(): self.value}
+
+    def _to_json(self) -> Dict[str, Any]:
+        return self.as_dict
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Category:
+        return cls.from_str(data[cls.__name__.lower()])
 
 
 class Stop(Category):

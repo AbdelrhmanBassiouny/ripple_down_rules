@@ -162,9 +162,8 @@ class CallableExpression(SubclassJSONSerializer):
             prev_e = e
         return "\n".join(all_binary_ops) if len(all_binary_ops) > 0 else user_input
 
-    def to_json(self) -> Dict[str, Any]:
-        return {**SubclassJSONSerializer.to_json(self),
-                "user_input": self.user_input, "conclusion_type": get_full_class_name(self.conclusion_type)}
+    def _to_json(self) -> Dict[str, Any]:
+        return {"user_input": self.user_input, "conclusion_type": get_full_class_name(self.conclusion_type)}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> CallableExpression:

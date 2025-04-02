@@ -195,9 +195,8 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         if_clause = "elif" if self.weight == RDREdge.Alternative.value else "if"
         return f"{parent_indent}{if_clause} {self.conditions.parsed_user_input}:\n"
 
-    def to_json(self) -> Dict[str, Any]:
-        self.json_serialization = {**SubclassJSONSerializer.to_json(self),
-                                   "conditions": self.conditions.to_json(),
+    def _to_json(self) -> Dict[str, Any]:
+        self.json_serialization = {"conditions": self.conditions.to_json(),
                                    "conclusion": self.conclusion.to_json(),
                                    "parent": self.parent.json_serialization if self.parent else None,
                                    "corner_case": self.corner_case.to_json() if self.corner_case else None,

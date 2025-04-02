@@ -82,7 +82,14 @@ class SubclassJSONSerializer:
     """
 
     def to_json(self) -> Dict[str, Any]:
-        return {"_type": get_full_class_name(self.__class__)}
+        return {"_type": get_full_class_name(self.__class__), **self._to_json()}
+
+    @abstractmethod
+    def _to_json(self) -> Dict[str, Any]:
+        """
+        Create a json dict from the object.
+        """
+        pass
 
     @classmethod
     @abstractmethod
