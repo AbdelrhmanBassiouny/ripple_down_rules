@@ -17,7 +17,7 @@ from .utils import draw_tree, make_set, get_attribute_by_type, copy_case, \
     get_hint_for_attribute, SubclassJSONSerializer, is_iterable, make_list
 
 
-class RippleDownRules(ABC):
+class RippleDownRules(SubclassJSONSerializer, ABC):
     """
     The abstract base class for the ripple down rules classifiers.
     """
@@ -175,10 +175,7 @@ class RippleDownRules(ABC):
             return conclusion_type in case
 
 
-RDR = RippleDownRules
-
-
-class RDRWithCodeWriter(RDR, ABC):
+class RDRWithCodeWriter(RippleDownRules, ABC):
 
     @abstractmethod
     def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = ""):
@@ -260,7 +257,7 @@ class RDRWithCodeWriter(RDR, ABC):
             return type(self.start_rule.conclusion)
 
 
-class SingleClassRDR(RDRWithCodeWriter, SubclassJSONSerializer):
+class SingleClassRDR(RDRWithCodeWriter):
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
             -> Union[CaseAttribute, CallableExpression]:
@@ -353,17 +350,15 @@ class MultiClassRDR(RDRWithCodeWriter):
     The conditions of the stopping rule if needed.
     """
 
-    def __init__(self, start_rules: Optional[List[Rule]] = None,
+    def __init__(self, start_rule: Optional[Rule] = None,
                  mode: MCRDRMode = MCRDRMode.StopOnly, session: Optional[Session] = None):
         """
-        :param start_rules: The starting rules for the classifier, these are the rules that are at the top of the tree
-        and are always checked, in contrast to the refinement and alternative rules which are only checked if the
-        starting rules fire or not.
+        :param start_rule: The starting rules for the classifier.
         :param mode: The mode of the classifier, either StopOnly or StopPlusRule, or StopPlusRuleCombined.
         :param session: The sqlalchemy orm session.
         """
-        self.start_rules = [MultiClassTopRule()] if not start_rules else start_rules
-        super(MultiClassRDR, self).__init__(self.start_rules[0], session=session)
+        start_rule = MultiClassTopRule() if not start_rule else start_rule
+        super(MultiClassRDR, self).__init__(start_rule, session=session)
         self.mode: MCRDRMode = mode
 
     def classify(self, case: Union[Case, SQLTable]) -> List[Any]:
@@ -613,6 +608,17 @@ class MultiClassRDR(RDRWithCodeWriter):
         :param corner_case: The corner case of the rule.
         """
         self.start_rule.alternative = MultiClassTopRule(conditions, conclusion, corner_case=corner_case)
+
+    def _to_json(self) -> Dict[str, Any]:
+        return {"start_rule": self.start_rule.to_json()}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        """
+        Create an instance of the class from a json
+        """
+        start_rule = SingleClassRule.from_json(data["start_rule"])
+        return cls(start_rule)
 
 
 class GeneralRDR(RippleDownRules):

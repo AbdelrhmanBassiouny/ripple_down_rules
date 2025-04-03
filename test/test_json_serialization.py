@@ -6,7 +6,9 @@ from typing_extensions import List
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import CaseQuery, Case
 from ripple_down_rules.experts import Human
-from ripple_down_rules.rdr import SingleClassRDR
+from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR
+from ripple_down_rules.utils import make_set
+from test_helpers.helpers import get_fit_mcrdr, get_fit_scrdr
 
 
 class TestJSONSerialization(TestCase):
@@ -20,7 +22,7 @@ class TestJSONSerialization(TestCase):
         cls.all_cases, cls.targets = load_zoo_dataset(cls.cache_dir + "/zoo_dataset.pkl")
 
     def test_scrdr_json_serialization(self):
-        scrdr = self.get_fit_scrdr()
+        scrdr = get_fit_scrdr(self.all_cases, self.targets)
         filename = f"{self.cache_dir}/scrdr.json"
         scrdr.save(filename)
         scrdr = SingleClassRDR.load(filename)
@@ -28,16 +30,11 @@ class TestJSONSerialization(TestCase):
             cat = scrdr.classify(case)
             self.assertEqual(cat, target)
 
-    def get_fit_scrdr(self, draw_tree=False) -> SingleClassRDR:
-        filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
-        expert = Human(use_loaded_answers=True)
-        expert.load_answers(filename)
-
-        scrdr = SingleClassRDR()
-        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
-        scrdr.fit(case_queries, expert=expert,
-                  animate_tree=draw_tree)
+    def test_mcrdr_json_serialization(self):
+        mcrdr = get_fit_mcrdr(self.all_cases, self.targets)
+        filename = f"{self.cache_dir}/mcrdr.json"
+        mcrdr.save(filename)
+        mcrdr = MultiClassRDR.load(filename)
         for case, target in zip(self.all_cases, self.targets):
-            cat = scrdr.classify(case)
-            self.assertEqual(cat, target)
-        return scrdr
+            cat = mcrdr.classify(case)
+            self.assertEqual(make_set(cat), make_set(target))

@@ -11,6 +11,7 @@ from ripple_down_rules.datastructures import Case, MCRDRMode, \
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set
+from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr
 
 
 class TestRDR(TestCase):
@@ -71,7 +72,7 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def test_write_scrdr_to_python_file(self):
-        scrdr = self.get_fit_scrdr()
+        scrdr = get_fit_scrdr(self.all_cases,self.targets)
         scrdr.write_to_python_file(self.generated_rdrs_dir)
         classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, target in zip(self.all_cases, self.targets):
@@ -79,7 +80,7 @@ class TestRDR(TestCase):
             self.assertEqual(cat, target)
 
     def test_write_mcrdr_to_python_file(self):
-        mcrdr = self.get_fit_mcrdr()
+        mcrdr = get_fit_mcrdr(self.all_cases, self.targets)
         mcrdr.write_to_python_file(self.generated_rdrs_dir)
         classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, target in zip(self.all_cases, self.targets):
@@ -258,7 +259,7 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
 
-        fit_scrdr = self.get_fit_scrdr(draw_tree=False)
+        fit_scrdr = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False)
 
         grdr = GeneralRDR({type(fit_scrdr.start_rule.conclusion): fit_scrdr})
 
@@ -309,7 +310,7 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
 
-        fit_scrdr = self.get_fit_scrdr(draw_tree=False)
+        fit_scrdr = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False)
 
         grdr = GeneralRDR({type(fit_scrdr.start_rule.conclusion): fit_scrdr})
 
@@ -326,23 +327,3 @@ class TestRDR(TestCase):
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
-
-    def get_fit_scrdr(self, draw_tree=False) -> SingleClassRDR:
-        filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
-        expert = Human(use_loaded_answers=True)
-        expert.load_answers(filename)
-
-        scrdr = SingleClassRDR()
-        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
-        scrdr.fit(case_queries, expert=expert,
-                  animate_tree=draw_tree)
-        return scrdr
-
-    def get_fit_mcrdr(self, draw_tree: bool = False):
-        filename = self.expert_answers_dir + "/mcrdr_expert_answers_stop_only_fit"
-        expert = Human(use_loaded_answers=True)
-        expert.load_answers(filename)
-        mcrdr = MultiClassRDR()
-        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
-        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-        return mcrdr

@@ -265,14 +265,17 @@ class MultiClassStopRule(Rule, HasAlternativeRule):
 
     def _to_json(self) -> Dict[str, Any]:
         self.json_serialization = {**Rule._to_json(self),
-                                   "top_rule": self.top_rule.to_json(),
                                    "alternative": self.alternative.to_json() if self.alternative is not None else None}
         return self.json_serialization
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> MultiClassStopRule:
-        loaded_rule = Rule._from_json(data)
-        loaded_rule.top_rule = MultiClassTopRule.from_json(data["top_rule"])
+        loaded_rule = super(MultiClassStopRule, cls)._from_json(data)
+        # The following is done to prevent re-initialization of the top rule,
+        # so the top rule that is already initialized is passed in the data instead of its json serialization.
+        loaded_rule.top_rule = data['top_rule']
+        if data['alternative'] is not None:
+            data['alternative']['top_rule'] = data['top_rule']
         loaded_rule.alternative = MultiClassStopRule.from_json(data["alternative"])
         return loaded_rule
 
@@ -312,7 +315,11 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> MultiClassTopRule:
-        loaded_rule = Rule._from_json(data)
+        loaded_rule = super(MultiClassTopRule, cls)._from_json(data)
+        # The following is done to prevent re-initialization of the top rule,
+        # so the top rule that is already initialized is passed in the data instead of its json serialization.
+        if data['refinement'] is not None:
+            data['refinement']['top_rule'] = loaded_rule
         loaded_rule.refinement = MultiClassStopRule.from_json(data["refinement"])
         loaded_rule.alternative = MultiClassTopRule.from_json(data["alternative"])
         return loaded_rule
