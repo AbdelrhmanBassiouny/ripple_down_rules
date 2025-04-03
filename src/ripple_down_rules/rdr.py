@@ -199,7 +199,7 @@ class RDRWithCodeWriter(RDR, ABC):
         """
         func_def = f"def classify(case: {self.case_type.__name__}) -> {self._get_conclusion_type_hint()}:\n"
         with open(file_path + f"/{self.generated_python_file_name}.py", "w") as f:
-            f.write(self._get_imports())
+            f.write(self._get_imports() + "\n\n")
             f.write(func_def)
             f.write(f"{' '*4}if not isinstance(case, Case):\n"
                     f"{' '*4}    case = create_case(case, recursion_idx=3)\n""")
@@ -222,7 +222,6 @@ class RDRWithCodeWriter(RDR, ABC):
         if self.conclusion_type.__module__ != "builtins":
             imports += f"from {self.conclusion_type.__module__} import {self.conclusion_type.__name__}\n"
         imports += "from ripple_down_rules.datastructures import Case, create_case\n"
-        imports += "\n\n"
         return imports
 
     def get_rdr_classifier_from_python_file(self, package_name) -> Callable[[Any], Any]:
@@ -452,8 +451,8 @@ class MultiClassRDR(RDRWithCodeWriter):
         return f"Set[{self.conclusion_type.__name__}]"
 
     def _get_imports(self) -> str:
-        imports = super()._get_imports().strip('\n')
-        imports += "\nfrom typing_extensions import Set\n\n"
+        imports = super()._get_imports()
+        imports += "from typing_extensions import Set\n"
         return imports
 
     def update_start_rule(self, case: Union[Case, SQLTable], target: Any, expert: Expert):

@@ -82,10 +82,9 @@ class TestRDR(TestCase):
         mcrdr = self.get_fit_mcrdr()
         mcrdr.write_to_python_file(self.generated_rdrs_dir)
         classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
-        for case in self.all_cases:
-            cat_1 = mcrdr.classify(case)
-            cat_2 = classify_species_mcrdr(case)
-            self.assertEqual(make_set(cat_1), make_set(cat_2))
+        for case, target in zip(self.all_cases, self.targets):
+            cat = classify_species_mcrdr(case)
+            self.assertEqual(make_set(cat), make_set(target))
 
     def test_classify_mcrdr(self):
         use_loaded_answers = True
@@ -115,7 +114,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
         mcrdr = MultiClassRDR()
         case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
-        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree, n_iter=1)
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_only")
         cats = mcrdr.classify(self.all_cases[50])
@@ -345,5 +344,5 @@ class TestRDR(TestCase):
         expert.load_answers(filename)
         mcrdr = MultiClassRDR()
         case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
-        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree, n_iter=1)
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         return mcrdr
