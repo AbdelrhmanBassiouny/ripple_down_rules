@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import UserDict
+from copy import copy, deepcopy
 from dataclasses import dataclass
 from enum import Enum
 
@@ -9,7 +10,8 @@ from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING
 
-from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, SubclassJSONSerializer
+from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, SubclassJSONSerializer, \
+    get_full_class_name, get_type_from_string
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
@@ -76,11 +78,17 @@ class Case(UserDict, SubclassJSONSerializer):
     def _to_json(self) -> Dict[str, Any]:
         serializable = {k: v for k, v in self.items() if not k.startswith("_")}
         serializable["_id"] = self._id
+        for k, v in serializable.items():
+            if isinstance(v, set):
+                serializable[k] = {'_type': get_full_class_name(set), 'value': list(v)}
         return {k: v.to_json() if isinstance(v, SubclassJSONSerializer) else v for k, v in serializable.items()}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Case:
         id_ = data.pop("_id")
+        for k, v in data.items():
+            if isinstance(v, dict) and "_type" in v:
+                data[k] = SubclassJSONSerializer.from_json(v)
         return cls(_id=id_, **data)
 
 

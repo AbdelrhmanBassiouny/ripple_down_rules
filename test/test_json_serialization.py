@@ -6,9 +6,9 @@ from typing_extensions import List
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import CaseQuery, Case
 from ripple_down_rules.experts import Human
-from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR
-from ripple_down_rules.utils import make_set
-from test_helpers.helpers import get_fit_mcrdr, get_fit_scrdr
+from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
+from ripple_down_rules.utils import make_set, flatten_list
+from test_helpers.helpers import get_fit_mcrdr, get_fit_scrdr, get_fit_grdr
 
 
 class TestJSONSerialization(TestCase):
@@ -38,3 +38,14 @@ class TestJSONSerialization(TestCase):
         for case, target in zip(self.all_cases, self.targets):
             cat = mcrdr.classify(case)
             self.assertEqual(make_set(cat), make_set(target))
+
+    def test_grdr_json_serialization(self):
+        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets)
+        filename = f"{self.cache_dir}/grdr.json"
+        grdr.save(filename)
+        grdr = GeneralRDR.load(filename)
+        for case, case_targets in zip(self.all_cases[:len(all_targets)], all_targets):
+            cat = grdr.classify(case)
+            cat = flatten_list(cat)
+            case_targets = flatten_list(case_targets)
+            self.assertEqual(make_set(cat), make_set(case_targets))

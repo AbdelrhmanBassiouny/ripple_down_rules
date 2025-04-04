@@ -25,6 +25,16 @@ if TYPE_CHECKING:
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
+def flatten_list(a: List):
+    a_flattened = []
+    for c in a:
+        if is_iterable(c):
+            a_flattened.extend(list(c))
+        else:
+            a_flattened.append(c)
+    return a_flattened
+
+
 def make_list(value: Any) -> List:
     """
     Make a list from a value.
@@ -97,15 +107,13 @@ class SubclassJSONSerializer:
     def to_json(self) -> Dict[str, Any]:
         return {"_type": get_full_class_name(self.__class__), **self._to_json()}
 
-    @abstractmethod
     def _to_json(self) -> Dict[str, Any]:
         """
         Create a json dict from the object.
         """
-        pass
+        raise NotImplementedError()
 
     @classmethod
-    @abstractmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
         """
         Create a variable from a json dict.
@@ -140,7 +148,16 @@ class SubclassJSONSerializer:
         """
         if data is None:
             return None
+        if not isinstance(data, dict) or ('_type' not in data):
+            return data
+        # check if type module is builtins
+        data_type = get_type_from_string(data["_type"])
+        if data_type.__module__ == 'builtins':
+            if is_iterable(data['value']) and not isinstance(data['value'], dict):
+                return data_type([cls.from_json(d) for d in data['value']])
+            return data_type(data["value"])
         if get_full_class_name(cls) == data["_type"]:
+            data.pop("_type")
             return cls._from_json(data)
         for subclass in recursive_subclasses(SubclassJSONSerializer):
             if get_full_class_name(subclass) == data["_type"]:

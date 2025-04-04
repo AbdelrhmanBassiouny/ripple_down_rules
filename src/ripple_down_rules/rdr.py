@@ -14,7 +14,7 @@ from .datastructures import Case, MCRDRMode, CallableExpression, CaseAttribute, 
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .utils import draw_tree, make_set, get_attribute_by_type, copy_case, \
-    get_hint_for_attribute, SubclassJSONSerializer, is_iterable, make_list
+    get_hint_for_attribute, SubclassJSONSerializer, is_iterable, make_list, get_full_class_name, get_type_from_string
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -801,3 +801,17 @@ class GeneralRDR(RippleDownRules):
         Get all the types of categories that the GRDR can classify.
         """
         return list(self.start_rules_dict.keys())
+
+    def _to_json(self) -> Dict[str, Any]:
+        return {"start_rules": {get_full_class_name(t): rdr.to_json() for t, rdr in self.start_rules_dict.items()}}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> GeneralRDR:
+        """
+        Create an instance of the class from a json
+        """
+        start_rules_dict = {}
+        for k, v in data["start_rules"].items():
+            k = get_type_from_string(k)
+            start_rules_dict[k] = get_type_from_string(v['_type']).from_json(v)
+        return cls(start_rules_dict)

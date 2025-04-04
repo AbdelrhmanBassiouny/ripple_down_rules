@@ -8,7 +8,7 @@ from typing_extensions import List, Optional, Self, Union, Dict, Any
 
 from .datastructures import CallableExpression, Case, SQLTable
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer
+from .utils import SubclassJSONSerializer, is_iterable, get_full_class_name
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
@@ -102,8 +102,17 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         pass
 
     def _to_json(self) -> Dict[str, Any]:
+        def conclusion_to_json(conclusion):
+            if is_iterable(conclusion):
+                conclusions = {'_type': get_full_class_name(type(conclusion)), 'value': []}
+                for c in conclusion:
+                    conclusions['value'].append(conclusion_to_json(c))
+            else:
+                conclusions = conclusion.to_json()
+            return conclusions
+
         json_serialization = {"conditions": self.conditions.to_json(),
-                              "conclusion": self.conclusion.to_json(),
+                              "conclusion": conclusion_to_json(self.conclusion),
                               "parent": self.parent.json_serialization if self.parent else None,
                               "corner_case": self.corner_case.to_json() if self.corner_case else None,
                               "weight": self.weight}
