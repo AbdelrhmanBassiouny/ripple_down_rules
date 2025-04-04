@@ -10,8 +10,8 @@ from ripple_down_rules.datastructures import Case, MCRDRMode, \
     Case, CaseAttribute, Category, CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set
-from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr
+from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set, flatten_list
+from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
 
 
 class TestRDR(TestCase):
@@ -86,6 +86,16 @@ class TestRDR(TestCase):
         for case, target in zip(self.all_cases, self.targets):
             cat = classify_species_mcrdr(case)
             self.assertEqual(make_set(cat), make_set(target))
+
+    def test_write_grdr_to_python_file(self):
+        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets)
+        grdr.write_to_python_file(self.generated_rdrs_dir)
+        classify_animal_grdr = grdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
+        for case, case_targets in zip(self.all_cases[:len(all_targets)], all_targets):
+            cat = classify_animal_grdr(case)
+            cat = flatten_list(cat)
+            case_targets = flatten_list(case_targets)
+            self.assertEqual(make_set(cat), make_set(case_targets))
 
     def test_classify_mcrdr(self):
         use_loaded_answers = True

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib
 from abc import ABC, abstractmethod
-from copy import copy, deepcopy
+from copy import copy
 from types import ModuleType
 
 from matplotlib import pyplot as plt
@@ -120,7 +120,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             plt.show()
 
     @staticmethod
-    def calculate_precision_and_recall(pred_cat: List[CaseAttribute], target: List[CaseAttribute]) -> Tuple[List[bool], List[bool]]:
+    def calculate_precision_and_recall(pred_cat: List[CaseAttribute], target: List[CaseAttribute]) -> Tuple[
+        List[bool], List[bool]]:
         """
         :param pred_cat: The predicted category.
         :param target: The target category.
@@ -194,16 +195,17 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
 
         :param file_path: The path to the file to write the source code to.
         """
-        func_def = f"def classify(case: {self.case_type.__name__}) -> {self._get_conclusion_type_hint()}:\n"
+        func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
         with open(file_path + f"/{self.generated_python_file_name}.py", "w") as f:
             f.write(self._get_imports() + "\n\n")
             f.write(func_def)
-            f.write(f"{' '*4}if not isinstance(case, Case):\n"
-                    f"{' '*4}    case = create_case(case, recursion_idx=3)\n""")
+            f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
+                    f"{' ' * 4}    case = create_case(case, recursion_idx=3)\n""")
             self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4)
 
+    @property
     @abstractmethod
-    def _get_conclusion_type_hint(self) -> str:
+    def conclusion_type_hint(self) -> str:
         """
         :return: The type hint of the conclusion of the rdr as a string.
         """
@@ -254,6 +256,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         if isinstance(self.start_rule.conclusion, CallableExpression):
             return self.start_rule.conclusion.conclusion_type
         else:
+            if isinstance(self.start_rule.conclusion, set):
+                return type(list(self.start_rule.conclusion)[0])
             return type(self.start_rule.conclusion)
 
 
@@ -316,7 +320,8 @@ class SingleClassRDR(RDRWithCodeWriter):
             if rule.alternative:
                 self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent)
 
-    def _get_conclusion_type_hint(self) -> str:
+    @property
+    def conclusion_type_hint(self) -> str:
         return self.conclusion_type.__name__
 
     def _to_json(self) -> Dict[str, Any]:
@@ -427,6 +432,8 @@ class MultiClassRDR(RDRWithCodeWriter):
                                            file, parent_indent: str = ""):
         """
         Write the rules as source code to a file.
+
+        :
         """
         if rule == self.start_rule:
             file.write(f"{parent_indent}conclusions = set()\n")
@@ -435,14 +442,15 @@ class MultiClassRDR(RDRWithCodeWriter):
             conclusion_indent = parent_indent
             if hasattr(rule, "refinement") and rule.refinement:
                 self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ")
-                conclusion_indent = parent_indent + " "*4
+                conclusion_indent = parent_indent + " " * 4
                 file.write(f"{conclusion_indent}else:\n")
             file.write(rule.write_conclusion_as_source_code(conclusion_indent))
 
             if rule.alternative:
                 self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent)
 
-    def _get_conclusion_type_hint(self) -> str:
+    @property
+    def conclusion_type_hint(self) -> str:
         return f"Set[{self.conclusion_type.__name__}]"
 
     def _get_imports(self) -> str:
@@ -654,7 +662,7 @@ class GeneralRDR(RippleDownRules):
     @start_rule.setter
     def start_rule(self, value: Union[SingleClassRDR, MultiClassRDR]):
         if value:
-            self.start_rules_dict[type(value.start_rule.conclusion)] = value
+            self.start_rules_dict[value.conclusion_type] = value
 
     @property
     def start_rules(self) -> List[Union[SingleClassRule, MultiClassTopRule]]:
@@ -668,12 +676,25 @@ class GeneralRDR(RippleDownRules):
         :param case: The case to classify.
         :return: The categories that the case belongs to.
         """
+        return self._classify(self.start_rules_dict, case)
+
+    @staticmethod
+    def _classify(classifiers_dict: Dict[Type, Union[ModuleType, RippleDownRules]],
+                  case: Union[Case, SQLTable]) -> Optional[List[Any]]:
+        """
+        Classify a case by going through all classifiers and adding the categories that are classified,
+         and then restarting the classification until no more categories can be added.
+
+        :param classifiers_dict: A dictionary mapping conclusion types to the classifiers that produce them.
+        :param case: The case to classify.
+        :return: The categories that the case belongs to.
+        """
         conclusions = []
         case_cp = copy_case(case)
         while True:
             added_attributes = False
-            for cat_type, rdr in self.start_rules_dict.items():
-                if self.case_has_conclusion(case_cp, cat_type):
+            for cat_type, rdr in classifiers_dict.items():
+                if GeneralRDR.case_has_conclusion(case_cp, cat_type):
                     continue
                 pred_atts = rdr.classify(case_cp)
                 if pred_atts:
@@ -733,7 +754,7 @@ class GeneralRDR(RippleDownRules):
                         conclusions = rdr.classify(case_cp)
                     else:
                         conclusions = self.start_rules_dict[target_type].fit_case(case_query_cp,
-                                                                                   expert, **kwargs)
+                                                                                  expert, **kwargs)
                     self.update_case(case_cp, conclusions, rdr_type)
 
         return self.classify(case)
@@ -815,3 +836,66 @@ class GeneralRDR(RippleDownRules):
             k = get_type_from_string(k)
             start_rules_dict[k] = get_type_from_string(v['_type']).from_json(v)
         return cls(start_rules_dict)
+
+    def write_to_python_file(self, file_path: str):
+        """
+        Write the tree of rules as source code to a file.
+
+        :param file_path: The path to the file to write the source code to.
+        """
+        for rdr in self.start_rules_dict.values():
+            rdr.write_to_python_file(file_path)
+        func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
+        with open(file_path + f"/{self.generated_python_file_name}.py", "w") as f:
+            f.write(self._get_imports(file_path) + "\n\n")
+            f.write("classifiers_dict = dict()\n")
+            for t, rdr in self.start_rules_dict.items():
+                f.write(f"classifiers_dict[{t.__name__}] = {t.__name__.lower()}_classifier\n")
+            f.write("\n\n")
+            f.write(func_def)
+            f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
+                    f"{' ' * 4}    case = create_case(case, recursion_idx=3)\n""")
+            f.write(f"{' ' * 4}return GeneralRDR._classify(classifiers_dict, case)\n")
+
+    @property
+    def case_type(self) -> Type:
+        """
+        :return: The type of the case (input) to the RDR classifier.
+        """
+        if isinstance(self.start_rule.corner_case, Case):
+            return self.start_rule.corner_case._type
+        else:
+            return type(self.start_rule.corner_case)
+
+    def get_rdr_classifier_from_python_file(self, file_path: str):
+        """
+        :param file_path: The path to the file that contains the RDR classifier function.
+        :return: The module that contains the rdr classifier function.
+        """
+        return importlib.import_module(f"{file_path.strip('./')}.{self.generated_python_file_name}").classify
+
+    @property
+    def generated_python_file_name(self) -> str:
+        return f"{self.case_type.__name__.lower()}_grdr"
+
+    @property
+    def conclusion_type_hint(self) -> str:
+        return f"List[Union[{', '.join([rdr.conclusion_type_hint for rdr in self.start_rules_dict.values()])}]]"
+
+    def _get_imports(self, file_path: str) -> str:
+        imports = ""
+        # add type hints
+        imports += f"from typing_extensions import List, Union, Set\n"
+        # import rdr type
+        imports += f"from ripple_down_rules.rdr import GeneralRDR\n"
+        # add case type
+        imports += f"from ripple_down_rules.datastructures import Case, create_case\n"
+        imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
+        # add conclusion type imports
+        for conclusion_type in self.start_rules_dict.keys():
+            imports += f"from {conclusion_type.__module__} import {conclusion_type.__name__}\n"
+        # add rdr python generated functions.
+        for conclusion_type, rdr in self.start_rules_dict.items():
+            imports += (f"from {file_path.strip('./')}"
+                        f" import {rdr.generated_python_file_name} as {conclusion_type.__name__.lower()}_classifier\n")
+        return imports

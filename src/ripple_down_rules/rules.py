@@ -334,7 +334,11 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         return loaded_rule
 
     def _conclusion_source_code_clause(self, conclusion: Any, parent_indent: str = "") -> str:
-        statement = f"{parent_indent}{' ' * 4}conclusions.add({conclusion})\n"
+        if is_iterable(conclusion):
+            conclusion_str = "{" + ", ".join([str(c) for c in conclusion]) + "}"
+        else:
+            conclusion_str = "{" + str(conclusion) + "}"
+        statement = f"{parent_indent}{' ' * 4}conclusions.update({conclusion_str})\n"
         if self.alternative is None:
             statement += f"{parent_indent}return conclusions\n"
         return statement

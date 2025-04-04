@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ripple_down_rules"
-version = "0.0.14"
+version = "0.0.15"
 description = "Implements the various versions of Ripple Down Rules (RDR) for knowledge representation and reasoning."
 readme = "README.md"
 authors = [{ name = "Abdelrhman Bassiouny", email = "abassiou@uni-bremen.de" }]
