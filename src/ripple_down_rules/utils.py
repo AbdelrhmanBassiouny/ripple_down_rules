@@ -25,6 +25,52 @@ if TYPE_CHECKING:
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
+def get_method_args_as_dict(method: Callable, *args, **kwargs) -> Dict[str, Any]:
+    """
+    Get the arguments of a method as a dictionary.
+
+    :param method: The method to get the arguments from.
+    :param args: The positional arguments.
+    :param kwargs: The keyword arguments.
+    :return: A dictionary of the arguments.
+    """
+    func_arg_names = method.__code__.co_varnames
+    func_arg_values = args + tuple(kwargs.values())
+    return dict(zip(func_arg_names, func_arg_values))
+
+
+def get_method_name(method: Callable) -> str:
+    """
+    Get the name of a method.
+
+    :param method: The method to get the name of.
+    :return: The name of the method.
+    """
+    return method.__name__ if hasattr(method, "__name__") else str(method)
+
+
+def get_method_class_name_if_exists(method: Callable) -> Optional[str]:
+    """
+    Get the class name of a method if it has one.
+
+    :param method: The method to get the class name of.
+    :return: The class name of the method.
+    """
+    if hasattr(method, "__self__") and hasattr(method.__self__, "__class__"):
+        return method.__self__.__class__.__name__
+    return None
+
+
+def get_method_file_name(method: Callable) -> str:
+    """
+    Get the file name of a method.
+
+    :param method: The method to get the file name of.
+    :return: The file name of the method.
+    """
+    return method.__code__.co_filename
+
+
 def flatten_list(a: List):
     a_flattened = []
     for c in a:
@@ -86,7 +132,7 @@ def recursive_subclasses(cls):
 
 class SubclassJSONSerializer:
     """
-    Copied from: https://github.com/tomsch420/random-events/blob/master/src/random_events/utils.py#L6C1-L21C101
+    Originally from: https://github.com/tomsch420/random-events/blob/master/src/random_events/utils.py#L6C1-L21C101
     Class for automatic (de)serialization of subclasses.
     Classes that inherit from this class can be serialized and deserialized automatically by calling this classes
     'from_json' method.
