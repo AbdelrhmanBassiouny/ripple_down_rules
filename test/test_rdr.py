@@ -1,10 +1,18 @@
+import _ast
 import importlib
 import os
+from _ast import AST
+from enum import Enum
 from unittest import TestCase, skip
 
+from probabilistic_model.learning.jpt.variables import infer_variables_from_dataframe
+from probabilistic_model.probabilistic_circuit.nx.helper import fully_factorized
+from random_events.product_algebra import SimpleEvent
+from random_events.set import Set
+from random_events.variable import Symbolic
 from typing_extensions import List
 
-from ripple_down_rules.datasets import Habitat, Species
+from ripple_down_rules.datasets import Habitat, Species, get_dataset
 from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import Case, MCRDRMode, \
     Case, CaseAttribute, Category, CaseQuery
@@ -46,6 +54,63 @@ class TestRDR(TestCase):
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
+
+    def test_random_events(self):
+        scrdr = get_fit_scrdr(self.all_cases, self.targets)
+
+        # fetch dataset
+        zoo = get_dataset(111, self.cache_file)
+
+        # data (as pandas dataframes)
+        features = zoo['features']
+        targets = zoo['targets']
+
+        print("=" * 80)
+        for f in features.columns:
+            features.loc[:, (f,)] = features[f].apply(lambda x: str(bool(x)))
+        category_names = ["mammal", "bird", "reptile", "fish", "amphibian", "insect", "molusc"]
+        targets.loc[:, ("type",)] = targets["type"].apply(lambda x: category_names[x - 1])
+        target_variable = Symbolic("type", Set.from_iterable(Species))
+        variables = infer_variables_from_dataframe(features) + [target_variable]
+        name_to_variable = {v.name: v for v in variables}
+
+        kb = SimpleEvent({v: v.domain for v in variables}).as_composite_set()
+        path_condition = kb.__deepcopy__()
+        for node in (scrdr.start_rule,) + scrdr.start_rule.descendants:
+            left = node.conditions
+            left_event = SimpleEvent()
+            for name, operator, value in left.visitor.compares:
+                if isinstance(operator, _ast.Eq):
+                    variable: Symbolic = name_to_variable[name.id]
+                    left_event[variable] = variable.make_value(value.value)
+
+            # restate left => right as !left or right
+
+            # create ~left
+            left_event = left_event.as_composite_set()
+            not_left = ~left_event
+            not_left.fill_missing_variables(variables)
+
+            left_event = path_condition & left_event
+
+            # create right
+            right_event = SimpleEvent()
+            right = node.conclusion
+            variable: Symbolic = name_to_variable["type"]
+            right_event[variable] = variable.make_value([right] if isinstance(right, (str, Enum)) else right)
+            right_event = right_event.as_composite_set()
+            right_event.fill_missing_variables(variables)
+
+            rule = right_event | ~left_event
+            kb = kb & rule
+            path_condition = path_condition & not_left
+
+        print(*kb.simple_sets, sep="\n")
+        model = fully_factorized(variables, means={}, variances={})
+        print(model)
+        cooler_model, p = model.conditional(kb)
+        print(cooler_model)
+        print(p)
 
     def test_fit_scrdr(self):
         use_loaded_answers = True
