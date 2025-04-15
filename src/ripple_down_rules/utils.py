@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import os
 from abc import abstractmethod
 from collections import UserDict
 from copy import deepcopy
@@ -23,6 +24,21 @@ if TYPE_CHECKING:
     from .datastructures import Case
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def get_func_rdr_model_path(func: Callable, model_dir: str) -> str:
+    """
+    :param func: The function to get the model path for.
+    :param model_dir: The directory to save the model to.
+    :return: The path to the model file.
+    """
+    func_name = get_method_name(func)
+    func_class_name = get_method_class_name_if_exists(func)
+    func_file_name = get_method_file_name(func)
+    model_name = func_file_name
+    model_name += f"_{func_class_name}" if func_class_name else ""
+    model_name += f"_{func_name}"
+    return os.path.join(model_dir, f"{model_name}.json")
 
 
 def get_method_args_as_dict(method: Callable, *args, **kwargs) -> Dict[str, Any]:

@@ -15,7 +15,7 @@ from ripple_down_rules.experts import Expert, Human
 
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import get_method_args_as_dict, get_method_name, get_method_class_name_if_exists, \
-    get_method_file_name
+    get_method_file_name, get_func_rdr_model_path
 
 
 def single_class_rdr(
@@ -30,13 +30,7 @@ def single_class_rdr(
     expert = expert if expert else Human(session=session)
 
     def decorator(func: Callable) -> Callable:
-        func_name = get_method_name(func)
-        func_class_name = get_method_class_name_if_exists(func)
-        func_file_name = get_method_file_name(func)
-        model_name = func_file_name
-        model_name += f"_{func_class_name}" if func_class_name else ""
-        model_name += f"_{func_name}"
-        scrdr_model_path = os.path.join(model_dir, f"{model_name}.json")
+        scrdr_model_path = get_func_rdr_model_path(func, model_dir)
         if os.path.exists(scrdr_model_path):
             scrdr = SingleClassRDR.load(scrdr_model_path)
             scrdr.session = session
