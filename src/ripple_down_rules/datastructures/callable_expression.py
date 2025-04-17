@@ -119,7 +119,7 @@ class CallableExpression(SubclassJSONSerializer):
         self.visitor.visit(expression_tree)
         variables_str = self.visitor.variables
         attributes_str = get_attributes_str(self.visitor)
-        for v in variables_str | attributes_str:
+        for v in variables_str:
             if not v.startswith("case."):
                 self.parsed_user_input = self.parsed_user_input.replace(v, f"case.{v}")
         self.expression_tree = parse_string_to_expression(self.parsed_user_input)
