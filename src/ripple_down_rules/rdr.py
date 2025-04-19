@@ -91,11 +91,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             if not targets:
                 targets = [None] * len(cases)
             for case_query in case_queries:
-                case = case_query.case
                 target = case_query.target
-                if not target:
-                    conclusions = self.classify(case) if self.start_rule and self.start_rule.conditions else []
-                    target = expert.ask_for_conclusion(case_query, conclusions)
                 pred_cat = self.fit_case(case_query, expert=expert, **kwargs_for_fit_case)
                 match = self.is_matching(pred_cat, target)
                 if not match:
@@ -279,15 +275,16 @@ class SingleClassRDR(RDRWithCodeWriter):
             target = expert.ask_for_conclusion(case_query)
         else:
             target = case_query.target
-
+        target_name = case_query.attribute_name if case_query.attribute_name else type(target).__name__
+        target_dict = {target_name: target}
         if not self.start_rule:
-            conditions = expert.ask_for_conditions(case, [target])
+            conditions = expert.ask_for_conditions(case, target_dict)
             self.start_rule = SingleClassRule(conditions, target, corner_case=case)
 
         pred = self.evaluate(case)
 
         if pred.conclusion != target:
-            conditions = expert.ask_for_conditions(case, [target], pred)
+            conditions = expert.ask_for_conditions(case, target_dict, pred)
             pred.fit_rule(case, target, conditions=conditions)
 
         return self.classify(case)
@@ -393,16 +390,20 @@ class MultiClassRDR(RDRWithCodeWriter):
             targets = [expert.ask_for_conclusion(case_query)]
         else:
             targets = [case_query.target]
+        target_names = [case_query.attribute_name] if case_query.attribute_name else \
+            [type(target).__name__ for target in targets]
+        targets = dict(zip(target_names, targets))
         self.expert_accepted_conclusions = []
         user_conclusions = []
-        for target in targets:
+        for target_name, target_value in targets.items():
+            target = {target_name: target_value}
             self.update_start_rule(case, target, expert)
             self.conclusions = []
             self.stop_rule_conditions = None
             evaluated_rule = self.start_rule
             while evaluated_rule:
                 next_rule = evaluated_rule(case)
-                good_conclusions = targets + user_conclusions + self.expert_accepted_conclusions
+                good_conclusions = list(targets.values()) + user_conclusions + self.expert_accepted_conclusions
 
                 if evaluated_rule.fired:
                     if target and evaluated_rule.conclusion not in good_conclusions:
@@ -415,7 +416,7 @@ class MultiClassRDR(RDRWithCodeWriter):
                         self.add_conclusion(evaluated_rule)
 
                 if not next_rule:
-                    if not make_set(target).intersection(make_set(self.conclusions)):
+                    if not make_set(list(target.values())[0]).intersection(make_set(self.conclusions)):
                         # Nothing fired and there is a target that should have been in the conclusions
                         self.add_rule_for_case(case, target, expert)
                         # Have to check all rules again to make sure only this new rule fires
@@ -458,7 +459,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         imports += "from typing_extensions import Set\n"
         return imports
 
-    def update_start_rule(self, case: Union[Case, SQLTable], target: Any, expert: Expert):
+    def update_start_rule(self, case: Union[Case, SQLTable], target: Dict[str, Any], expert: Expert):
         """
         Update the starting rule of the classifier.
 
@@ -469,7 +470,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         if not self.start_rule.conditions:
             conditions = expert.ask_for_conditions(case, target)
             self.start_rule.conditions = conditions
-            self.start_rule.conclusion = target
+            self.start_rule.conclusion = list(target.values())[0]
             self.start_rule.corner_case = case
 
     @property
@@ -482,7 +483,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         else:
             return self.start_rule.furthest_alternative[-1]
 
-    def stop_wrong_conclusion_else_add_it(self, case: Union[Case, SQLTable], target: Any, expert: Expert,
+    def stop_wrong_conclusion_else_add_it(self, case: Union[Case, SQLTable], target: Dict[str, Any], expert: Expert,
                                           evaluated_rule: MultiClassTopRule,
                                           add_extra_conclusions: bool):
         """
@@ -494,7 +495,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         elif not self.conclusion_is_correct(case, target, expert, evaluated_rule, add_extra_conclusions):
             self.stop_conclusion(case, target, expert, evaluated_rule)
 
-    def stop_conclusion(self, case: Union[Case, SQLTable], target: Any,
+    def stop_conclusion(self, case: Union[Case, SQLTable], target: Dict[str, Any],
                         expert: Expert, evaluated_rule: MultiClassTopRule):
         """
         Stop a conclusion by adding a stopping rule.
@@ -510,10 +511,10 @@ class MultiClassRDR(RDRWithCodeWriter):
             self.stop_rule_conditions = conditions
         if self.mode == MCRDRMode.StopPlusRuleCombined:
             new_top_rule_conditions = conditions.combine_with(evaluated_rule.conditions)
-            self.add_top_rule(new_top_rule_conditions, target, case)
+            self.add_top_rule(new_top_rule_conditions, list(target.values())[0], case)
 
     @staticmethod
-    def is_conflicting_with_target(conclusion: Any, target: Any) -> bool:
+    def is_conflicting_with_target(conclusion: Any, target: Dict[str, Any]) -> bool:
         """
         Check if the conclusion is conflicting with the target category.
 
@@ -524,10 +525,10 @@ class MultiClassRDR(RDRWithCodeWriter):
         if hasattr(conclusion, "mutually_exclusive") and conclusion.mutually_exclusive:
             return True
         else:
-            return not make_set(conclusion).issubset(make_set(target))
+            return not make_set(conclusion).issubset(make_set(target.values()))
 
     @staticmethod
-    def is_same_category_type(conclusion: Any, target: Any) -> bool:
+    def is_same_category_type(conclusion: Any, target: Dict[str, Any]) -> bool:
         """
         Check if the conclusion is of the same class as the target category.
 
@@ -535,9 +536,11 @@ class MultiClassRDR(RDRWithCodeWriter):
         :param target: The target category to compare the conclusion with.
         :return: Whether the conclusion is of the same class as the target category but has a different value.
         """
+        target = list(target.values())[0]
         return conclusion.__class__ == target.__class__ and target.__class__ != CaseAttribute
 
-    def conclusion_is_correct(self, case: Union[Case, SQLTable], target: Any, expert: Expert, evaluated_rule: Rule,
+    def conclusion_is_correct(self, case: Union[Case, SQLTable], target: Dict[str, Any],
+                              expert: Expert, evaluated_rule: Rule,
                               add_extra_conclusions: bool) -> bool:
         """
         Ask the expert if the conclusion is correct, and add it to the conclusions if it is.
@@ -549,7 +552,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         :param add_extra_conclusions: Whether adding extra conclusions after classification is allowed.
         :return: Whether the conclusion is correct or not.
         """
-        conclusions = list(OrderedSet(self.conclusions))
+        conclusions = {list(target.keys())[0]: c for c in OrderedSet(self.conclusions)}
         if (add_extra_conclusions and expert.ask_if_conclusion_is_correct(case, evaluated_rule.conclusion,
                                                                           targets=target,
                                                                           current_conclusions=conclusions)):
@@ -558,7 +561,7 @@ class MultiClassRDR(RDRWithCodeWriter):
             return True
         return False
 
-    def add_rule_for_case(self, case: Union[Case, SQLTable], target: Any, expert: Expert):
+    def add_rule_for_case(self, case: Union[Case, SQLTable], target: Dict[str, Any], expert: Expert):
         """
         Add a rule for a case that has not been classified with any conclusion.
         """
@@ -567,7 +570,7 @@ class MultiClassRDR(RDRWithCodeWriter):
             self.stop_rule_conditions = None
         else:
             conditions = expert.ask_for_conditions(case, target)
-        self.add_top_rule(conditions, target, case)
+        self.add_top_rule(conditions, list(target.values())[0], case)
 
     def ask_expert_for_extra_conclusions(self, expert: Expert, case: Union[Case, SQLTable]) -> List[Any]:
         """
@@ -733,7 +736,8 @@ class GeneralRDR(RippleDownRules):
         for case_query in case_queries:
             target = case_query.target
             if not target:
-                target = expert.ask_for_conclusion(case_query)
+                conclusions = self.classify(case) if self.start_rule and self.start_rule.conditions else []
+                target = expert.ask_for_conclusion(case_query, conclusions)
             case_query_cp = CaseQuery(case_cp, attribute_name=case_query.attribute_name, target=target)
             if is_iterable(target) and not isinstance(target, CaseAttribute):
                 target_type = type(make_list(target)[0])

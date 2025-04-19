@@ -66,13 +66,13 @@ class RelationalRDRTestCase(TestCase):
         cls.part_e = Part(name="E")
         cls.part_f = Part(name="F")
         robot = Robot("pr2", parts=[cls.part_a, cls.part_b, cls.part_c, cls.part_d])
-        cls.part_a.contained_objects = {cls.part_b, cls.part_c}
-        cls.part_c.contained_objects = {cls.part_d}
-        cls.part_d.contained_objects = {cls.part_e}
-        cls.part_e.contained_objects = {cls.part_f}
+        cls.part_a.contained_objects = [cls.part_b, cls.part_c]
+        cls.part_c.contained_objects = [cls.part_d]
+        cls.part_d.contained_objects = [cls.part_e]
+        cls.part_e.contained_objects = [cls.part_f]
         cls.robot: Robot = robot
         cls.target = CaseQuery(robot, robot.contained_objects,
-                               {cls.part_b, cls.part_c, cls.part_d, cls.part_e})
+                               [cls.part_b, cls.part_c, cls.part_d, cls.part_e])
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -102,7 +102,7 @@ class RelationalRDRTestCase(TestCase):
 
     def test_parse_relational_conclusions(self):
         user_input = "case.parts.contained_objects"
-        conclusion = CallableExpression(user_input, set)
+        conclusion = CallableExpression(user_input, list)
         print(conclusion)
         print(conclusion(self.robot))
         assert conclusion(self.robot) == self.target.target

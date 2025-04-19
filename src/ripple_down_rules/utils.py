@@ -364,7 +364,7 @@ def table_rows_as_str(row_dict: Dict[str, Any], columns_per_row: int = 9):
     values = [list(map(lambda i: i[1], row)) for row in all_items]
     all_table_rows = []
     for row_keys, row_values in zip(keys, values):
-        table = tabulate([row_values], headers=row_keys, tablefmt='plain')
+        table = tabulate([row_values], headers=row_keys, tablefmt='plain', maxcolwidths=[20] * len(row_keys))
         all_table_rows.append(table)
     return "\n".join(all_table_rows)
 

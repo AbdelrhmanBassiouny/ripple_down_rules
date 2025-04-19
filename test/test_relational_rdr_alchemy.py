@@ -129,7 +129,7 @@ class RelationalRDRTestCase(TestCase):
         cls.containments.append(ContainsObject(left=cls.part_e, right=cls.part_f))
         cls.robot: PhysicalObject = robot
         cls.target = CaseQuery(robot, robot.contained_objects,
-                               {cls.part_b, cls.part_c, cls.part_d, cls.part_e})
+                               [cls.part_b, cls.part_c, cls.part_d, cls.part_e])
 
     def test_setup(self):
         assert self.robot.parts == [self.part_a, self.part_b, self.part_c, self.part_d]
@@ -168,7 +168,7 @@ class RelationalRDRTestCase(TestCase):
 
     def test_parse_relational_conclusions(self):
         user_input = "case.parts.contained_objects"
-        conclusion = CallableExpression(user_input, set)
+        conclusion = CallableExpression(user_input, list)
         print(conclusion)
         print(conclusion(self.robot))
         assert conclusion(self.robot) == self.target.target

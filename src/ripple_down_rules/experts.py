@@ -125,14 +125,14 @@ class Human(Expert):
             self.all_expert_answers = json.load(f)
 
     def ask_for_conditions(self, case: Case,
-                           targets: Union[List[CaseAttribute], List[SQLColumn]],
+                           targets: Dict[str, Any],
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         if not self.use_loaded_answers:
             show_current_and_corner_cases(case, targets, last_evaluated_rule=last_evaluated_rule)
         return self._get_conditions(case, targets)
 
-    def _get_conditions(self, case: Case, targets: List[CaseAttribute]) \
+    def _get_conditions(self, case: Case, targets: Dict[str, Any]) \
             -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
@@ -142,10 +142,8 @@ class Human(Expert):
         :param targets: The target categories to compare the case with.
         :return: The differentiating features as new rule conditions.
         """
-        targets = targets if isinstance(targets, list) else [targets]
         condition = None
-        for target in targets:
-            target_name = target.__class__.__name__
+        for target_name, target in targets.items():
             user_input = None
             if self.use_loaded_answers:
                 user_input = self.all_expert_answers.pop(0)
@@ -172,7 +170,7 @@ class Human(Expert):
             category = self.ask_for_conclusion(CaseQuery(case), current_conclusions)
             if not category:
                 break
-            extra_conclusions[category] = self._get_conditions(case, category)
+            extra_conclusions[category] = self._get_conditions(case, {category.__class__.__name__: category})
         return extra_conclusions
 
     def ask_for_conclusion(self, case_query: CaseQuery,

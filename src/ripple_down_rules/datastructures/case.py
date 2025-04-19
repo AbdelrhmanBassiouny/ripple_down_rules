@@ -11,7 +11,7 @@ from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColum
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING
 
 from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, SubclassJSONSerializer, \
-    get_full_class_name, get_type_from_string
+    get_full_class_name, get_type_from_string, make_list
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
@@ -53,13 +53,14 @@ class Case(UserDict, SubclassJSONSerializer):
     def __setitem__(self, name: str, value: Any):
         name = name.lower()
         if name in self:
-            if isinstance(self[name], set):
-                self[name].update(make_set(value))
-            elif isinstance(value, set):
-                value.update(make_set(self[name]))
-                super().__setitem__(name, value)
+            if isinstance(self[name], list):
+                self[name].extend(make_list(value))
+            elif isinstance(value, list):
+                new_list = make_list(self[name])
+                new_list.extend(make_list(value))
+                super().__setitem__(name, new_list)
             else:
-                super().__setitem__(name, make_set([self[name], value]))
+                super().__setitem__(name, [self[name], value])
         else:
             super().__setitem__(name, value)
         setattr(self, name, self[name])
@@ -122,7 +123,7 @@ class CaseAttributeValue(SubclassJSONSerializer):
         return cls(id=data["id"], value=data["value"])
 
 
-class CaseAttribute(set, SubclassJSONSerializer):
+class CaseAttribute(list, SubclassJSONSerializer):
     nullable: bool = True
     """
     A boolean indicating whether the case attribute can be None or not.
@@ -132,33 +133,9 @@ class CaseAttribute(set, SubclassJSONSerializer):
     A boolean indicating whether the case attribute is mutually exclusive or not. (i.e. can only have one value)
     """
 
-    def __init__(self, values: Set[CaseAttributeValue]):
-        """
-        Create a new case attribute.
-
-        :param values: The values of the case attribute.
-        """
-        values = self._type_cast_values_to_set_of_case_attribute_values(values)
-        self.id_value_map: Dict[Hashable, Union[CaseAttributeValue, Set[CaseAttributeValue]]] = {id(v): v for v in values}
-        super().__init__([v.value for v in values])
-
-    @staticmethod
-    def _type_cast_values_to_set_of_case_attribute_values(values: Set[Any]) -> Set[CaseAttributeValue]:
-        """
-        Type cast values to a set of case attribute values.
-
-        :param values: The values to type cast.
-        """
-        values = make_set(values)
-        if len(values) > 0 and not isinstance(next(iter(values)), CaseAttributeValue):
-            values = {CaseAttributeValue(id(values), v) for v in values}
-        return values
-
     @classmethod
     def from_obj(cls, values: Set[Any], row_obj: Optional[Any] = None) -> CaseAttribute:
-        id_ = id(row_obj) if row_obj else id(values)
-        values = make_set(values)
-        return cls({CaseAttributeValue(id_, v) for v in values})
+        return cls(make_list(values))
 
     @property
     def as_dict(self) -> Dict[str, Any]:
@@ -176,28 +153,28 @@ class CaseAttribute(set, SubclassJSONSerializer):
         :param condition: The condition to filter by.
         :return: The filtered column.
         """
-        return self.__class__({v for v in self if condition(v)})
+        return self.__class__([v for v in self if condition(v)])
 
     def __eq__(self, other):
-        if not isinstance(other, set):
-            return super().__eq__(make_set(other))
+        if not isinstance(other, list):
+            return super().__eq__(make_list(other))
         return super().__eq__(other)
 
     def __hash__(self):
-        return hash(tuple(self.id_value_map.values()))
+        return hash(id(self))
 
     def __str__(self):
         if len(self) == 0:
             return "None"
-        return str({v for v in self}) if len(self) > 1 else str(next(iter(self)))
+        return str([v for v in self]) if len(self) > 1 else str(next(iter(self)))
 
     def _to_json(self) -> Dict[str, Any]:
-        return {id_: v.to_json() if isinstance(v, SubclassJSONSerializer) else v
-                for id_, v in self.id_value_map.items()}
+        return {str(i): v.to_json() if isinstance(v, SubclassJSONSerializer) else v
+                for i, v in enumerate(self)}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> CaseAttribute:
-        return cls({CaseAttributeValue.from_json(v) for id_, v in data.items()})
+        return cls([SubclassJSONSerializer.from_json(v) for _, v in data.items()])
 
 
 def create_cases_from_dataframe(df: DataFrame) -> List[Case]:
@@ -234,7 +211,7 @@ def create_case(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
     if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
             or (obj.__class__ in [MetaData, registry])):
         return Case(_id=id(obj), _type=obj.__class__,
-                    **{obj_name or obj.__class__.__name__: make_set(obj) if parent_is_iterable else obj})
+                    **{obj_name or obj.__class__.__name__: make_list(obj) if parent_is_iterable else obj})
     case = Case(_id=id(obj), _type=obj.__class__)
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
@@ -272,7 +249,7 @@ def create_or_update_case_from_attribute(attr_value: Any, name: str, obj: Any, o
                                                                max_recursion_idx=max_recursion_idx)
         case[obj_name] = column
     else:
-        case[obj_name] = make_set(attr_value) if parent_is_iterable else attr_value
+        case[obj_name] = make_list(attr_value) if parent_is_iterable else attr_value
     return case
 
 
@@ -304,8 +281,8 @@ def create_case_attribute_from_iterable_attribute(attr_value: Any, name: str, ob
     return case_attr
 
 
-def show_current_and_corner_cases(case: Any, targets: Optional[Union[List[CaseAttribute], List[SQLColumn]]] = None,
-                                  current_conclusions: Optional[Union[List[CaseAttribute], List[SQLColumn]]] = None,
+def show_current_and_corner_cases(case: Any, targets: Optional[Dict[str, Any]] = None,
+                                  current_conclusions: Optional[Dict[str, Any]] = None,
                                   last_evaluated_rule: Optional[Rule] = None) -> None:
     """
     Show the data of the new case and if last evaluated rule exists also show that of the corner case.
@@ -316,12 +293,8 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Union[List[CaseAt
     :param last_evaluated_rule: The last evaluated rule in the RDR.
     """
     corner_case = None
-    if targets:
-        targets = targets if isinstance(targets, list) else [targets]
-    if current_conclusions:
-        current_conclusions = current_conclusions if isinstance(current_conclusions, list) else [current_conclusions]
-    targets = {f"target_{t.__class__.__name__}": t for t in targets} if targets else {}
-    current_conclusions = {c.__class__.__name__: c for c in current_conclusions} if current_conclusions else {}
+    targets = {f"target_{name}": value for name, value in targets.items()} if targets else {}
+    current_conclusions = {name: value for name, value in current_conclusions.items} if current_conclusions else {}
     if last_evaluated_rule:
         action = "Refinement" if last_evaluated_rule.fired else "Alternative"
         print(f"{action} needed for rule: {last_evaluated_rule}\n")
