@@ -2,12 +2,67 @@ import ast
 import logging
 from _ast import AST
 
+from IPython.core.interactiveshell import ExecutionInfo
+from IPython.terminal.embed import InteractiveShellEmbed
+from traitlets.config import Config
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
 from typing_extensions import Any, List, Optional, Tuple, Dict, Union, Type
 
 from .datastructures import Case, PromptFor, CallableExpression, create_case, parse_string_to_expression
+from .utils import capture_variable_assignment
+
+
+class IpythonShell:
+    """
+    Create an embedded Ipython shell that can be used to prompt the user for input.
+    """
+    def __init__(self, variable_to_capture: str, scope: Optional[Dict] = None, header: Optional[str] = None):
+        """
+        Initialize the Ipython shell with the given scope and header.
+
+        :param variable_to_capture: The variable to capture from the user input.
+        :param scope: The scope to use for the shell.
+        :param header: The header to display when the shell is started.
+        """
+        self.variable_to_capture: str = variable_to_capture
+        self.scope: Dict = scope or {}
+        self.header: str = header or ">>> Embedded Ipython Shell"
+        self.user_input: Optional[str] = None
+        self.shell: InteractiveShellEmbed = self._init_shell()
+        self._register_hooks()
+
+    def _init_shell(self):
+        """
+        Initialize the Ipython shell with a custom configuration.
+        """
+        cfg = Config()
+        shell = InteractiveShellEmbed(config=cfg, user_ns=self.scope, banner1=self.header)
+        return shell
+
+    def _register_hooks(self):
+        """
+        Register hooks to capture specific events in the Ipython shell.
+        """
+        def capture_variable(exec_info: ExecutionInfo):
+            code = exec_info.raw_cell
+            if self.variable_to_capture not in code:
+                return
+            # use ast to find if the user is assigning a value to the variable "condition"
+            assignment = capture_variable_assignment(code, self.variable_to_capture)
+            if assignment:
+                # if the user is assigning a value to the variable "condition", update the raw_condition
+                self.user_input = assignment
+                print(f"[Captured {self.variable_to_capture}]:\n{self.user_input}")
+
+        self.shell.events.register('pre_run_cell', capture_variable)
+
+    def run(self):
+        """
+        Run the embedded shell.
+        """
+        self.shell()
 
 
 def prompt_user_for_expression(case: Union[Case, SQLTable], prompt_for: PromptFor, target_name: str,
@@ -24,7 +79,8 @@ def prompt_user_for_expression(case: Union[Case, SQLTable], prompt_for: PromptFo
     """
     while True:
         user_input, expression_tree = prompt_user_about_case(case, prompt_for, target_name)
-        callable_expression = CallableExpression(user_input, output_type, expression_tree=expression_tree, session=session)
+        callable_expression = CallableExpression(user_input, output_type, expression_tree=expression_tree,
+                                                 session=session)
         try:
             callable_expression(case)
             break
@@ -45,8 +101,8 @@ def prompt_user_about_case(case: Union[Case, SQLTable], prompt_for: PromptFor, t
     :return: The user input, and the executable expression that was parsed from the user input.
     """
     prompt_str = f"Give {prompt_for} for {case.__class__.__name__}.{target_name}"
-    session = get_prompt_session_for_obj(case)
-    user_input, expression_tree = prompt_user_input_and_parse_to_expression(prompt_str, session)
+    shell = IpythonShell(prompt_for.value, scope={'case': case}, header=prompt_str)
+    user_input, expression_tree = prompt_user_input_and_parse_to_expression(shell=shell)
     return user_input, expression_tree
 
 
@@ -64,21 +120,20 @@ def get_completions(obj: Any) -> List[str]:
     return completions
 
 
-def prompt_user_input_and_parse_to_expression(prompt: Optional[str] = None, session: Optional[PromptSession] = None,
+def prompt_user_input_and_parse_to_expression(shell: Optional[IpythonShell] = None,
                                               user_input: Optional[str] = None) -> Tuple[str, ast.AST]:
     """
     Prompt the user for input.
 
-    :param prompt: The prompt to display to the user.
-    :param session: The prompt session to use.
+    :param shell: The Ipython shell to use for prompting the user.
     :param user_input: The user input to use. If given, the user input will be used instead of prompting the user.
     :return: The user input and the AST tree.
     """
     while True:
-        if not user_input:
-            user_input = session.prompt(f"\n{prompt} >>> ")
-        if user_input.lower() in ['exit', 'quit', '']:
-            break
+        if user_input is None:
+            shell = IpythonShell() if shell is None else shell
+            shell.run()
+            user_input = shell.user_input
         try:
             return user_input, parse_string_to_expression(user_input)
         except Exception as e:

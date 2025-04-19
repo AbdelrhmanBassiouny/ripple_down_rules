@@ -160,14 +160,14 @@ class RelationalRDRTestCase(TestCase):
             expert.save_answers(file)
 
     def test_parse_relational_conditions(self):
-        user_input = "parts is not None and len(parts) > 0"
+        user_input = "case.parts is not None and len(case.parts) > 0"
         conditions = CallableExpression(user_input, bool)
         print(conditions)
         print(conditions(self.robot))
         assert conditions(self.robot) == (self.robot.parts is not None and len(self.robot.parts) > 0)
 
     def test_parse_relational_conclusions(self):
-        user_input = "parts.contained_objects"
+        user_input = "case.parts.contained_objects"
         conclusion = CallableExpression(user_input, set)
         print(conclusion)
         print(conclusion(self.robot))

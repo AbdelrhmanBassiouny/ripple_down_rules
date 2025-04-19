@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib
 import json
 import logging
@@ -24,6 +25,28 @@ if TYPE_CHECKING:
     from .datastructures import Case
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def capture_variable_assignment(code: str, variable_name: str) -> Optional[str]:
+    """
+    Capture the assignment of a variable in the given code.
+
+    :param code: The code to analyze.
+    :param variable_name: The name of the variable to capture.
+    :return: The assignment statement or None if not found.
+    """
+    tree = ast.parse(code)
+    assignment = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == variable_name:
+                    # now extract the right side of the assignment
+                    assignment = ast.get_source_segment(code, node.value)
+                    break
+        if assignment is not None:
+            break
+    return assignment
 
 
 def get_func_rdr_model_path(func: Callable, model_dir: str) -> str:
