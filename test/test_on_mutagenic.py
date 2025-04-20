@@ -5,7 +5,7 @@ from unittest import skip
 from typing_extensions import List
 
 from ripple_down_rules.datastructures import CaseQuery
-from ripple_down_rules.rdr import SingleClassRDR
+from ripple_down_rules.rdr import SingleClassRDR, GeneralRDR
 
 
 class Element(str, Enum):
@@ -150,9 +150,10 @@ def make_molecule_2() -> Molecule:
     molecule = Molecule(ind1=0, inda=0, logp=2.68, lumo=-1.034, mutagenic=False, atoms=atoms, bonds=bonds)
     return molecule
 
-@skip("needs to run in terminal")
+
+# @skip("needs to run in terminal")
 def test_main():
-    rdr = SingleClassRDR()
+    rdr = GeneralRDR()
 
     molecule_1 = make_molecule_1()
     molecule_2 = make_molecule_2()
@@ -165,11 +166,9 @@ def test_main():
 
     rdr.fit(case_queries)
 
-    r1 = rdr.classify(case_queries[0].case)
-    assert r1
-
-    r2 = rdr.classify(case_queries[1].case)
-    assert not r2
+    for case_query in case_queries:
+        r = rdr.classify(case_query.case)
+        assert r[case_query.attribute_name] == case_query.target
 
 
 if __name__ == '__main__':

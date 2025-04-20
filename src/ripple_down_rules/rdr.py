@@ -80,7 +80,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param kwargs_for_fit_case: The keyword arguments to pass to the fit_case method.
         """
         cases = [case_query.case for case_query in case_queries]
-        targets = [case.target for case in case_queries]
+        targets = [{case_query.attribute_name: case_query.target} for case_query in case_queries]
         if animate_tree:
             plt.ion()
         i = 0
@@ -91,7 +91,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             if not targets:
                 targets = [None] * len(cases)
             for case_query in case_queries:
-                target = case_query.target
+                target = {case_query.attribute_name: case_query.target}
                 pred_cat = self.fit_case(case_query, expert=expert, **kwargs_for_fit_case)
                 match = self.is_matching(pred_cat, target)
                 if not match:
@@ -101,8 +101,9 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                     num_rules = self.start_rule.size
                     self.update_figures()
             i += 1
-            all_predictions = [1 if self.is_matching(self.classify(case), target) else 0
-                               for case, target in zip(cases, targets)]
+            all_predictions = [1 if self.is_matching(self.classify(case_query.case), {case_query.attribute_name:
+                                                                                      case_query.target}) else 0
+                               for case_query in case_queries]
             all_pred = sum(all_predictions)
             print(f"Accuracy: {all_pred}/{len(targets)}")
             all_predicted = targets and all_pred == len(targets)
@@ -125,9 +126,29 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         pred_cat = pred_cat if is_iterable(pred_cat) else [pred_cat]
         target = target if is_iterable(target) else [target]
-        recall = [not yi or (yi in pred_cat) for yi in target]
-        target_types = [type(yi) for yi in target]
-        precision = [(pred in target) or (type(pred) not in target_types) for pred in pred_cat]
+        recall = []
+        precision = []
+        if isinstance(pred_cat, dict):
+            for pred_key, pred_value in pred_cat.items():
+                if pred_key not in target:
+                    continue
+                if is_iterable(pred_value):
+                    precision.extend([v in target[pred_key] for v in pred_value])
+                else:
+                    precision.append(pred_value == target[pred_key])
+            for target_key, target_value in target.items():
+                if target_key not in pred_cat:
+                    recall.append(False)
+                    continue
+                if is_iterable(target_value):
+                    recall.extend([v in pred_cat[target_key] for v in target_value])
+                else:
+                    recall.append(target_value == pred_cat[target_key])
+            print(f"Precision: {precision}, Recall: {recall}")
+        else:
+            recall = [not yi or (yi in pred_cat) for yi in target]
+            target_types = [type(yi) for yi in target]
+            precision = [(pred in target) or (type(pred) not in target_types) for pred in pred_cat]
         return precision, recall
 
     def is_matching(self, pred_cat: List[CaseAttribute], target: List[CaseAttribute]) -> bool:
@@ -154,22 +175,15 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             draw_tree(self.start_rule, self.fig)
 
     @staticmethod
-    def case_has_conclusion(case: Union[Case, SQLTable], conclusion_type: Type) -> bool:
+    def case_has_conclusion(case: Union[Case, SQLTable], conclusion_name: str) -> bool:
         """
         Check if the case has a conclusion.
 
         :param case: The case to check.
-        :param conclusion_type: The target category type to compare the case with.
+        :param conclusion_name: The target category name to compare the case with.
         :return: Whether the case has a conclusion or not.
         """
-        if isinstance(case, SQLTable):
-            prop_name, prop_value = get_attribute_by_type(case, conclusion_type)
-            if hasattr(prop_value, "__iter__") and not isinstance(prop_value, str):
-                return len(prop_value) > 0
-            else:
-                return prop_value is not None
-        else:
-            return conclusion_type in case
+        return hasattr(case, conclusion_name) and getattr(case, conclusion_name) is not None
 
 
 class RDRWithCodeWriter(RippleDownRules, ABC):
@@ -683,7 +697,7 @@ class GeneralRDR(RippleDownRules):
 
     @staticmethod
     def _classify(classifiers_dict: Dict[Type, Union[ModuleType, RippleDownRules]],
-                  case: Union[Case, SQLTable]) -> Optional[List[Any]]:
+                  case: Union[Case, SQLTable]) -> Optional[Dict[str, Any]]:
         """
         Classify a case by going through all classifiers and adding the categories that are classified,
          and then restarting the classification until no more categories can be added.
@@ -692,21 +706,31 @@ class GeneralRDR(RippleDownRules):
         :param case: The case to classify.
         :return: The categories that the case belongs to.
         """
-        conclusions = []
+        conclusions = {}
         case_cp = copy_case(case)
         while True:
-            added_attributes = False
-            for cat_type, rdr in classifiers_dict.items():
-                if GeneralRDR.case_has_conclusion(case_cp, cat_type):
-                    continue
+            new_conclusions = {}
+            for cat_id, rdr in classifiers_dict.items():
+                conclusion_name = cat_id.split(".")[-1]
                 pred_atts = rdr.classify(case_cp)
-                if pred_atts:
+                if pred_atts is None:
+                    continue
+                if isinstance(rdr, SingleClassRDR):
+                    if conclusion_name not in conclusions or \
+                            (conclusion_name in conclusions and conclusions[conclusion_name] != pred_atts):
+                        conclusions[conclusion_name] = pred_atts
+                        new_conclusions[conclusion_name] = pred_atts
+                else:
                     pred_atts = make_list(pred_atts)
-                    pred_atts = [p for p in pred_atts if p not in conclusions]
-                    added_attributes = True
-                    conclusions.extend(pred_atts)
-                    GeneralRDR.update_case(case_cp, pred_atts)
-            if not added_attributes:
+                    if conclusion_name not in conclusions:
+                        conclusions[conclusion_name] = []
+                    pred_atts = [p for p in pred_atts if p not in conclusions[conclusion_name]]
+                    if len(pred_atts) > 0:
+                        new_conclusions[conclusion_name] = pred_atts
+                        conclusions[conclusion_name].extend(pred_atts)
+                if conclusion_name in new_conclusions:
+                    GeneralRDR.update_case(case_cp, new_conclusions)
+            if len(new_conclusions) == 0:
                 break
         return conclusions
 
@@ -735,31 +759,28 @@ class GeneralRDR(RippleDownRules):
         case_cp = case_query_cp.case
         for case_query in case_queries:
             target = case_query.target
-            if not target:
+            if target is None:
                 conclusions = self.classify(case) if self.start_rule and self.start_rule.conditions else []
                 target = expert.ask_for_conclusion(case_query, conclusions)
             case_query_cp = CaseQuery(case_cp, attribute_name=case_query.attribute_name, target=target)
-            if is_iterable(target) and not isinstance(target, CaseAttribute):
-                target_type = type(make_list(target)[0])
-                assert all([type(t) is target_type for t in target]), ("All targets of a case query must be of the same"
-                                                                       " type")
-            else:
-                target_type = type(target)
-            if target_type not in self.start_rules_dict:
+            target_conclusion_name = case_query.name.split(".")[-1]
+            if case_query.name not in self.start_rules_dict:
                 conclusions = self.classify(case)
                 self.update_case(case_cp, conclusions)
                 new_rdr = self.initialize_new_rdr_for_attribute(target, case_cp)
                 new_conclusions = new_rdr.fit_case(case_query_cp, expert, **kwargs)
-                self.start_rules_dict[target_type] = new_rdr
-                self.update_case(case_cp, new_conclusions, target_type)
-            elif not self.case_has_conclusion(case_cp, target_type):
-                for rdr_type, rdr in self.start_rules_dict.items():
-                    if target_type is not rdr_type:
+                self.start_rules_dict[case_query.name] = new_rdr
+                self.update_case(case_cp, {target_conclusion_name: new_conclusions})
+            else:
+                for cat_id, rdr in self.start_rules_dict.items():
+                    conclusion_name = cat_id.split(".")[-1]
+                    if case_query.name != cat_id:
                         conclusions = rdr.classify(case_cp)
                     else:
-                        conclusions = self.start_rules_dict[target_type].fit_case(case_query_cp,
-                                                                                  expert, **kwargs)
-                    self.update_case(case_cp, conclusions, rdr_type)
+                        conclusions = self.start_rules_dict[case_query.name].fit_case(case_query_cp, expert, **kwargs)
+                    if conclusions is not None or (is_iterable(conclusions) and len(conclusions) > 0):
+                        conclusions = {conclusion_name: conclusions}
+                    self.update_case(case_cp, conclusions)
 
         return self.classify(case)
 
@@ -780,38 +801,34 @@ class GeneralRDR(RippleDownRules):
             return MultiClassRDR() if is_iterable(attribute) else SingleClassRDR()
 
     @staticmethod
-    def update_case(case: Union[Case, SQLTable],
-                    conclusions: List[Any], attribute_type: Optional[Any] = None):
+    def update_case(case: Union[Case, SQLTable], conclusions: Dict[str, Any]):
         """
         Update the case with the conclusions.
 
         :param case: The case to update.
         :param conclusions: The conclusions to update the case with.
-        :param attribute_type: The type of the attribute to update.
         """
         if not conclusions:
             return
-        conclusions = [conclusions] if not isinstance(conclusions, list) else list(conclusions)
         if len(conclusions) == 0:
             return
         if isinstance(case, SQLTable):
-            conclusions_type = type(conclusions[0]) if not attribute_type else attribute_type
-            attr_name, attribute = get_attribute_by_type(case, conclusions_type)
-            hint, origin, args = get_hint_for_attribute(attr_name, case)
-            if isinstance(attribute, set) or origin == set:
-                attribute = set() if attribute is None else attribute
-                for c in conclusions:
-                    attribute.update(make_set(c))
-            elif isinstance(attribute, list) or origin == list:
-                attribute = [] if attribute is None else attribute
-                attribute.extend(conclusions)
-            elif len(conclusions) == 1 and hint == conclusions_type:
-                setattr(case, attr_name, conclusions.pop())
-            else:
-                raise ValueError(f"Cannot add multiple conclusions to attribute {attr_name}")
+            for conclusion_name, conclusion in conclusions.items():
+                hint, origin, args = get_hint_for_attribute(conclusion_name, case)
+                attribute = getattr(case, conclusion_name)
+                if isinstance(attribute, set) or origin == set:
+                    attribute = set() if attribute is None else attribute
+                    for c in conclusions:
+                        attribute.update(make_set(c))
+                elif isinstance(attribute, list) or origin == list:
+                    attribute = [] if attribute is None else attribute
+                    attribute.extend(conclusions)
+                elif len(conclusions) == 1 and hint == type(attribute):
+                    setattr(case, conclusion_name, conclusion)
+                else:
+                    raise ValueError(f"Cannot add multiple conclusions to attribute {conclusion_name}")
         else:
-            for c in make_set(conclusions):
-                case.update(c.as_dict)
+            case.update(conclusions)
 
     @property
     def names_of_all_types(self) -> List[str]:

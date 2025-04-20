@@ -41,13 +41,11 @@ class CaseQuery:
     The representation of the target value in relational form.
     """
 
-    def __init__(self, case: Any, attribute: Optional[Any] = None, target: Optional[Any] = None,
-                 attribute_name: Optional[str] = None, attribute_type: Optional[Type] = None,
+    def __init__(self, case: Any, target: Optional[Any] = None,
+                 attribute_name: Optional[str] = None,
                  relational_representation: Optional[str] = None):
-
-        if attribute_name is None:
-            attribute_name = get_attribute_name(case, attribute, attribute_type, target)
         self.attribute_name = attribute_name
+        self.case_name = case.__class__.__name__
 
         if not isinstance(case, (Case, SQLTable)):
             case = create_case(case, max_recursion_idx=3)
@@ -60,7 +58,7 @@ class CaseQuery:
 
     @property
     def name(self):
-        return self.attribute_name if self.attribute_name else self.__class__.__name__
+        return self.case_name + (f".{self.attribute_name}" if self.attribute_name else "")
 
     def __str__(self):
         if self.relational_representation:

@@ -114,7 +114,7 @@ class TestAlchemyRDR(TestCase):
                 all_habs.append(HabitatTable(Habitat.land))
                 if x.aquatic == 1:
                     all_habs[-1] = make_set([all_habs[-1], HabitatTable(Habitat.water)])
-            atts = [x.habitats for _ in all_habs]
+            atts = ["habitats" for _ in all_habs]
             atts.extend([x.species for _ in [t]])
             return all_habs + [t], atts
 
@@ -125,7 +125,7 @@ class TestAlchemyRDR(TestCase):
         case_queries = []
         for case, attributes, targets in zip(self.all_cases[:n], all_attributes, habitat_targets):
             for attr, target in zip(attributes, targets):
-                case_queries.append(CaseQuery(case, attr, target=target))
+                case_queries.append(CaseQuery(case, attribute_name=attr, target=target))
         grdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         for rule in grdr.start_rules:
             render_tree(rule, use_dot_exporter=True,
