@@ -8,8 +8,9 @@ from types import ModuleType
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
-from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple, Callable
+from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple, Callable, Set
 
+from .datasets import Habitat, Species
 from .datastructures import Case, MCRDRMode, CallableExpression, CaseAttribute, CaseQuery
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
@@ -132,10 +133,12 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             for pred_key, pred_value in pred_cat.items():
                 if pred_key not in target:
                     continue
-                if is_iterable(pred_value):
-                    precision.extend([v in target[pred_key] for v in pred_value])
-                else:
-                    precision.append(pred_value == target[pred_key])
+                # if is_iterable(pred_value):
+                #     print(pred_value, target[pred_key])
+                #     precision.extend([v in make_set(target[pred_key]) for v in make_set(pred_value)])
+                precision.extend([v in make_set(target[pred_key]) for v in make_set(pred_value)])
+                # else:
+                #     precision.append(pred_value == target[pred_key])
             for target_key, target_value in target.items():
                 if target_key not in pred_cat:
                     recall.append(False)
@@ -146,6 +149,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                     recall.append(target_value == pred_cat[target_key])
             print(f"Precision: {precision}, Recall: {recall}")
         else:
+            if isinstance(target, dict):
+                target = list(target.values())
             recall = [not yi or (yi in pred_cat) for yi in target]
             target_types = [type(yi) for yi in target]
             precision = [(pred in target) or (type(pred) not in target_types) for pred in pred_cat]
@@ -254,7 +259,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :return: The type of the case (input) to the RDR classifier.
         """
         if isinstance(self.start_rule.corner_case, Case):
-            return self.start_rule.corner_case._type
+            return self.start_rule.corner_case._obj_type
         else:
             return type(self.start_rule.corner_case)
 
@@ -270,6 +275,13 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                 return type(list(self.start_rule.conclusion)[0])
             return type(self.start_rule.conclusion)
 
+    @property
+    def attribute_name(self) -> str:
+        """
+        :return: The name of the attribute that the classifier is classifying.
+        """
+        return self.start_rule.conclusion_name
+
 
 class SingleClassRDR(RDRWithCodeWriter):
 
@@ -284,16 +296,16 @@ class SingleClassRDR(RDRWithCodeWriter):
         :return: The category that the case belongs to.
         """
         expert = expert if expert else Human(session=self.session)
-        case, attribute = case_query.case, case_query.attribute
+        case = case_query.case
         if case_query.target is None:
             target = expert.ask_for_conclusion(case_query)
         else:
             target = case_query.target
-        target_name = case_query.attribute_name if case_query.attribute_name else type(target).__name__
+        target_name = case_query.attribute_name
         target_dict = {target_name: target}
         if not self.start_rule:
             conditions = expert.ask_for_conditions(case, target_dict)
-            self.start_rule = SingleClassRule(conditions, target, corner_case=case)
+            self.start_rule = SingleClassRule(conditions, target, corner_case=case, conclusion_name=target_name)
 
         pred = self.evaluate(case)
 
@@ -658,19 +670,30 @@ class GeneralRDR(RippleDownRules):
      gets called when the final rule fires.
     """
 
-    def __init__(self, category_rdr_map: Optional[Dict[Type, Union[SingleClassRDR, MultiClassRDR]]] = None):
+    def __init__(self, category_rdr_map: Optional[Dict[str, Union[SingleClassRDR, MultiClassRDR]]] = None):
         """
-        :param category_rdr_map: A map of categories to ripple down rules classifiers,
+        :param category_rdr_map: A map of case attribute names to ripple down rules classifiers,
         where each category is a parent category that has a set of mutually exclusive (in case of SCRDR) child
-        categories, e.g. {Species: SCRDR, Habitat: MCRDR}, where Species and Habitat are parent categories and SCRDR
-        and MCRDR are SingleClass and MultiClass ripple down rules classifiers. Species can have child categories like
-        Mammal, Bird, Fish, etc. which are mutually exclusive, and Habitat can have child categories like
-        Land, Water, Air, etc, which are not mutually exclusive due to some animals living more than one habitat.
+        categories, e.g. {'species': SCRDR, 'habitats': MCRDR}, where 'species' and 'habitats' are attribute names
+        for a case of type Animal, while SCRDR and MCRDR are SingleClass and MultiClass ripple down rules classifiers.
+        Species can have values like Mammal, Bird, Fish, etc. which are mutually exclusive, while Habitat can have
+        values like Land, Water, Air, etc., which are not mutually exclusive due to some animals living more than one
+        habitat.
         """
-        self.start_rules_dict: Dict[Type, Union[SingleClassRDR, MultiClassRDR]] \
+        self.start_rules_dict: Dict[str, Union[SingleClassRDR, MultiClassRDR]] \
             = category_rdr_map if category_rdr_map else {}
         super(GeneralRDR, self).__init__()
         self.all_figs: List[plt.Figure] = [sr.fig for sr in self.start_rules_dict.values()]
+
+    def add_rdr(self, rdr: Union[SingleClassRDR, MultiClassRDR], attribute_name: Optional[str] = None):
+        """
+        Add a ripple down rules classifier to the map of classifiers.
+
+        :param rdr: The ripple down rules classifier to add.
+        :param attribute_name: The name of the attribute that the classifier is classifying.
+        """
+        attribute_name = attribute_name if attribute_name else rdr.attribute_name
+        self.start_rules_dict[attribute_name] = rdr
 
     @property
     def start_rule(self) -> Optional[Union[SingleClassRule, MultiClassTopRule]]:
@@ -679,7 +702,7 @@ class GeneralRDR(RippleDownRules):
     @start_rule.setter
     def start_rule(self, value: Union[SingleClassRDR, MultiClassRDR]):
         if value:
-            self.start_rules_dict[value.conclusion_type] = value
+            self.start_rules_dict[value.attribute_name] = value
 
     @property
     def start_rules(self) -> List[Union[SingleClassRule, MultiClassTopRule]]:
@@ -696,7 +719,7 @@ class GeneralRDR(RippleDownRules):
         return self._classify(self.start_rules_dict, case)
 
     @staticmethod
-    def _classify(classifiers_dict: Dict[Type, Union[ModuleType, RippleDownRules]],
+    def _classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDownRules]],
                   case: Union[Case, SQLTable]) -> Optional[Dict[str, Any]]:
         """
         Classify a case by going through all classifiers and adding the categories that are classified,
@@ -710,25 +733,25 @@ class GeneralRDR(RippleDownRules):
         case_cp = copy_case(case)
         while True:
             new_conclusions = {}
-            for cat_id, rdr in classifiers_dict.items():
-                conclusion_name = cat_id.split(".")[-1]
+            for attribute_name, rdr in classifiers_dict.items():
                 pred_atts = rdr.classify(case_cp)
                 if pred_atts is None:
                     continue
                 if isinstance(rdr, SingleClassRDR):
-                    if conclusion_name not in conclusions or \
-                            (conclusion_name in conclusions and conclusions[conclusion_name] != pred_atts):
-                        conclusions[conclusion_name] = pred_atts
-                        new_conclusions[conclusion_name] = pred_atts
+                    if attribute_name not in conclusions or \
+                            (attribute_name in conclusions and conclusions[attribute_name] != pred_atts):
+                        conclusions[attribute_name] = pred_atts
+                        new_conclusions[attribute_name] = pred_atts
                 else:
                     pred_atts = make_list(pred_atts)
-                    if conclusion_name not in conclusions:
-                        conclusions[conclusion_name] = []
-                    pred_atts = [p for p in pred_atts if p not in conclusions[conclusion_name]]
+                    if attribute_name in conclusions:
+                        pred_atts = [p for p in pred_atts if p not in conclusions[attribute_name]]
                     if len(pred_atts) > 0:
-                        new_conclusions[conclusion_name] = pred_atts
-                        conclusions[conclusion_name].extend(pred_atts)
-                if conclusion_name in new_conclusions:
+                        new_conclusions[attribute_name] = pred_atts
+                        if attribute_name not in conclusions:
+                            conclusions[attribute_name] = []
+                        conclusions[attribute_name].extend(pred_atts)
+                if attribute_name in new_conclusions:
                     GeneralRDR.update_case(case_cp, new_conclusions)
             if len(new_conclusions) == 0:
                 break
@@ -755,50 +778,47 @@ class GeneralRDR(RippleDownRules):
         case = case_queries[0].case
         assert all([case is case_query.case for case_query in case_queries]), ("fit_case requires only one case,"
                                                                                " for multiple cases use fit instead")
-        case_query_cp = copy(case_queries[0])
-        case_cp = case_query_cp.case
+        case_cp = copy(case_queries[0]).case
         for case_query in case_queries:
             target = case_query.target
             if target is None:
                 conclusions = self.classify(case) if self.start_rule and self.start_rule.conditions else []
                 target = expert.ask_for_conclusion(case_query, conclusions)
-            case_query_cp = CaseQuery(case_cp, attribute_name=case_query.attribute_name, target=target)
-            target_conclusion_name = case_query.name.split(".")[-1]
-            if case_query.name not in self.start_rules_dict:
+
+            case_query_cp = CaseQuery(case_cp, case_query.attribute_name, target=target)
+
+            if case_query.attribute_name not in self.start_rules_dict:
                 conclusions = self.classify(case)
                 self.update_case(case_cp, conclusions)
-                new_rdr = self.initialize_new_rdr_for_attribute(target, case_cp)
+
+                new_rdr = self.initialize_new_rdr_for_attribute(case_query.attribute_name, case_cp, case_query.target)
+                self.add_rdr(new_rdr, case_query.attribute_name)
+
                 new_conclusions = new_rdr.fit_case(case_query_cp, expert, **kwargs)
-                self.start_rules_dict[case_query.name] = new_rdr
-                self.update_case(case_cp, {target_conclusion_name: new_conclusions})
+                self.update_case(case_cp, {case_query.attribute_name: new_conclusions})
             else:
-                for cat_id, rdr in self.start_rules_dict.items():
-                    conclusion_name = cat_id.split(".")[-1]
-                    if case_query.name != cat_id:
+                for rdr_attribute_name, rdr in self.start_rules_dict.items():
+                    if case_query.attribute_name != rdr_attribute_name:
                         conclusions = rdr.classify(case_cp)
                     else:
-                        conclusions = self.start_rules_dict[case_query.name].fit_case(case_query_cp, expert, **kwargs)
+                        conclusions = self.start_rules_dict[rdr_attribute_name].fit_case(case_query_cp, expert,
+                                                                                         **kwargs)
                     if conclusions is not None or (is_iterable(conclusions) and len(conclusions) > 0):
-                        conclusions = {conclusion_name: conclusions}
-                    self.update_case(case_cp, conclusions)
+                        conclusions = {rdr_attribute_name: conclusions}
+                        self.update_case(case_cp, conclusions)
 
         return self.classify(case)
 
     @staticmethod
-    def initialize_new_rdr_for_attribute(attribute: Any, case: Union[Case, SQLTable]):
+    def initialize_new_rdr_for_attribute(attribute_name: str, case: Union[Case, SQLTable], target: Any):
         """
         Initialize the appropriate RDR type for the target.
         """
-        if isinstance(case, SQLTable):
-            prop = get_attribute_by_type(case, type(attribute))
-            if hasattr(prop, "__iter__") and not isinstance(prop, str):
-                return MultiClassRDR()
-            else:
-                return SingleClassRDR()
-        elif isinstance(attribute, CaseAttribute):
+        attribute = getattr(case, attribute_name) if hasattr(case, attribute_name) else target
+        if isinstance(attribute, CaseAttribute):
             return SingleClassRDR() if attribute.mutually_exclusive else MultiClassRDR()
         else:
-            return MultiClassRDR() if is_iterable(attribute) else SingleClassRDR()
+            return MultiClassRDR() if is_iterable(attribute) or (attribute is None) else SingleClassRDR()
 
     @staticmethod
     def update_case(case: Union[Case, SQLTable], conclusions: Dict[str, Any]):
@@ -816,36 +836,22 @@ class GeneralRDR(RippleDownRules):
             for conclusion_name, conclusion in conclusions.items():
                 hint, origin, args = get_hint_for_attribute(conclusion_name, case)
                 attribute = getattr(case, conclusion_name)
-                if isinstance(attribute, set) or origin == set:
+                if isinstance(attribute, set) or origin in {Set, set}:
                     attribute = set() if attribute is None else attribute
-                    for c in conclusions:
+                    for c in conclusion:
                         attribute.update(make_set(c))
-                elif isinstance(attribute, list) or origin == list:
+                elif isinstance(attribute, list) or origin in {list, List}:
                     attribute = [] if attribute is None else attribute
-                    attribute.extend(conclusions)
-                elif len(conclusions) == 1 and hint == type(attribute):
+                    attribute.extend(conclusion)
+                elif (not is_iterable(conclusion) or (len(conclusion) == 1)) and hint == type(conclusion):
                     setattr(case, conclusion_name, conclusion)
                 else:
                     raise ValueError(f"Cannot add multiple conclusions to attribute {conclusion_name}")
         else:
             case.update(conclusions)
 
-    @property
-    def names_of_all_types(self) -> List[str]:
-        """
-        Get the names of all the types of categories that the GRDR can classify.
-        """
-        return [t.__name__ for t in self.start_rules_dict.keys()]
-
-    @property
-    def all_types(self) -> List[Type]:
-        """
-        Get all the types of categories that the GRDR can classify.
-        """
-        return list(self.start_rules_dict.keys())
-
     def _to_json(self) -> Dict[str, Any]:
-        return {"start_rules": {get_full_class_name(t): rdr.to_json() for t, rdr in self.start_rules_dict.items()}}
+        return {"start_rules": {t: rdr.to_json() for t, rdr in self.start_rules_dict.items()}}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> GeneralRDR:
@@ -854,7 +860,6 @@ class GeneralRDR(RippleDownRules):
         """
         start_rules_dict = {}
         for k, v in data["start_rules"].items():
-            k = get_type_from_string(k)
             start_rules_dict[k] = get_type_from_string(v['_type']).from_json(v)
         return cls(start_rules_dict)
 
@@ -870,8 +875,8 @@ class GeneralRDR(RippleDownRules):
         with open(file_path + f"/{self.generated_python_file_name}.py", "w") as f:
             f.write(self._get_imports(file_path) + "\n\n")
             f.write("classifiers_dict = dict()\n")
-            for t, rdr in self.start_rules_dict.items():
-                f.write(f"classifiers_dict[{t.__name__}] = {t.__name__.lower()}_classifier\n")
+            for rdr_key, rdr in self.start_rules_dict.items():
+                f.write(f"classifiers_dict['{rdr_key}'] = {self.rdr_key_to_function_name(rdr_key)}\n")
             f.write("\n\n")
             f.write(func_def)
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
@@ -884,7 +889,7 @@ class GeneralRDR(RippleDownRules):
         :return: The type of the case (input) to the RDR classifier.
         """
         if isinstance(self.start_rule.corner_case, Case):
-            return self.start_rule.corner_case._type
+            return self.start_rule.corner_case._obj_type
         else:
             return type(self.start_rule.corner_case)
 
@@ -913,10 +918,20 @@ class GeneralRDR(RippleDownRules):
         imports += f"from ripple_down_rules.datastructures import Case, create_case\n"
         imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
         # add conclusion type imports
-        for conclusion_type in self.start_rules_dict.keys():
-            imports += f"from {conclusion_type.__module__} import {conclusion_type.__name__}\n"
+        for rdr in self.start_rules_dict.values():
+            imports += f"from {rdr.conclusion_type.__module__} import {rdr.conclusion_type.__name__}\n"
         # add rdr python generated functions.
-        for conclusion_type, rdr in self.start_rules_dict.items():
+        for rdr_key, rdr in self.start_rules_dict.items():
             imports += (f"from {file_path.strip('./')}"
-                        f" import {rdr.generated_python_file_name} as {conclusion_type.__name__.lower()}_classifier\n")
+                        f" import {rdr.generated_python_file_name} as {self.rdr_key_to_function_name(rdr_key)}\n")
         return imports
+
+    @staticmethod
+    def rdr_key_to_function_name(rdr_key: str) -> str:
+        """
+        Convert the RDR key to a function name.
+
+        :param rdr_key: The RDR key to convert.
+        :return: The function name.
+        """
+        return rdr_key.replace(".", "_").lower() + "_classifier"

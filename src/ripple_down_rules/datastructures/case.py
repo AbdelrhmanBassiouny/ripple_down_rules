@@ -24,16 +24,19 @@ class Case(UserDict, SubclassJSONSerializer):
     the names of the attributes and the values are the attributes. All are stored in lower case.
     """
 
-    def __init__(self, _id: Optional[Hashable] = None, _type: Optional[Type] = None, **kwargs):
+    def __init__(self, _obj_type: Type, _id: Optional[Hashable] = None, _name: Optional[str] = None, **kwargs):
         """
         Create a new row.
 
+        :param _obj_type: The type of the object that the row represents.
         :param _id: The id of the row.
+        :param _name: The semantic name that describes the row.
         :param kwargs: The attributes of the row.
         """
         super().__init__(kwargs)
-        self._id = _id if _id else id(self)
-        self._type = _type
+        self._obj_type: Type = _obj_type
+        self._id: Hashable = _id if _id is not None else id(self)
+        self._name: str = _name if _name is not None else self._obj_type.__name__
 
     @classmethod
     def from_obj(cls, obj: Any, obj_name: Optional[str] = None, max_recursion_idx: int = 3) -> Case:
@@ -79,6 +82,8 @@ class Case(UserDict, SubclassJSONSerializer):
     def _to_json(self) -> Dict[str, Any]:
         serializable = {k: v for k, v in self.items() if not k.startswith("_")}
         serializable["_id"] = self._id
+        serializable["_obj_type"] = get_full_class_name(self._obj_type)
+        serializable["_name"] = self._name
         for k, v in serializable.items():
             if isinstance(v, set):
                 serializable[k] = {'_type': get_full_class_name(set), 'value': list(v)}
@@ -87,10 +92,12 @@ class Case(UserDict, SubclassJSONSerializer):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Case:
         id_ = data.pop("_id")
+        obj_type = get_type_from_string(data.pop("_obj_type"))
+        name = data.pop("_name")
         for k, v in data.items():
             if isinstance(v, dict) and "_type" in v:
                 data[k] = SubclassJSONSerializer.from_json(v)
-        return cls(_id=id_, **data)
+        return cls(_obj_type=obj_type, _id=id_, _name=name, **data)
 
 
 @dataclass
@@ -134,7 +141,7 @@ class CaseAttribute(list, SubclassJSONSerializer):
     """
 
     @classmethod
-    def from_obj(cls, values: Set[Any], row_obj: Optional[Any] = None) -> CaseAttribute:
+    def from_obj(cls, values: List[Any]) -> CaseAttribute:
         return cls(make_list(values))
 
     @property
@@ -177,18 +184,19 @@ class CaseAttribute(list, SubclassJSONSerializer):
         return cls([SubclassJSONSerializer.from_json(v) for _, v in data.items()])
 
 
-def create_cases_from_dataframe(df: DataFrame) -> List[Case]:
+def create_cases_from_dataframe(df: DataFrame, name: Optional[str] = None) -> List[Case]:
     """
     Create cases from a pandas DataFrame.
 
     :param df: The DataFrame to create cases from.
+    :param name: The semantic name of the DataFrame that describes the DataFrame.
     :return: The cases of the DataFrame.
     """
     cases = []
     attribute_names = list(df.columns)
     for row_id, case in df.iterrows():
         case = {col_name: case[col_name].item() for col_name in attribute_names}
-        cases.append(Case(_id=row_id, _type=DataFrame, **case))
+        cases.append(Case(DataFrame, _id=row_id, _name=name, **case))
     return cases
 
 
@@ -205,19 +213,19 @@ def create_case(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
     :return: The case that represents the object.
     """
     if isinstance(obj, DataFrame):
-        return create_cases_from_dataframe(obj)
+        return create_cases_from_dataframe(obj, obj_name)
     if isinstance(obj, Case):
         return obj
     if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
             or (obj.__class__ in [MetaData, registry])):
-        return Case(_id=id(obj), _type=obj.__class__,
+        return Case(type(obj), _id=id(obj), _name=obj_name,
                     **{obj_name or obj.__class__.__name__: make_list(obj) if parent_is_iterable else obj})
-    case = Case(_id=id(obj), _type=obj.__class__)
+    case = Case(type(obj), _id=id(obj), _name=obj_name)
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
             continue
         attr_value = getattr(obj, attr)
-        case = create_or_update_case_from_attribute(attr_value, attr, obj, attr, recursion_idx,
+        case = create_or_update_case_from_attribute(attr_value, attr, obj, obj_name, recursion_idx,
                                                     max_recursion_idx, parent_is_iterable, case)
     return case
 
@@ -240,16 +248,16 @@ def create_or_update_case_from_attribute(attr_value: Any, name: str, obj: Any, o
     :return: The updated/created case.
     """
     if case is None:
-        case = Case(_id=id(obj), _type=obj.__class__)
+        case = Case(type(obj), _id=id(obj), _name=obj_name)
     if isinstance(attr_value, (dict, UserDict)):
         case.update({f"{obj_name}.{k}": v for k, v in attr_value.items()})
     if hasattr(attr_value, "__iter__") and not isinstance(attr_value, str):
         column = create_case_attribute_from_iterable_attribute(attr_value, name, obj, obj_name,
                                                                recursion_idx=recursion_idx + 1,
                                                                max_recursion_idx=max_recursion_idx)
-        case[obj_name] = column
+        case[name] = column
     else:
-        case[obj_name] = make_list(attr_value) if parent_is_iterable else attr_value
+        case[name] = make_list(attr_value) if parent_is_iterable else attr_value
     return case
 
 
@@ -267,14 +275,14 @@ def create_case_attribute_from_iterable_attribute(attr_value: Any, name: str, ob
     :param max_recursion_idx: The maximum recursion index.
     :return: A case attribute that represents the original iterable attribute.
     """
-    values = attr_value.values() if isinstance(attr_value, (dict, UserDict)) else attr_value
+    values = list(attr_value.values()) if isinstance(attr_value, (dict, UserDict)) else attr_value
     _type = type(list(values)[0]) if len(values) > 0 else get_value_type_from_type_hint(name, obj)
-    attr_case = Case(_id=id(attr_value), _type=_type)
-    case_attr = CaseAttribute.from_obj(values, row_obj=obj)
+    attr_case = Case(_type, _id=id(attr_value), _name=name)
+    case_attr = CaseAttribute(values)
     for idx, val in enumerate(values):
         sub_attr_case = create_case(val, recursion_idx=recursion_idx,
                                     max_recursion_idx=max_recursion_idx,
-                                    obj_name=obj_name, parent_is_iterable=True)
+                                    obj_name=name, parent_is_iterable=True)
         attr_case.update(sub_attr_case)
     for sub_attr, val in attr_case.items():
         setattr(case_attr, sub_attr, val)

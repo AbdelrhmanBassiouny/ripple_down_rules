@@ -83,7 +83,7 @@ class RelationalRDRTestCase(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        cat = scrdr.fit_case(CaseQuery(self.robot, attribute_name="contained_objects"), expert=expert)
+        cat = scrdr.fit_case(CaseQuery(self.robot, "contained_objects"), expert=expert)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + "/relational_scrdr_classify")
         assert cat(self.robot) == self.target.target

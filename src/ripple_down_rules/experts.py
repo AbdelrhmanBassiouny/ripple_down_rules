@@ -4,7 +4,7 @@ import json
 from abc import ABC, abstractmethod
 
 from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, Session
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, get_type_hints
 
 from .datastructures import (Case, PromptFor, CallableExpression, CaseAttribute, CaseQuery)
 from .datastructures.case import show_current_and_corner_cases

@@ -1,7 +1,7 @@
 [
-  "species=='mammal',aquatic==0",
-  "species=='fish'",
-  "species=='bird',legs>0",
-  "species=='molusc',aquatic==0",
-  "species=='molusc',aquatic==1"
+  "case.species=='mammal',case.aquatic==0",
+  "case.species=='fish'",
+  "case.species=='bird',case.legs>0",
+  "case.species=='molusc',case.aquatic==0",
+  "case.species=='molusc',case.aquatic==1"
 ]

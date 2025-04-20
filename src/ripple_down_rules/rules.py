@@ -21,7 +21,8 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
                  conclusion: Optional[CallableExpression] = None,
                  parent: Optional[Rule] = None,
                  corner_case: Optional[Union[Case, SQLTable]] = None,
-                 weight: Optional[str] = None):
+                 weight: Optional[str] = None,
+                 conclusion_name: Optional[str] = None):
         """
         A rule in the ripple down rules classifier.
 
@@ -30,6 +31,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         :param parent: The parent rule of this rule.
         :param corner_case: The corner case that this rule is based on/created from.
         :param weight: The weight of the rule, which is the type of edge connecting the rule to its parent.
+        :param conclusion_name: The name of the conclusion of the rule.
         """
         super(Rule, self).__init__()
         self.conclusion = conclusion
@@ -37,6 +39,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self.parent = parent
         self.weight: Optional[str] = weight
         self.conditions = conditions if conditions else None
+        self.conclusion_name: Optional[str] = conclusion_name
         self.json_serialization: Optional[Dict[str, Any]] = None
 
     def _post_detach(self, parent):

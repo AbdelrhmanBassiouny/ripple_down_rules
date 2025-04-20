@@ -11,7 +11,7 @@ from ripple_down_rules.datastructures import Case, MCRDRMode, \
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set, flatten_list
-from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
+from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr, get_habitat
 
 
 class TestRDR(TestCase):
@@ -39,7 +39,8 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        cat = scrdr.fit_case(CaseQuery(self.all_cases[0], target=self.targets[0]), expert=expert)
+        cat = scrdr.fit_case(CaseQuery(self.all_cases[0], "species", target=self.targets[0]),
+                             expert=expert)
         self.assertEqual(cat, self.targets[0])
 
         if save_answers:
@@ -57,7 +58,8 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        case_queries = [CaseQuery(case, "species", target=target)
+                        for case, target in zip(self.all_cases, self.targets)]
         scrdr.fit(case_queries, expert=expert,
                   animate_tree=draw_tree)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
@@ -72,7 +74,7 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def test_write_scrdr_to_python_file(self):
-        scrdr = get_fit_scrdr(self.all_cases,self.targets)
+        scrdr = get_fit_scrdr(self.all_cases, self.targets)
         scrdr.write_to_python_file(self.generated_rdrs_dir)
         classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, target in zip(self.all_cases, self.targets):
@@ -93,9 +95,11 @@ class TestRDR(TestCase):
         classify_animal_grdr = grdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, case_targets in zip(self.all_cases[:len(all_targets)], all_targets):
             cat = classify_animal_grdr(case)
-            cat = flatten_list(cat)
-            case_targets = flatten_list(case_targets)
-            self.assertEqual(make_set(cat), make_set(case_targets))
+            for cat_name, cat_val in cat.items():
+                if cat_name == "habitats":
+                    self.assertEqual(cat_val, case_targets['habitats'])
+                elif cat_name == "species":
+                    self.assertEqual(cat_val[0], case_targets['species'])
 
     def test_classify_mcrdr(self):
         use_loaded_answers = True
@@ -106,7 +110,8 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         mcrdr = MultiClassRDR()
-        cats = mcrdr.fit_case(CaseQuery(self.all_cases[0], target=self.targets[0]), expert=expert)
+        cats = mcrdr.fit_case(CaseQuery(self.all_cases[0], "species", target=self.targets[0]),
+                              expert=expert)
 
         self.assertEqual(cats[0], self.targets[0])
 
@@ -124,7 +129,7 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR()
-        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        case_queries = [CaseQuery(case, "species", target=target) for case, target in zip(self.all_cases, self.targets)]
         mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_only")
@@ -146,7 +151,7 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
-        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        case_queries = [CaseQuery(case, "species", target=target) for case, target in zip(self.all_cases, self.targets)]
         try:
             mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         # catch pop from empty list error
@@ -176,7 +181,7 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRuleCombined)
-        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
+        case_queries = [CaseQuery(case, "species", target=target) for case, target in zip(self.all_cases, self.targets)]
         try:
             mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         # catch pop from empty list error
@@ -196,50 +201,6 @@ class TestRDR(TestCase):
             file = os.path.join(cwd, filename)
             expert.save_answers(file, append=append)
 
-    @skip("Extra conclusions loaded answers are not working with new prompt interface")
-    def test_classify_mcrdr_with_extra_conclusions(self):
-        use_loaded_answers = True
-        save_answers = False
-        file_name = self.expert_answers_dir + "/mcrdr_extra_expert_answers_classify"
-        expert = Human(use_loaded_answers=use_loaded_answers)
-        if use_loaded_answers:
-            expert.load_answers(file_name)
-
-        mcrdr = MultiClassRDR()
-        cats = mcrdr.fit_case(CaseQuery(self.all_cases[0], target=self.targets[0]),
-                              add_extra_conclusions=True, expert=expert)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/mcrdr_extra_classify")
-        LivesOnlyOnLand = get_all_subclasses(CaseAttribute)["LivesOnlyOnLand".lower()]
-        self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
-
-        if save_answers:
-            cwd = os.getcwd()
-            file = os.path.join(cwd, file_name)
-            expert.save_answers(file)
-
-    @skip("Extra conclusions loaded answers are not working with new prompt interface")
-    def test_fit_mcrdr_with_extra_conclusions(self):
-        draw_tree = False
-        use_loaded_answers = True
-        save_answers = False
-        expert = Human(use_loaded_answers=use_loaded_answers)
-        mcrdr = MultiClassRDR()
-        case_queries = [CaseQuery(case, target=target) for case, target in zip(self.all_cases, self.targets)]
-        mcrdr.fit(case_queries, add_extra_conclusions=False, expert=expert, animate_tree=False)
-        expert = Human(use_loaded_answers=use_loaded_answers)
-        file_name = self.expert_answers_dir + "/mcrdr_extra_expert_answers_fit"
-        if use_loaded_answers:
-            expert.load_answers(file_name)
-        mcrdr.fit(case_queries, add_extra_conclusions=True, expert=expert, n_iter=10, animate_tree=draw_tree)
-        cats = mcrdr.classify(self.all_cases[50])
-        LivesOnlyOnLand = get_all_subclasses(CaseAttribute)["LivesOnlyOnLand".lower()]
-        self.assertEqual(cats, [self.targets[50], LivesOnlyOnLand(True)])
-        render_tree(mcrdr.start_rule, use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/mcrdr_extra")
-        if save_answers:
-            expert.save_answers(file_name)
-
     def test_classify_grdr(self):
         use_loaded_answers = True
         save_answers = False
@@ -251,7 +212,9 @@ class TestRDR(TestCase):
         grdr = GeneralRDR()
 
         targets = [self.targets[0], Habitat.land]
-        case_queries = [CaseQuery(self.all_cases[0], target=target) for target in targets]
+        attribute_names = [t.__class__.__name__ for t in targets]
+        targets = dict(zip(attribute_names, targets))
+        case_queries = [CaseQuery(self.all_cases[0], attribute_name=a, target=t) for a, t in targets.items()]
         cats = grdr.fit_case(case_queries, expert=expert)
         self.assertEqual(cats, targets)
 
@@ -264,76 +227,17 @@ class TestRDR(TestCase):
         use_loaded_answers = True
         save_answers = False
         draw_tree = False
-        filename = self.expert_answers_dir + "/grdr_expert_answers_fit"
-        expert = Human(use_loaded_answers=use_loaded_answers)
-        if use_loaded_answers:
-            expert.load_answers(filename)
+        filename = "/grdr_expert_answers_fit"
 
-        fit_scrdr = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False)
-
-        grdr = GeneralRDR({type(fit_scrdr.start_rule.conclusion): fit_scrdr})
-
-        def get_habitat(x: Case, t: Category):
-            all_habs = []
-            if t == Species.mammal and x["aquatic"] == 0:
-                all_habs.append({Habitat.land})
-            elif t == Species.bird:
-                all_habs.append({Habitat.land})
-                if x["airborne"] == 1:
-                    all_habs[-1].update({Habitat.air})
-                if x["aquatic"] == 1:
-                    all_habs[-1].update({Habitat.water})
-            elif t == Species.fish:
-                all_habs.append({Habitat.water})
-            elif t == Species.molusc:
-                all_habs.append({Habitat.land})
-                if x["aquatic"] == 1:
-                    all_habs[-1].update({Habitat.water})
-            return all_habs + [t]
-
-        n = 20
-        habitat_targets = [get_habitat(x, t) for x, t in zip(self.all_cases[:n], self.targets[:n])]
-        case_queries = [CaseQuery(case, target=target)
-                        for case, targets in zip(self.all_cases[:n], habitat_targets)
-                        for target in targets]
-        grdr.fit(case_queries, expert=expert,
-                 animate_tree=draw_tree, n_iter=n)
+        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets, draw_tree=draw_tree,
+                                         expert_answers_dir=self.expert_answers_dir,
+                                         expert_answers_file=filename,
+                                         load_answers=use_loaded_answers)
         for rule in grdr.start_rules:
             render_tree(rule, use_dot_exporter=True,
                         filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
 
-        cats = grdr.classify(self.all_cases[50])
-        self.assertEqual(cats, [self.targets[50], Habitat.land])
-
         if save_answers:
             cwd = os.getcwd()
-            file = os.path.join(cwd, filename)
-            expert.save_answers(file)
-
-    @skip("Extra conclusions loaded answers are not working with new prompt interface")
-    def test_fit_grdr_with_extra_conclusions(self):
-        use_loaded_answers = True
-        save_answers = False
-        draw_tree = False
-        filename = self.expert_answers_dir + "/grdr_expert_answers_fit_extra"
-        expert = Human(use_loaded_answers=use_loaded_answers)
-        if use_loaded_answers:
-            expert.load_answers(filename)
-
-        fit_scrdr = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False)
-
-        grdr = GeneralRDR({type(fit_scrdr.start_rule.conclusion): fit_scrdr})
-
-        grdr.fit(self.all_cases[17:], expert=expert,
-                 animate_tree=draw_tree, n_iter=20, add_extra_conclusions=True)
-        for rule in grdr.start_rules:
-            render_tree(rule, use_dot_exporter=True,
-                        filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
-
-        cats = grdr.classify(self.all_cases[50])
-        self.assertEqual(cats, [self.targets[50], Habitat.land])
-
-        if save_answers:
-            cwd = os.getcwd()
-            file = os.path.join(cwd, filename)
-            expert.save_answers(file)
+            file = os.path.join(cwd, self.expert_answers_dir + filename)
+            grdr.expert.save_answers(file)

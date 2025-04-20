@@ -58,12 +58,12 @@ class PhysicalObject(Base):
     part_of_relations: Mapped[List[HasPart]] = relationship(init=False, back_populates="right",
                                                             foreign_keys=[HasPart.right_id],
                                                             repr=False, default_factory=list)
-    contains_objects_relations: Mapped[Set[ContainsObject]] = relationship(init=False, back_populates="left",
+    contains_objects_relations: Mapped[List[ContainsObject]] = relationship(init=False, back_populates="left",
                                                                            foreign_keys=[ContainsObject.left_id],
-                                                                           repr=False, default_factory=set)
-    is_contained_in_relations: Mapped[Set[ContainsObject]] = relationship(init=False, back_populates="right",
+                                                                           repr=False, default_factory=list)
+    is_contained_in_relations: Mapped[List[ContainsObject]] = relationship(init=False, back_populates="right",
                                                                           foreign_keys=[ContainsObject.right_id],
-                                                                          repr=False, default_factory=set)
+                                                                          repr=False, default_factory=list)
     type: Mapped[str] = mapped_column(init=False)
 
     @property
@@ -75,12 +75,12 @@ class PhysicalObject(Base):
         return [has_part.left for has_part in self.part_of_relations]
 
     @property
-    def contained_objects(self) -> Set[PhysicalObject]:
-        return {cont_obj.right for cont_obj in self.contains_objects_relations}
+    def contained_objects(self) -> List[PhysicalObject]:
+        return [cont_obj.right for cont_obj in self.contains_objects_relations]
 
     @property
-    def is_contained_in(self) -> Set[PhysicalObject]:
-        return {cont_obj.left for cont_obj in self.is_contained_in_relations}
+    def is_contained_in(self) -> List[PhysicalObject]:
+        return [cont_obj.left for cont_obj in self.is_contained_in_relations]
 
     @declared_attr.directive
     def __mapper_args__(cls):
@@ -134,11 +134,11 @@ class RelationalRDRTestCase(TestCase):
     def test_setup(self):
         assert self.robot.parts == [self.part_a, self.part_b, self.part_c, self.part_d]
         assert all(len(part.part_of) == 1 and part.part_of[0] == self.robot for part in self.robot.parts)
-        assert self.robot.contained_objects == set()
-        assert self.part_a.contained_objects == {self.part_b, self.part_c}
-        assert self.part_c.contained_objects == {self.part_d}
-        assert self.part_d.contained_objects == {self.part_e}
-        assert self.part_e.contained_objects == {self.part_f}
+        assert self.robot.contained_objects == []
+        assert self.part_a.contained_objects == [self.part_b, self.part_c]
+        assert self.part_c.contained_objects == [self.part_d]
+        assert self.part_d.contained_objects == [self.part_e]
+        assert self.part_e.contained_objects == [self.part_f]
 
     def test_classify_scrdr(self):
         use_loaded_answers = True

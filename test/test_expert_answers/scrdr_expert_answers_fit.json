@@ -1,1 +1,14 @@
-["milk == 1", "aquatic == 1", "feathers == 1", "backbone == 0, breathes == 0", "fins == 0", "feathers == 1", "eggs == 1, backbone == 0", "backbone == 1", "backbone == 1, tail == 1", "backbone == 0, eggs == 0", "breathes == 0", "legs == 0"]
+[
+  "case.milk == 1",
+  "case.aquatic == 1",
+  "case.feathers == 1",
+  "case.backbone == 0, case.breathes == 0",
+  "case.fins == 0",
+  "case.feathers == 1",
+  "case.eggs == 1, case.backbone == 0",
+  "case.backbone == 1",
+  "case.backbone == 1, case.tail == 1",
+  "case.backbone == 0, case.eggs == 0",
+  "case.breathes == 0",
+  "case.legs == 0"
+]

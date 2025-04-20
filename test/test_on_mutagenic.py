@@ -151,7 +151,7 @@ def make_molecule_2() -> Molecule:
     return molecule
 
 
-# @skip("needs to run in terminal")
+@skip("needs to run in terminal")
 def test_main():
     rdr = GeneralRDR()
 

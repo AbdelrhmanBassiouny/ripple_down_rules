@@ -27,6 +27,25 @@ if TYPE_CHECKING:
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
+def typing_to_python_type(typing_hint: Type) -> Type:
+    """
+    Convert a typing hint to a python type.
+
+    :param typing_hint: The typing hint to convert.
+    :return: The python type.
+    """
+    if typing_hint in [list, List]:
+        return list
+    elif typing_hint in [tuple, Tuple]:
+        return tuple
+    elif typing_hint in [set, Set]:
+        return set
+    elif typing_hint in [dict, Dict]:
+        return dict
+    else:
+        return typing_hint
+
+
 def capture_variable_assignment(code: str, variable_name: str) -> Optional[str]:
     """
     Capture the assignment of a variable in the given code.

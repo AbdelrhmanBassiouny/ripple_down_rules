@@ -117,12 +117,12 @@ class CallableExpression(SubclassJSONSerializer):
         self.expression_tree: AST = expression_tree
         self.visitor = VariableVisitor()
         self.visitor.visit(expression_tree)
-        if "case" not in self.parsed_user_input:
-            variables_str = self.visitor.variables
-            attributes_str = get_attributes_str(self.visitor)
-            for v in variables_str:
-                if not v.startswith("case."):
-                    self.parsed_user_input = self.parsed_user_input.replace(v, f"case.{v}")
+        # if "case" not in self.parsed_user_input:
+        #     variables_str = self.visitor.variables
+        #     attributes_str = get_attributes_str(self.visitor)
+        #     for v in variables_str:
+        #         if not v.startswith("case."):
+        #             self.parsed_user_input = self.parsed_user_input.replace(v, f"case.{v}")
         self.expression_tree = parse_string_to_expression(self.parsed_user_input)
         self.compares_column_offset = [(c[0].col_offset, c[2].end_col_offset) for c in self.visitor.compares]
         self.code = compile_expression_to_code(self.expression_tree)
@@ -132,7 +132,7 @@ class CallableExpression(SubclassJSONSerializer):
             if not isinstance(case, Case):
                 case = create_case(case, max_recursion_idx=3)
             output = eval(self.code)
-            if self.conclusion_type:
+            if self.conclusion_type is not None:
                 assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
                                                                   f" got {type(output)}")
             return output
