@@ -296,24 +296,19 @@ class SingleClassRDR(RDRWithCodeWriter):
         :return: The category that the case belongs to.
         """
         expert = expert if expert else Human(session=self.session)
-        case = case_query.case
         if case_query.target is None:
-            target = expert.ask_for_conclusion(case_query)
-        else:
-            target = case_query.target
-        target_name = case_query.attribute_name
-        target_dict = {target_name: target}
+            case_query = expert.ask_for_conclusion(case_query)
         if not self.start_rule:
-            conditions = expert.ask_for_conditions(case, target_dict)
-            self.start_rule = SingleClassRule(conditions, target, corner_case=case, conclusion_name=target_name)
+            case_query = expert.ask_for_conditions(case_query)
+            self.start_rule = SingleClassRule(case_query)
 
-        pred = self.evaluate(case)
+        pred = self.evaluate(case_query.case)
 
-        if pred.conclusion != target:
-            conditions = expert.ask_for_conditions(case, target_dict, pred)
-            pred.fit_rule(case, target, conditions=conditions)
+        if pred.conclusion != case_query.target:
+            case_query = expert.ask_for_conditions(case_query, pred)
+            pred.fit_rule(case_query)
 
-        return self.classify(case)
+        return self.classify(case_query.case)
 
     def classify(self, case: Case) -> Optional[CaseAttribute]:
         """

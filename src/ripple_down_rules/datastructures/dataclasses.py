@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import Any, Optional, Type, List, Tuple, Set, Dict
 
+from . import CallableExpression
 from .case import create_case, Case
 from ..utils import get_attribute_name, copy_case, get_hint_for_attribute, typing_to_python_type
 
@@ -28,31 +29,52 @@ class CaseQuery:
     """
     The target value of the attribute.
     """
-    relational_representation: Optional[str] = None
+    mutually_exclusive: bool = False
     """
-    The representation of the target value in relational form.
+    Whether the attribute can only take one value (i.e. True) or multiple values (i.e. False).
+    """
+    conditions: Optional[CallableExpression] = None
+    """
+    The conditions that must be satisfied for the target value to be valid.
+    """
+    prediction: Optional[CallableExpression] = None
+    """
+    The predicted value of the attribute.
     """
 
     def __init__(self, case: Any, attribute_name: str,
                  target: Optional[Any] = None,
-                 relational_representation: Optional[str] = None):
-        self.case = case
+                 mutually_exclusive: bool = False,
+                 conditions: Optional[CallableExpression] = None,
+                 prediction: Optional[CallableExpression] = None):
+        self.original_case = case
+        self.case = self._get_case()
+
         self.attribute_name = attribute_name
-
-        self.attribute_type = None
-        if target is not None:
-            self.attribute_type = type(target)
-        elif hasattr(case, attribute_name):
-            hint, origin, args = get_hint_for_attribute(attribute_name, case)
-            if origin is not None:
-                self.attribute_type = typing_to_python_type(origin)
-            elif hint is not None:
-                self.attribute_type = typing_to_python_type(hint)
-
         self.target = target
-        if not isinstance(case, (Case, SQLTable)):
-            self.case = create_case(case, max_recursion_idx=3)
-        self.relational_representation = relational_representation
+        self.attribute_type = self._get_attribute_type()
+        self.mutually_exclusive = mutually_exclusive
+        self.conditions = conditions
+        self.prediction = prediction
+
+    def _get_case(self) -> Any:
+        if not isinstance(self.original_case, (Case, SQLTable)):
+            return create_case(self.original_case, max_recursion_idx=3)
+        else:
+            return self.original_case
+
+    def _get_attribute_type(self) -> Type:
+        """
+        :return: The type of the attribute.
+        """
+        if self.target is not None:
+            return type(self.target)
+        elif hasattr(self.original_case, self.attribute_name):
+            hint, origin, args = get_hint_for_attribute(self.attribute_name, self.original_case)
+            if origin is not None:
+                return typing_to_python_type(origin)
+            elif hint is not None:
+                return typing_to_python_type(hint)
 
     @property
     def name(self):
@@ -69,14 +91,15 @@ class CaseQuery:
         return self.case._name if isinstance(self.case, Case) else self.case.__class__.__name__
 
     def __str__(self):
-        if self.relational_representation:
-            return f"{self.name} |= {self.relational_representation}"
-        else:
-            return f"{self.name} = {self.target}"
+        header = f"CaseQuery: {self.name}"
+        target = f"Target: {self.name} |= {self.target if self.target is not None else '?'}"
+        prediction = f"Prediction: {self.name} |= {self.prediction if self.prediction is not None else '?'}"
+        conditions = f"Conditions: {self.conditions if self.conditions is not None else '?'}"
+        return "\n".join([header, target, prediction, conditions])
 
     def __repr__(self):
         return self.__str__()
 
     def __copy__(self):
-        return CaseQuery(copy_case(self.case), self.attribute_name, target=self.target,
-                         relational_representation=self.relational_representation)
+        return CaseQuery(copy_case(self.case), self.attribute_name, self.target, self.mutually_exclusive,
+                         self.conditions, self.prediction)

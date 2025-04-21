@@ -17,6 +17,7 @@ from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr, get
 class TestRDR(TestCase):
     all_cases: List[Case]
     targets: List[str]
+    case_queries: List[CaseQuery]
     test_results_dir: str = "./test_results"
     expert_answers_dir: str = "./test_expert_answers"
     generated_rdrs_dir: str = "./test_generated_rdrs"
@@ -26,6 +27,8 @@ class TestRDR(TestCase):
     def setUpClass(cls):
         # fetch dataset
         cls.all_cases, cls.targets = load_zoo_dataset(cache_file=cls.cache_file)
+        cls.case_queries = [CaseQuery(case, "species", target=target, mutually_exclusive=True)
+                            for case, target in zip(cls.all_cases, cls.targets)]
         for test_dir in [cls.test_results_dir, cls.expert_answers_dir, cls.generated_rdrs_dir]:
             if not os.path.exists(test_dir):
                 os.makedirs(test_dir)
@@ -39,8 +42,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        cat = scrdr.fit_case(CaseQuery(self.all_cases[0], "species", target=self.targets[0]),
-                             expert=expert)
+        cat = scrdr.fit_case(self.case_queries[0], expert=expert)
         self.assertEqual(cat, self.targets[0])
 
         if save_answers:
@@ -58,9 +60,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        case_queries = [CaseQuery(case, "species", target=target)
-                        for case, target in zip(self.all_cases, self.targets)]
-        scrdr.fit(case_queries, expert=expert,
+        scrdr.fit(self.case_queries, expert=expert,
                   animate_tree=draw_tree)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/scrdr")
