@@ -8,7 +8,7 @@ import os
 from abc import abstractmethod
 from collections import UserDict
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass, fields
 
 import matplotlib
 import networkx as nx
@@ -25,6 +25,47 @@ if TYPE_CHECKING:
     from .datastructures import Case
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def serialize_dataclass(obj: Any) -> Dict:
+
+    def recursive_convert(obj):
+        if is_dataclass(obj):
+            return {
+                "__dataclass__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}",
+                "fields": {f.name: recursive_convert(getattr(obj, f.name)) for f in fields(obj)}
+            }
+        elif isinstance(obj, list):
+            return [recursive_convert(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {k: recursive_convert(v) for k, v in obj.items()}
+        elif hasattr(obj, "__module__") and hasattr(obj, "__name__"):
+            return {'_type': get_full_class_name(obj.__class__)}
+        else:
+            return obj
+
+    return recursive_convert(obj)
+
+
+def deserialize_dataclass(data: dict) -> Any:
+    def recursive_load(obj):
+        if isinstance(obj, dict) and "__dataclass__" in obj:
+            module_name, class_name = obj["__dataclass__"].rsplit(".", 1)
+            module = importlib.import_module(module_name)
+            cls: Type = getattr(module, class_name)
+            field_values = {
+                k: recursive_load(v)
+                for k, v in obj["fields"].items()
+            }
+            return cls(**field_values)
+        elif isinstance(obj, list):
+            return [recursive_load(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {k: recursive_load(v) for k, v in obj.items()}
+        else:
+            return obj
+
+    return recursive_load(data)
 
 
 def typing_to_python_type(typing_hint: Type) -> Type:
@@ -254,8 +295,14 @@ class SubclassJSONSerializer:
             return None
         if not isinstance(data, dict) or ('_type' not in data):
             return data
+        if '__dataclass__' in data:
+            # if the data is a dataclass, deserialize it
+            return deserialize_dataclass(data)
+
         # check if type module is builtins
         data_type = get_type_from_string(data["_type"])
+        if len(data) == 1:
+            return data_type
         if data_type.__module__ == 'builtins':
             if is_iterable(data['value']) and not isinstance(data['value'], dict):
                 return data_type([cls.from_json(d) for d in data['value']])

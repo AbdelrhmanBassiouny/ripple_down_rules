@@ -110,8 +110,10 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
                 conclusions = {'_type': get_full_class_name(type(conclusion)), 'value': []}
                 for c in conclusion:
                     conclusions['value'].append(conclusion_to_json(c))
-            else:
+            elif hasattr(conclusion, 'to_json'):
                 conclusions = conclusion.to_json()
+            else:
+                conclusions = {'_type': get_full_class_name(type(conclusion)), 'value': conclusion}
             return conclusions
 
         json_serialization = {"conditions": self.conditions.to_json(),

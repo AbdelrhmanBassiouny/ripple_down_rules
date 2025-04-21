@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import UserDict
 from copy import copy, deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from enum import Enum
 
 from pandas import DataFrame
@@ -11,7 +11,7 @@ from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColum
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING
 
 from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, SubclassJSONSerializer, \
-    get_full_class_name, get_type_from_string, make_list
+    get_full_class_name, get_type_from_string, make_list, is_iterable, serialize_dataclass
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
@@ -86,7 +86,9 @@ class Case(UserDict, SubclassJSONSerializer):
         serializable["_name"] = self._name
         for k, v in serializable.items():
             if isinstance(v, set):
-                serializable[k] = {'_type': get_full_class_name(set), 'value': list(v)}
+                serializable[k] = {'_type': get_full_class_name(set), 'value': serialize_dataclass(list(v))}
+            else:
+                serializable[k] = serialize_dataclass(v)
         return {k: v.to_json() if isinstance(v, SubclassJSONSerializer) else v for k, v in serializable.items()}
 
     @classmethod

@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from unittest import TestCase
 
 from typing_extensions import List
@@ -7,8 +8,20 @@ from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures import CaseQuery, Case
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import make_set, flatten_list
+from ripple_down_rules.utils import make_set, flatten_list, serialize_dataclass, deserialize_dataclass
 from test_helpers.helpers import get_fit_mcrdr, get_fit_scrdr, get_fit_grdr
+
+
+@dataclass
+class Position:
+    x: float
+    y: float
+
+
+@dataclass
+class Robot:
+    name: str
+    position: Position
 
 
 class TestJSONSerialization(TestCase):
@@ -49,3 +62,14 @@ class TestJSONSerialization(TestCase):
             cat = flatten_list(cat)
             case_targets = flatten_list(case_targets)
             self.assertEqual(make_set(cat), make_set(case_targets))
+
+    def test_serialize_dataclass(self):
+
+        robot = Robot("Robo", Position(1.0, 2.0))
+
+        # Serialize
+        json = serialize_dataclass(robot)
+        # Deserialize
+        reconstructed = deserialize_dataclass(json)
+        assert robot == reconstructed
+

@@ -106,6 +106,7 @@ def make_molecule_1() -> Molecule:
     molecule = Molecule(ind1=1, inda=0, logp=4.23, lumo=-1.246, mutagenic=True, atoms=atoms, bonds=bonds)
     return molecule
 
+
 def make_molecule_2() -> Molecule:
     atoms = [Atom(element=Element.C, type=22, charge=-0.128), Atom(element=Element.H, type=3, charge=0.132),
              Atom(element=Element.C, type=29, charge=0.002), Atom(element=Element.C, type=22, charge=-0.128),
@@ -153,23 +154,18 @@ def make_molecule_2() -> Molecule:
     return molecule
 
 
-def test_two_molecules():
-    draw_tree = False
-    load_answers = True
-    save_answers = False
-    filename = "./test_expert_answers/mutagenic_expert_answers"
+def get_two_molecules_model(draw_tree=False, load_answers=True, save_answers=False,
+                            filename="./test_expert_answers/mutagenic_expert_answers"):
     expert = Human(use_loaded_answers=load_answers)
     if load_answers:
         expert.load_answers(filename)
 
-    rdr = SingleClassRDR()
-
     molecule_1 = make_molecule_1()
     molecule_2 = make_molecule_2()
-
     case_queries = [CaseQuery(molecule_1, attribute_name="mutagenic", target=molecule_1.mutagenic),
                     CaseQuery(molecule_2, attribute_name="mutagenic", target=molecule_2.mutagenic), ]
 
+    rdr = SingleClassRDR()
     rdr.fit(case_queries, expert=expert, draw_tree=draw_tree)
 
     for case_query in case_queries:
@@ -183,6 +179,21 @@ def test_two_molecules():
         cwd = os.getcwd()
         file = os.path.join(cwd, filename)
         expert.save_answers(file)
+
+    return rdr
+
+
+def test_two_molecules():
+    rdr = get_two_molecules_model(draw_tree=False, load_answers=True, save_answers=False)
+
+
+def test_serialize_two_molecules_model():
+    rdr = get_two_molecules_model()
+    filename = "./test_results/mutagenic_rdr.json"
+    rdr.save(filename)
+    loaded_rdr = type(rdr).load(filename)
+    assert rdr.classify(make_molecule_1()) == loaded_rdr.classify(make_molecule_1())
+    assert rdr.classify(make_molecule_2()) == loaded_rdr.classify(make_molecule_2())
 
 
 if __name__ == '__main__':
