@@ -162,7 +162,7 @@ def test_two_molecules():
     if load_answers:
         expert.load_answers(filename)
 
-    rdr = GeneralRDR()
+    rdr = SingleClassRDR()
 
     molecule_1 = make_molecule_1()
     molecule_2 = make_molecule_2()
@@ -174,7 +174,10 @@ def test_two_molecules():
 
     for case_query in case_queries:
         r = rdr.classify(case_query.case)
-        assert r[case_query.attribute_name] == case_query.target
+        if isinstance(rdr, GeneralRDR):
+            assert r[case_query.attribute_name] == case_query.target
+        else:
+            assert r == case_query.target
 
     if save_answers:
         cwd = os.getcwd()
