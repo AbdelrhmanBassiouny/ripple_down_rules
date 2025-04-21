@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Type, List, Tuple, Set, Dict
+from typing_extensions import Any, Optional, Type, List, Tuple, Set, Dict, TYPE_CHECKING
 
-from . import CallableExpression
 from .case import create_case, Case
 from ..utils import get_attribute_name, copy_case, get_hint_for_attribute, typing_to_python_type
 
+if TYPE_CHECKING:
+    from . import CallableExpression
 
 @dataclass
 class CaseQuery:
@@ -41,12 +43,19 @@ class CaseQuery:
     """
     The predicted value of the attribute.
     """
+    scope: Optional[Dict[str, Any]] = None
+    """
+    The global scope of the case query. This is used to evaluate the conditions and prediction, and is what is available
+    to the user when they are prompted for input. If it is not provided, it will be set to the global scope of the
+    caller.
+    """
 
     def __init__(self, case: Any, attribute_name: str,
                  target: Optional[Any] = None,
                  mutually_exclusive: bool = False,
                  conditions: Optional[CallableExpression] = None,
-                 prediction: Optional[CallableExpression] = None):
+                 prediction: Optional[CallableExpression] = None,
+                 scope: Optional[Dict[str, Any]] = None,):
         self.original_case = case
         self.case = self._get_case()
 
@@ -56,6 +65,7 @@ class CaseQuery:
         self.mutually_exclusive = mutually_exclusive
         self.conditions = conditions
         self.prediction = prediction
+        self.scope = scope if scope is not None else inspect.currentframe().f_back.f_globals
 
     def _get_case(self) -> Any:
         if not isinstance(self.original_case, (Case, SQLTable)):
@@ -102,4 +112,4 @@ class CaseQuery:
 
     def __copy__(self):
         return CaseQuery(copy_case(self.case), self.attribute_name, self.target, self.mutually_exclusive,
-                         self.conditions, self.prediction)
+                         self.conditions, self.prediction, self.scope)

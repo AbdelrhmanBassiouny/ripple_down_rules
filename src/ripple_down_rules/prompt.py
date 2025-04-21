@@ -10,7 +10,7 @@ from prompt_toolkit.completion import WordCompleter
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
 from typing_extensions import Any, List, Optional, Tuple, Dict, Union, Type
 
-from .datastructures import Case, PromptFor, CallableExpression, create_case, parse_string_to_expression
+from .datastructures import Case, PromptFor, CallableExpression, create_case, parse_string_to_expression, CaseQuery
 from .utils import capture_variable_assignment
 
 
@@ -65,24 +65,23 @@ class IpythonShell:
         self.shell()
 
 
-def prompt_user_for_expression(case: Union[Case, SQLTable], prompt_for: PromptFor, target_name: str,
-                               output_type: Type, session: Optional[Session] = None) -> Tuple[str, CallableExpression]:
+def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor,
+                               session: Optional[Session] = None) -> Tuple[str, CallableExpression]:
     """
-    Prompt the user for an executable python expression.
+    Prompt the user for an executable python expression to the given case query.
 
-    :param case: The case to classify.
+    :param case_query: The case query to prompt the user for.
     :param prompt_for: The type of information ask user about.
-    :param target_name: The name of the target attribute to compare the case with.
-    :param output_type: The type of the output of the given statement from the user.
     :param session: The sqlalchemy orm session.
     :return: A callable expression that takes a case and executes user expression on it.
     """
     while True:
-        user_input, expression_tree = prompt_user_about_case(case, prompt_for, target_name)
-        callable_expression = CallableExpression(user_input, output_type, expression_tree=expression_tree,
-                                                 session=session)
+        user_input, expression_tree = prompt_user_about_case(case_query, prompt_for)
+        conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
+        callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
+                                                 scope=case_query.scope, session=session)
         try:
-            callable_expression(case)
+            callable_expression(case_query.case)
             break
         except Exception as e:
             logging.error(e)
@@ -90,18 +89,17 @@ def prompt_user_for_expression(case: Union[Case, SQLTable], prompt_for: PromptFo
     return user_input, callable_expression
 
 
-def prompt_user_about_case(case: Union[Case, SQLTable], prompt_for: PromptFor, target_name: str) \
-        -> Tuple[str, AST]:
+def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor) -> Tuple[str, AST]:
     """
     Prompt the user for input.
 
-    :param case: The case to prompt the user on.
+    :param case_query: The case query to prompt the user for.
     :param prompt_for: The type of information the user should provide for the given case.
-    :param target_name: The name of the target property of the case that is queried.
     :return: The user input, and the executable expression that was parsed from the user input.
     """
-    prompt_str = f"Give {prompt_for} for {case.__class__.__name__}.{target_name}"
-    shell = IpythonShell(prompt_for.value, scope={'case': case}, header=prompt_str)
+    prompt_str = f"Give {prompt_for} for {case_query.name}"
+    scope = {'case': case_query.case, **case_query.scope}
+    shell = IpythonShell(prompt_for.value, scope=scope, header=prompt_str)
     user_input, expression_tree = prompt_user_input_and_parse_to_expression(shell=shell)
     return user_input, expression_tree
 

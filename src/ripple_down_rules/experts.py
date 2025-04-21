@@ -36,14 +36,13 @@ class Expert(ABC):
     """
 
     @abstractmethod
-    def ask_for_conditions(self, x: Case, targets: List[CaseAttribute], last_evaluated_rule: Optional[Rule] = None) \
+    def ask_for_conditions(self, case_query: CaseQuery, last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
         that doesn't have a corner case to compare to.
 
-        :param x: The case to classify.
-        :param targets: The target categories to compare the case with.
+        :param case_query: The case query containing the case to classify and the required target.
         :param last_evaluated_rule: The last evaluated rule.
         :return: The differentiating features as new rule conditions.
         """
@@ -76,13 +75,11 @@ class Expert(ABC):
         """
         pass
 
-    def ask_for_conclusion(self, case_query: CaseQuery,
-                           session: Optional[Session] = None) -> Optional[CallableExpression]:
+    def ask_for_conclusion(self, case_query: CaseQuery) -> Optional[CallableExpression]:
         """
         Ask the expert to provide a relational conclusion for the case.
 
         :param case_query: The case query containing the case to find a conclusion for.
-        :param session: The sqlalchemy orm session to use if the case is a Table.
         :return: A callable expression that can be called with a new case as an argument.
         """
 
@@ -124,35 +121,33 @@ class Human(Expert):
         with open(path + '.json', "r") as f:
             self.all_expert_answers = json.load(f)
 
-    def ask_for_conditions(self, case: Case,
-                           targets: Dict[str, Any],
+    def ask_for_conditions(self, case_query: CaseQuery,
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         if not self.use_loaded_answers:
-            show_current_and_corner_cases(case, targets, last_evaluated_rule=last_evaluated_rule)
-        return self._get_conditions(case, targets)
+            show_current_and_corner_cases(case_query.case, {case_query.attribute_name: case_query.target},
+                                          last_evaluated_rule=last_evaluated_rule)
+        return self._get_conditions(case_query)
 
-    def _get_conditions(self, case: Case, targets: Dict[str, Any]) \
+    def _get_conditions(self, case_query: CaseQuery) \
             -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
         that doesn't have a corner case to compare to.
 
-        :param case: The case to classify.
-        :param targets: The target categories to compare the case with.
+        :param case_query: The case query containing the case to classify.
         :return: The differentiating features as new rule conditions.
         """
-        condition = None
-        for target_name, target in targets.items():
-            user_input = None
-            if self.use_loaded_answers:
-                user_input = self.all_expert_answers.pop(0)
-            if user_input:
-                condition = CallableExpression(user_input, bool, session=self.session)
-            else:
-                user_input, condition = prompt_user_for_expression(case, PromptFor.Conditions, target_name, bool)
-            if not self.use_loaded_answers:
-                self.all_expert_answers.append(user_input)
+        user_input = None
+        if self.use_loaded_answers:
+            user_input = self.all_expert_answers.pop(0)
+        if user_input:
+            condition = CallableExpression(user_input, bool, scope=case_query.scope, session=self.session)
+        else:
+            user_input, condition = prompt_user_for_expression(case_query, PromptFor.Conditions, session=self.session)
+        if not self.use_loaded_answers:
+            self.all_expert_answers.append(user_input)
+        case_query.conditions = condition
         return condition
 
     def ask_for_extra_conclusions(self, case: Case, current_conclusions: List[CaseAttribute]) \
@@ -182,13 +177,14 @@ class Human(Expert):
         """
         if self.use_loaded_answers:
             expert_input = self.all_expert_answers.pop(0)
-            expression = CallableExpression(expert_input, conclusion_type=case_query.attribute_type,
-                                            session=self.session)
+            expression = CallableExpression(expert_input, case_query.attribute_type, session=self.session,
+                                            scope=case_query.scope)
         else:
-            show_current_and_corner_cases(case, current_conclusions=current_conclusions)
-            expert_input, expression = prompt_user_for_expression(case, PromptFor.Conclusion, attribute_name,
-                                                                  attribute_type)
+            show_current_and_corner_cases(case_query.case)
+            expert_input, expression = prompt_user_for_expression(case_query, PromptFor.Conclusion,
+                                                                  session=self.session)
             self.all_expert_answers.append(expert_input)
+        case_query.target = expression
         return expression
 
     def get_category_type(self, cat_name: str) -> Optional[Type[CaseAttribute]]:

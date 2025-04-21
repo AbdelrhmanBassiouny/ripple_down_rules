@@ -22,9 +22,21 @@ class VariableVisitor(ast.NodeVisitor):
     def __init__(self):
         self.variables = set()
         self.attributes: Dict[ast.Name, ast.Attribute] = {}
+        self.types = set()
+        self.callables = set()
         self.compares = list()
         self.binary_ops = list()
         self.all = list()
+
+    def visit_Constant(self, node):
+        self.all.append(node)
+        self.types.add(node)
+        self.generic_visit(node)
+
+    def visit_Call(self, node):
+        self.all.append(node)
+        self.callables.add(node)
+        self.generic_visit(node)
 
     def visit_Attribute(self, node):
         self.all.append(node)
@@ -49,6 +61,27 @@ class VariableVisitor(ast.NodeVisitor):
         if f"__{node.id}__" not in dir(__builtins__) and node not in self.attributes:
             self.variables.add(node.id)
         self.generic_visit(node)
+
+
+def get_used_scope(code_str, scope):
+    # Parse the code into an AST
+    tree = ast.parse(code_str, mode='eval')
+
+    # Walk the AST to collect used variable names
+    class NameCollector(ast.NodeVisitor):
+        def __init__(self):
+            self.names = set()
+
+        def visit_Name(self, node):
+            if isinstance(node.ctx, ast.Load):  # We care only about variables being read
+                self.names.add(node.id)
+
+    collector = NameCollector()
+    collector.visit(tree)
+
+    # Filter the scope to include only used names
+    used_scope = {k: scope[k] for k in collector.names if k in scope}
+    return used_scope
 
 
 class CallableExpression(SubclassJSONSerializer):
@@ -85,7 +118,7 @@ class CallableExpression(SubclassJSONSerializer):
     """
 
     def __init__(self, user_input: str, conclusion_type: Optional[Type] = None, expression_tree: Optional[AST] = None,
-                 session: Optional[Session] = None):
+                 session: Optional[Session] = None, scope: Optional[Dict[str, Any]] = None):
         """
         Create a callable expression.
 
@@ -98,7 +131,16 @@ class CallableExpression(SubclassJSONSerializer):
         self.user_input: str = user_input
         self.parsed_user_input = self.parse_user_input(user_input, session)
         self.conclusion_type = conclusion_type
+        self.scope: Optional[Dict[str, Any]] = scope if scope is not None else {}
+        self.scope = get_used_scope(self.parsed_user_input, self.scope)
         self.update_expression(self.parsed_user_input, expression_tree)
+
+    def get_used_scope_in_user_input(self) -> Set[str]:
+        """
+        Get the used scope in the user input.
+        :return: The used scope in the user input.
+        """
+        return self.visitor.variables.union(self.visitor.attributes.keys())
 
     @staticmethod
     def parse_user_input(user_input: str, session: Optional[Session] = None) -> str:
@@ -117,12 +159,6 @@ class CallableExpression(SubclassJSONSerializer):
         self.expression_tree: AST = expression_tree
         self.visitor = VariableVisitor()
         self.visitor.visit(expression_tree)
-        # if "case" not in self.parsed_user_input:
-        #     variables_str = self.visitor.variables
-        #     attributes_str = get_attributes_str(self.visitor)
-        #     for v in variables_str:
-        #         if not v.startswith("case."):
-        #             self.parsed_user_input = self.parsed_user_input.replace(v, f"case.{v}")
         self.expression_tree = parse_string_to_expression(self.parsed_user_input)
         self.compares_column_offset = [(c[0].col_offset, c[2].end_col_offset) for c in self.visitor.compares]
         self.code = compile_expression_to_code(self.expression_tree)
@@ -131,7 +167,8 @@ class CallableExpression(SubclassJSONSerializer):
         try:
             if not isinstance(case, Case):
                 case = create_case(case, max_recursion_idx=3)
-            output = eval(self.code)
+            scope = {'case': case, **self.scope}
+            output = eval(self.code, scope)
             if self.conclusion_type is not None:
                 assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
                                                                   f" got {type(output)}")
@@ -164,11 +201,15 @@ class CallableExpression(SubclassJSONSerializer):
         return "\n".join(all_binary_ops) if len(all_binary_ops) > 0 else user_input
 
     def _to_json(self) -> Dict[str, Any]:
-        return {"user_input": self.user_input, "conclusion_type": get_full_class_name(self.conclusion_type)}
+        return {"user_input": self.user_input, "conclusion_type": get_full_class_name(self.conclusion_type),
+                "scope": {k: get_full_class_name(v) for k, v in self.scope.items()
+                          if hasattr(v, '__module__') and hasattr(v, '__name__')}
+                }
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> CallableExpression:
-        return cls(user_input=data["user_input"], conclusion_type=get_type_from_string(data["conclusion_type"]))
+        return cls(user_input=data["user_input"], conclusion_type=get_type_from_string(data["conclusion_type"]),
+                   scope={k: get_type_from_string(v) for k, v in data["scope"].items()})
 
 
 def compile_expression_to_code(expression_tree: AST) -> Any:

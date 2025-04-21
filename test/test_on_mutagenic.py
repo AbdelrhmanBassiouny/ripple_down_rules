@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from enum import Enum
 from unittest import skip
@@ -5,6 +6,7 @@ from unittest import skip
 from typing_extensions import List
 
 from ripple_down_rules.datastructures import CaseQuery
+from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, GeneralRDR
 
 
@@ -151,25 +153,34 @@ def make_molecule_2() -> Molecule:
     return molecule
 
 
-# @skip("needs to run in terminal")
-def test_main():
+def test_two_molecules():
+    draw_tree = False
+    load_answers = True
+    save_answers = False
+    filename = "./test_expert_answers/mutagenic_expert_answers"
+    expert = Human(use_loaded_answers=load_answers)
+    if load_answers:
+        expert.load_answers(filename)
+
     rdr = GeneralRDR()
 
     molecule_1 = make_molecule_1()
     molecule_2 = make_molecule_2()
 
-    user_input_1 = "len([atom for atom in case.atoms if atom.element == 'c']) > 0"
-    user_input_2 = "case.ind1 == 0"
-
     case_queries = [CaseQuery(molecule_1, attribute_name="mutagenic", target=molecule_1.mutagenic),
                     CaseQuery(molecule_2, attribute_name="mutagenic", target=molecule_2.mutagenic), ]
 
-    rdr.fit(case_queries)
+    rdr.fit(case_queries, expert=expert, draw_tree=draw_tree)
 
     for case_query in case_queries:
         r = rdr.classify(case_query.case)
         assert r[case_query.attribute_name] == case_query.target
 
+    if save_answers:
+        cwd = os.getcwd()
+        file = os.path.join(cwd, filename)
+        expert.save_answers(file)
+
 
 if __name__ == '__main__':
-    test_main()
+    test_two_molecules()
