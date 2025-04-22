@@ -12,3 +12,5 @@ pyqt5
 tabulate
 pdbpp
 pytest
+ipython
+requests
