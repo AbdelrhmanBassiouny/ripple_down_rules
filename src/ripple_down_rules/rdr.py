@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from copy import copy
 from types import ModuleType
 
+from anytree import Node
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
@@ -235,6 +236,11 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         if self.conclusion_type.__module__ != "builtins":
             imports += f"from {self.conclusion_type.__module__} import {self.conclusion_type.__name__}\n"
         imports += "from ripple_down_rules.datastructures import Case, create_case\n"
+        for rule in [self.start_rule] + list(self.start_rule.descendants):
+            if rule.conditions:
+                if rule.conditions.scope is not None and len(rule.conditions.scope) > 0:
+                    for k, v in rule.conditions.scope.items():
+                        imports += f"from {v.__module__} import {v.__name__}\n"
         return imports
 
     def get_rdr_classifier_from_python_file(self, package_name) -> Callable[[Any], Any]:

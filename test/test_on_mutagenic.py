@@ -196,5 +196,14 @@ def test_serialize_two_molecules_model():
     assert rdr.classify(make_molecule_2()) == loaded_rdr.classify(make_molecule_2())
 
 
+def test_write_two_molecules_model_to_python():
+    rdr = get_two_molecules_model()
+    filename = "./test_generated_rdrs"
+    rdr.write_to_python_file(filename)
+    loaded_rdr = rdr.get_rdr_classifier_from_python_file(filename)
+    assert rdr.classify(make_molecule_1()) == loaded_rdr(make_molecule_1())
+    assert rdr.classify(make_molecule_2()) == loaded_rdr(make_molecule_2())
+
+
 if __name__ == '__main__':
     test_two_molecules()
