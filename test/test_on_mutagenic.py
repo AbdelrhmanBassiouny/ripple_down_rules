@@ -206,4 +206,5 @@ def test_write_two_molecules_model_to_python():
 
 
 if __name__ == '__main__':
-    test_two_molecules()
+    # test_two_molecules()
+    test_write_two_molecules_model_to_python()

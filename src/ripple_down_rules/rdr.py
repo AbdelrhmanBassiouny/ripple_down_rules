@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from copy import copy
 from types import ModuleType
 
-from anytree import Node
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
@@ -133,12 +132,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             for pred_key, pred_value in pred_cat.items():
                 if pred_key not in target:
                     continue
-                # if is_iterable(pred_value):
-                #     print(pred_value, target[pred_key])
-                #     precision.extend([v in make_set(target[pred_key]) for v in make_set(pred_value)])
                 precision.extend([v in make_set(target[pred_key]) for v in make_set(pred_value)])
-                # else:
-                #     precision.append(pred_value == target[pred_key])
             for target_key, target_value in target.items():
                 if target_key not in pred_cat:
                     recall.append(False)
@@ -147,7 +141,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                     recall.extend([v in pred_cat[target_key] for v in target_value])
                 else:
                     recall.append(target_value == pred_cat[target_key])
-            print(f"Precision: {precision}, Recall: {recall}")
         else:
             if isinstance(target, dict):
                 target = list(target.values())
@@ -215,7 +208,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             f.write(self._get_imports() + "\n\n")
             f.write(func_def)
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
-                    f"{' ' * 4}    case = create_case(case, recursion_idx=3)\n""")
+                    f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
             self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4)
 
     @property
@@ -252,11 +245,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
 
     @property
     def generated_python_file_name(self) -> str:
-        return f"{self.conclusion_type.__name__.lower()}_{self.__class__.__name__}"
-
-    @property
-    def python_file_name(self):
-        return f"{self.start_rule.conclusion.__name__.lower()}_rdr"
+        return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_rdr"
 
     @property
     def case_type(self) -> Type:
@@ -491,6 +480,7 @@ class MultiClassRDR(RDRWithCodeWriter):
             self.start_rule.conditions = conditions
             self.start_rule.conclusion = case_query.target
             self.start_rule.corner_case = case_query.case
+            self.start_rule.conclusion_name = case_query.attribute_name
 
     @property
     def last_top_rule(self) -> Optional[MultiClassTopRule]:
@@ -872,7 +862,7 @@ class GeneralRDR(RippleDownRules):
             f.write("\n\n")
             f.write(func_def)
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
-                    f"{' ' * 4}    case = create_case(case, recursion_idx=3)\n""")
+                    f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
             f.write(f"{' ' * 4}return GeneralRDR._classify(classifiers_dict, case)\n")
 
     @property
@@ -894,7 +884,7 @@ class GeneralRDR(RippleDownRules):
 
     @property
     def generated_python_file_name(self) -> str:
-        return f"{self.case_type.__name__.lower()}_grdr"
+        return f"{self.start_rule.corner_case._name.lower()}_rdr"
 
     @property
     def conclusion_type_hint(self) -> str:

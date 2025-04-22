@@ -27,7 +27,14 @@ if TYPE_CHECKING:
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
-def serialize_dataclass(obj: Any) -> Dict:
+def serialize_dataclass(obj: Any) -> Union[Dict, Any]:
+    """
+    Recursively serialize a dataclass to a dictionary. If the dataclass contains any nested dataclasses, they will be
+    serialized as well. If the object is not a dataclass, it will be returned as is.
+
+    :param obj: The dataclass to serialize.
+    :return: The serialized dataclass as a dictionary or the object itself if it is not a dataclass.
+    """
 
     def recursive_convert(obj):
         if is_dataclass(obj):
@@ -39,8 +46,6 @@ def serialize_dataclass(obj: Any) -> Dict:
             return [recursive_convert(item) for item in obj]
         elif isinstance(obj, dict):
             return {k: recursive_convert(v) for k, v in obj.items()}
-        elif hasattr(obj, "__module__") and hasattr(obj, "__name__"):
-            return {'_type': get_full_class_name(obj.__class__)}
         else:
             return obj
 
@@ -48,6 +53,14 @@ def serialize_dataclass(obj: Any) -> Dict:
 
 
 def deserialize_dataclass(data: dict) -> Any:
+    """
+    Recursively deserialize a dataclass from a dictionary, if the dictionary contains a key "__dataclass__" (Most likely
+    created by the serialize_dataclass function), it will be treated as a dataclass and deserialized accordingly,
+    otherwise it will be returned as is.
+
+    :param data: The dictionary to deserialize.
+    :return: The deserialized dataclass.
+    """
     def recursive_load(obj):
         if isinstance(obj, dict) and "__dataclass__" in obj:
             module_name, class_name = obj["__dataclass__"].rsplit(".", 1)
