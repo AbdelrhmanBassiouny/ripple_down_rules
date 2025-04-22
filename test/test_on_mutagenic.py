@@ -166,7 +166,7 @@ def get_two_molecules_model(draw_tree=False, load_answers=True, save_answers=Fal
                     CaseQuery(molecule_2, attribute_name="mutagenic", target=molecule_2.mutagenic), ]
 
     rdr = SingleClassRDR()
-    rdr.fit(case_queries, expert=expert, draw_tree=draw_tree)
+    rdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
 
     for case_query in case_queries:
         r = rdr.classify(case_query.case)
