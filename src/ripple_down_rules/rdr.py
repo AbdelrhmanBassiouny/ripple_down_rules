@@ -163,9 +163,9 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         Update the figures of the classifier.
         """
         if isinstance(self, GeneralRDR):
-            for i, (_type, rdr) in enumerate(self.start_rules_dict.items()):
+            for i, (rdr_name, rdr) in enumerate(self.start_rules_dict.items()):
                 if not rdr.fig:
-                    rdr.fig = plt.figure(f"Rule {i}: {_type.__name__}")
+                    rdr.fig = plt.figure(f"Rule {i}: {rdr_name}")
                 draw_tree(rdr.start_rule, rdr.fig)
         else:
             if not self.fig:
