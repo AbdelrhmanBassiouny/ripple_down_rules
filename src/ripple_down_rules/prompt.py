@@ -26,9 +26,10 @@ class CustomInteractiveShell(InteractiveShellEmbed):
         if contains_return_statement(raw_cell):
             self.all_lines.append(raw_cell)
             print("Exiting shell on `return` statement.")
+            self.history_manager.store_inputs(line_num=self.execution_count, source=raw_cell)
             self.ask_exit()
             return None
-        result = super().run_cell(raw_cell, **kwargs)
+        result = super().run_cell(raw_cell, store_history=True, **kwargs)
         if not result.error_in_exec:
             self.all_lines.append(raw_cell)
         return result
@@ -137,12 +138,12 @@ def prompt_user_input_and_parse_to_expression(shell: Optional[IpythonShell] = No
             shell = IpythonShell() if shell is None else shell
             shell.run()
             user_input = shell.user_input
+            print(user_input)
         try:
             return user_input, parse_string_to_expression(user_input)
         except Exception as e:
             msg = f"Error parsing expression: {e}"
             logging.error(msg)
-            print(msg)
             user_input = None
 
 

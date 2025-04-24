@@ -65,7 +65,8 @@ class VariableVisitor(ast.NodeVisitor):
 
 def get_used_scope(code_str, scope):
     # Parse the code into an AST
-    tree = ast.parse(code_str, mode='eval')
+    mode = 'exec' if code_str.startswith('def') else 'eval'
+    tree = ast.parse(code_str, mode=mode)
 
     # Walk the AST to collect used variable names
     class NameCollector(ast.NodeVisitor):
@@ -221,7 +222,8 @@ def compile_expression_to_code(expression_tree: AST) -> Any:
     :param expression_tree: The parsed expression tree.
     :return: The code that was compiled from the expression tree.
     """
-    return compile(expression_tree, filename="<string>", mode="eval")
+    mode = 'exec' if isinstance(expression_tree, ast.Module) else 'eval'
+    return compile(expression_tree, filename="<string>", mode=mode)
 
 
 def assert_context_contains_needed_information(case: Any, context: Dict[str, Any],
@@ -275,6 +277,7 @@ def parse_string_to_expression(expression_str: str) -> AST:
     :param expression_str: The string which will be parsed.
     :return: The parsed expression.
     """
-    tree = ast.parse(expression_str, mode='eval')
+    mode = 'exec' if expression_str.startswith('def') else 'eval'
+    tree = ast.parse(expression_str, mode=mode)
     logging.debug(f"AST parsed successfully: {ast.dump(tree)}")
     return tree
