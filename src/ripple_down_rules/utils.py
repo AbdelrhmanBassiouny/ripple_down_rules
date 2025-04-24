@@ -5,10 +5,9 @@ import importlib
 import json
 import logging
 import os
-from abc import abstractmethod
 from collections import UserDict
 from copy import deepcopy
-from dataclasses import dataclass, is_dataclass, fields
+from dataclasses import is_dataclass, fields
 
 import matplotlib
 import networkx as nx
@@ -24,7 +23,80 @@ from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get
 if TYPE_CHECKING:
     from .datastructures import Case
 
+import ast
+
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def contains_return_statement(source: str) -> bool:
+    """
+    :param source: The source code to check.
+    :return: True if the source code contains a return statement, False otherwise.
+    """
+    try:
+        tree = ast.parse(source)
+        for node in tree.body:
+            if isinstance(node, ast.Return):
+                return True
+        return False
+    except SyntaxError:
+        return False
+
+
+def get_names_used(node):
+    return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+
+
+def extract_dependencies(code_lines):
+    full_code = '\n'.join(code_lines)
+    tree = ast.parse(full_code)
+    final_stmt = tree.body[-1]
+
+    if not isinstance(final_stmt, ast.Return):
+        raise ValueError("Last line is not a return statement")
+
+    needed = get_names_used(final_stmt.value)
+    required_lines = []
+    line_map = {id(node): i for i, node in enumerate(tree.body)}
+
+    def handle_stmt(stmt, needed):
+        keep = False
+        if isinstance(stmt, ast.Assign):
+            targets = [t.id for t in stmt.targets if isinstance(t, ast.Name)]
+            if any(t in needed for t in targets):
+                needed.update(get_names_used(stmt.value))
+                keep = True
+        elif isinstance(stmt, ast.AugAssign):
+            if isinstance(stmt.target, ast.Name) and stmt.target.id in needed:
+                needed.update(get_names_used(stmt.value))
+                keep = True
+        elif isinstance(stmt, ast.FunctionDef):
+            if stmt.name in needed:
+                for n in ast.walk(stmt):
+                    if isinstance(n, ast.Name):
+                        needed.add(n.id)
+                keep = True
+        elif isinstance(stmt, (ast.For, ast.While, ast.If)):
+            # Check if any of the body statements interact with needed variables
+            for substmt in stmt.body + getattr(stmt, 'orelse', []):
+                if handle_stmt(substmt, needed):
+                    keep = True
+            # Also check the condition (test or iter)
+            if isinstance(stmt, ast.For):
+                if isinstance(stmt.target, ast.Name) and stmt.target.id in needed:
+                    keep = True
+                needed.update(get_names_used(stmt.iter))
+            elif isinstance(stmt, ast.If) or isinstance(stmt, ast.While):
+                needed.update(get_names_used(stmt.test))
+
+        return keep
+
+    for stmt in reversed(tree.body[:-1]):
+        if handle_stmt(stmt, needed):
+            required_lines.insert(0, code_lines[line_map[id(stmt)]])
+
+    required_lines.append(code_lines[-1])  # Always include return
+    return required_lines
 
 
 def serialize_dataclass(obj: Any) -> Union[Dict, Any]:
@@ -61,6 +133,7 @@ def deserialize_dataclass(data: dict) -> Any:
     :param data: The dictionary to deserialize.
     :return: The deserialized dataclass.
     """
+
     def recursive_load(obj):
         if isinstance(obj, dict) and "__dataclass__" in obj:
             module_name, class_name = obj["__dataclass__"].rsplit(".", 1)

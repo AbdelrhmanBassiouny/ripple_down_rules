@@ -2,58 +2,68 @@ from IPython.core.interactiveshell import ExecutionInfo
 from IPython.terminal.embed import InteractiveShellEmbed
 from traitlets.config import Config
 
-from ripple_down_rules.utils import capture_variable_assignment
+from ripple_down_rules.utils import capture_variable_assignment, contains_return_statement, extract_dependencies
 
 
-class IpythonShell:
+class IpythonShell(InteractiveShellEmbed):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.all_lines = []
+
+    def run_cell(self, raw_cell: str, **kwargs):
+        """
+        Override the run_cell method to capture return statements.
+        """
+        if contains_return_statement(raw_cell):
+            self.all_lines.append(raw_cell)
+            print("Exiting shell on `return` statement.")
+            self.ask_exit()
+            return None
+        result = super().run_cell(raw_cell, **kwargs)
+        if not result.error_in_exec:
+            self.all_lines.append(raw_cell)
+        return result
+
+
+class IpythonShellManager:
     def __init__(self, scope=None, header=None):
         self.scope = scope or {}
         self.header = header or ">>> Embedded Ipython Shell"
         self.raw_condition = None
         self.shell = self._init_shell()
-        self._register_hooks()
+        self.all_code_lines = []
 
     def _init_shell(self):
         """
         Initialize the Ipython shell with a custom configuration.
         """
         cfg = Config()
-        shell = InteractiveShellEmbed(config=cfg, user_ns=self.scope, banner1=self.header)
+        shell = IpythonShell(config=cfg, user_ns=self.scope, banner1=self.header)
         return shell
-
-    def _register_hooks(self):
-        """
-        Register hooks to capture specific events in the Ipython shell.
-        """
-        def capture_condition(exec_info: ExecutionInfo):
-            code = exec_info.raw_cell
-            if "condition" not in code:
-                return
-            # use ast to find if the user is assigning a value to the variable "condition"
-            assignment = capture_variable_assignment(code, "condition")
-            if assignment:
-                # if the user is assigning a value to the variable "condition", update the raw_condition
-                self.raw_condition = assignment
-                print(f"[Captured Condition]:\n{self.raw_condition}")
-
-        self.shell.events.register('pre_run_cell', capture_condition)
 
     def run(self):
         """
         Run the embedded shell.
         """
         self.shell()
+        self.all_code_lines = extract_dependencies(self.shell.all_lines)
+        user_input = f"def get_value(case):\n    "
+        user_input += '\n    '.join(self.all_code_lines)
+        print(user_input)
+        eval(compile(user_input, '<string>', 'exec'), self.scope)
+        print(self.scope['get_value'](4))
 
 
 def run_ipython_shell():
     x = 10
-    msg = "hello"
+    case = 5
     scope = locals()
-    IpythonShell(scope).run()
+    mgr = IpythonShellManager(scope)
+    mgr.run()
+    print(mgr.all_code_lines)
     # Apply changes to outer scope
     x = scope['x']
-    msg = scope['msg']
-    print(f"Back in code: x={x}, msg={msg}")
+    print(f"Back in code: x={x}")
 
 
 # run_ipython_shell()

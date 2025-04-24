@@ -11,58 +11,63 @@ from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
 from typing_extensions import Any, List, Optional, Tuple, Dict, Union, Type
 
 from .datastructures import Case, PromptFor, CallableExpression, create_case, parse_string_to_expression, CaseQuery
-from .utils import capture_variable_assignment
+from .utils import capture_variable_assignment, extract_dependencies, contains_return_statement
+
+
+class CustomInteractiveShell(InteractiveShellEmbed):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.all_lines = []
+
+    def run_cell(self, raw_cell: str, **kwargs):
+        """
+        Override the run_cell method to capture return statements.
+        """
+        if contains_return_statement(raw_cell):
+            self.all_lines.append(raw_cell)
+            print("Exiting shell on `return` statement.")
+            self.ask_exit()
+            return None
+        result = super().run_cell(raw_cell, **kwargs)
+        if not result.error_in_exec:
+            self.all_lines.append(raw_cell)
+        return result
 
 
 class IpythonShell:
     """
     Create an embedded Ipython shell that can be used to prompt the user for input.
     """
-    def __init__(self, variable_to_capture: str, scope: Optional[Dict] = None, header: Optional[str] = None):
+    def __init__(self, prompt_for: PromptFor, scope: Optional[Dict] = None, header: Optional[str] = None):
         """
         Initialize the Ipython shell with the given scope and header.
 
-        :param variable_to_capture: The variable to capture from the user input.
         :param scope: The scope to use for the shell.
         :param header: The header to display when the shell is started.
         """
-        self.variable_to_capture: str = variable_to_capture
+        self.prompt_for: PromptFor = prompt_for
         self.scope: Dict = scope or {}
         self.header: str = header or ">>> Embedded Ipython Shell"
         self.user_input: Optional[str] = None
-        self.shell: InteractiveShellEmbed = self._init_shell()
-        self._register_hooks()
+        self.shell: CustomInteractiveShell = self._init_shell()
+        self.all_code_lines: List[str] = []
 
     def _init_shell(self):
         """
         Initialize the Ipython shell with a custom configuration.
         """
         cfg = Config()
-        shell = InteractiveShellEmbed(config=cfg, user_ns=self.scope, banner1=self.header)
+        shell = CustomInteractiveShell(config=cfg, user_ns=self.scope, banner1=self.header)
         return shell
-
-    def _register_hooks(self):
-        """
-        Register hooks to capture specific events in the Ipython shell.
-        """
-        def capture_variable(exec_info: ExecutionInfo):
-            code = exec_info.raw_cell
-            if self.variable_to_capture not in code:
-                return
-            # use ast to find if the user is assigning a value to the variable "condition"
-            assignment = capture_variable_assignment(code, self.variable_to_capture)
-            if assignment:
-                # if the user is assigning a value to the variable "condition", update the raw_condition
-                self.user_input = assignment
-                print(f"[Captured {self.variable_to_capture}]:\n{self.user_input}")
-
-        self.shell.events.register('pre_run_cell', capture_variable)
 
     def run(self):
         """
         Run the embedded shell.
         """
         self.shell()
+        self.all_code_lines = extract_dependencies(self.shell.all_lines)
+        self.user_input = f"def _get_value(case):\n    "
+        self.user_input += '\n    '.join(self.all_code_lines)
 
 
 def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor,
@@ -99,7 +104,7 @@ def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor) -> Tupl
     """
     prompt_str = f"Give {prompt_for} for {case_query.name}"
     scope = {'case': case_query.case, **case_query.scope}
-    shell = IpythonShell(prompt_for.value, scope=scope, header=prompt_str)
+    shell = IpythonShell(prompt_for, scope=scope, header=prompt_str)
     user_input, expression_tree = prompt_user_input_and_parse_to_expression(shell=shell)
     return user_input, expression_tree
 
