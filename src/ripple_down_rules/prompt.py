@@ -2,16 +2,12 @@ import ast
 import logging
 from _ast import AST
 
-from IPython.core.interactiveshell import ExecutionInfo
 from IPython.terminal.embed import InteractiveShellEmbed
 from traitlets.config import Config
-from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import WordCompleter
-from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
-from typing_extensions import Any, List, Optional, Tuple, Dict, Union, Type
+from typing_extensions import List, Optional, Tuple, Dict
 
-from .datastructures import Case, PromptFor, CallableExpression, create_case, parse_string_to_expression, CaseQuery
-from .utils import capture_variable_assignment, extract_dependencies, contains_return_statement
+from .datastructures import PromptFor, CallableExpression, parse_string_to_expression, CaseQuery
+from .utils import extract_dependencies, contains_return_statement
 
 
 class CustomInteractiveShell(InteractiveShellEmbed):
@@ -39,14 +35,14 @@ class IpythonShell:
     """
     Create an embedded Ipython shell that can be used to prompt the user for input.
     """
-    def __init__(self, prompt_for: PromptFor, scope: Optional[Dict] = None, header: Optional[str] = None):
+
+    def __init__(self, scope: Optional[Dict] = None, header: Optional[str] = None):
         """
         Initialize the Ipython shell with the given scope and header.
 
         :param scope: The scope to use for the shell.
         :param header: The header to display when the shell is started.
         """
-        self.prompt_for: PromptFor = prompt_for
         self.scope: Dict = scope or {}
         self.header: str = header or ">>> Embedded Ipython Shell"
         self.user_input: Optional[str] = None
@@ -112,23 +108,9 @@ def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor) -> Tupl
     """
     prompt_str = f"Give {prompt_for} for {case_query.name}"
     scope = {'case': case_query.case, **case_query.scope}
-    shell = IpythonShell(prompt_for, scope=scope, header=prompt_str)
+    shell = IpythonShell(scope=scope, header=prompt_str)
     user_input, expression_tree = prompt_user_input_and_parse_to_expression(shell=shell)
     return user_input, expression_tree
-
-
-def get_completions(obj: Any) -> List[str]:
-    """
-    Get all completions for the object. This is used in the python prompt shell to provide completions for the user.
-
-    :param obj: The object to get completions for.
-    :return: A list of completions.
-    """
-    # Define completer with all object attributes and comparison operators
-    completions = ['==', '!=', '>', '<', '>=', '<=', 'in', 'not', 'and', 'or', 'is']
-    completions += ["isinstance(", "issubclass(", "type(", "len(", "hasattr(", "getattr(", "setattr(", "delattr("]
-    completions += list(create_case(obj).keys())
-    return completions
 
 
 def prompt_user_input_and_parse_to_expression(shell: Optional[IpythonShell] = None,
@@ -152,16 +134,3 @@ def prompt_user_input_and_parse_to_expression(shell: Optional[IpythonShell] = No
             msg = f"Error parsing expression: {e}"
             logging.error(msg)
             user_input = None
-
-
-def get_prompt_session_for_obj(obj: Any) -> PromptSession:
-    """
-    Get a prompt session for an object.
-
-    :param obj: The object to get the prompt session for.
-    :return: The prompt session.
-    """
-    completions = get_completions(obj)
-    completer = WordCompleter(completions)
-    session = PromptSession(completer=completer)
-    return session
