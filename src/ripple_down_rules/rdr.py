@@ -86,14 +86,14 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         num_rules: int = 0
         while not stop_iterating:
             all_pred = 0
-            for case_query in case_queries:
+            for i, case_query in enumerate(case_queries):
                 target = {case_query.attribute_name: case_query.target}
                 pred_cat = self.fit_case(case_query, expert=expert, **kwargs_for_fit_case)
-                if target[case_query.attribute_name] is None:
-                    if isinstance(case_query.target, CallableExpression):
-                        target[case_query.attribute_name] = case_query.target(case_query.case)
-                    else:
-                        target[case_query.attribute_name] = case_query.target
+                if isinstance(case_query.target, CallableExpression):
+                    target[case_query.attribute_name] = case_query.target(case_query.case)
+                else:
+                    target[case_query.attribute_name] = case_query.target
+                if len(targets) < i + 1:
                     targets.append(target)
                 match = self.is_matching(pred_cat, target)
                 if not match:
@@ -103,9 +103,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                     num_rules = self.start_rule.size
                     self.update_figures()
             i += 1
-            all_predictions = [1 if self.is_matching(self.classify(case_query.case), {case_query.attribute_name:
-                                                                                          case_query.target}) else 0
-                               for case_query in case_queries]
+            all_predictions = [1 if self.is_matching(self.classify(case), t) else 0 for t, case in zip(targets, cases)]
             all_pred = sum(all_predictions)
             print(f"Accuracy: {all_pred}/{len(targets)}")
             all_predicted = targets and all_pred == len(targets)
@@ -281,6 +279,14 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
 
 class SingleClassRDR(RDRWithCodeWriter):
 
+    def __init__(self, start_rule: Optional[SingleClassRule] = None, default_conclusion: Optional[Any] = None):
+        """
+        :param start_rule: The starting rule for the classifier.
+        :param default_conclusion: The default conclusion for the classifier if no rules fire.
+        """
+        super(SingleClassRDR, self).__init__(start_rule)
+        self.default_conclusion: Optional[Any] = default_conclusion
+
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
             -> Union[CaseAttribute, CallableExpression]:
         """
@@ -292,18 +298,20 @@ class SingleClassRDR(RDRWithCodeWriter):
         :return: The category that the case belongs to.
         """
         expert = expert if expert else Human()
-        if case_query.target is None:
-            target = expert.ask_for_conclusion(case_query)
+        case = case_query.case
+        target = expert.ask_for_conclusion(case_query) if case_query.target is None else case_query.target
         if not self.start_rule:
             conditions = expert.ask_for_conditions(case_query)
-            self.start_rule = SingleClassRule(conditions, case_query.target, corner_case=case_query.case,
+            self.start_rule = SingleClassRule(conditions, target, corner_case=case,
                                               conclusion_name=case_query.attribute_name)
 
-        pred = self.evaluate(case_query.case)
+        target = target if not isinstance(target, CallableExpression) else target(case_query.case)
 
-        if pred.conclusion != case_query.target:
+        pred = self.evaluate(case_query.case)
+        conclusion = pred.conclusion if not isinstance(pred.conclusion, CallableExpression) else pred.conclusion(case)
+        if conclusion != target:
             conditions = expert.ask_for_conditions(case_query, pred)
-            pred.fit_rule(case_query.case, case_query.target, conditions=conditions)
+            pred.fit_rule(case_query.case, target, conditions=conditions)
 
         return self.classify(case_query.case)
 
@@ -312,7 +320,8 @@ class SingleClassRDR(RDRWithCodeWriter):
         Classify a case by recursively evaluating the rules until a rule fires or the last rule is reached.
         """
         pred = self.evaluate(case)
-        return pred.conclusion if pred.fired else None
+        conclusion = pred.conclusion if not isinstance(pred.conclusion, CallableExpression) else pred.conclusion(case)
+        return conclusion if pred.fired else self.default_conclusion
 
     def evaluate(self, case: Case) -> SingleClassRule:
         """

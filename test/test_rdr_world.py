@@ -14,7 +14,7 @@ class WorldEntity:
 
 @dataclass
 class Body(WorldEntity):
-    ...
+    name: str
 
 
 @dataclass
@@ -64,10 +64,10 @@ class Drawer(View):
 def main():
     world = World()
 
-    handle = Handle(world=world)
-    handle_2 = Handle(world=world)
-    container_1 = Container(world=world)
-    container_2 = Container(world=world)
+    handle = Handle('h1', world=world)
+    handle_2 = Handle('h2', world=world)
+    container_1 = Container('c1',world=world)
+    container_2 = Container('c2', world=world)
     connection_1 = FixedConnection(container_1, handle, world=world)
     connection_2 = PrismaticConnection(container_2, container_1, world=world)
 
@@ -84,9 +84,11 @@ def main():
             i += 1
 
     print(all_views)
-    case_queries = [CaseQuery(view, "correct", mutually_exclusive=True) for view in all_views]
-    rdr = SingleClassRDR()
+    case_queries = [CaseQuery(view, "correct") for view in all_views]
+    rdr = SingleClassRDR(default_conclusion=False)
     rdr.fit(case_queries)
+    for case_query in case_queries:
+        print(f"Case: {case_query}, Classification: {rdr.classify(case_query.case)}")
 
 
 if __name__ == '__main__':

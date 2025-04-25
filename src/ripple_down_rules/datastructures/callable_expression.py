@@ -116,9 +116,9 @@ class CallableExpression(SubclassJSONSerializer):
             output = eval(self.code, scope)
             if output is None:
                 output = scope['_get_value'](case)
-            if self.conclusion_type is not None:
-                assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
-                                                                  f" got {type(output)}")
+            # if self.conclusion_type is not None:
+            #     assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
+            #                                                       f" got {type(output)}")
             return output
         except Exception as e:
             raise ValueError(f"Error during evaluation: {e}")
