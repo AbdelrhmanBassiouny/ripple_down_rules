@@ -86,11 +86,15 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         num_rules: int = 0
         while not stop_iterating:
             all_pred = 0
-            if not targets:
-                targets = [None] * len(cases)
             for case_query in case_queries:
                 target = {case_query.attribute_name: case_query.target}
                 pred_cat = self.fit_case(case_query, expert=expert, **kwargs_for_fit_case)
+                if target[case_query.attribute_name] is None:
+                    if isinstance(case_query.target, CallableExpression):
+                        target[case_query.attribute_name] = case_query.target(case_query.case)
+                    else:
+                        target[case_query.attribute_name] = case_query.target
+                    targets.append(target)
                 match = self.is_matching(pred_cat, target)
                 if not match:
                     print(f"Predicted: {pred_cat} but expected: {target}")
