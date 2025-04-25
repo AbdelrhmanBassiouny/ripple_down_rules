@@ -98,7 +98,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         :param parent_indent: The indentation of the parent rule.
         """
         if_clause = self._if_statement_source_code_clause()
-        return f"{parent_indent}{if_clause} {self.conditions.parsed_user_input}:\n"
+        return f"{parent_indent}{if_clause} {self.conditions.user_input}:\n"
 
     @abstractmethod
     def _if_statement_source_code_clause(self) -> str:

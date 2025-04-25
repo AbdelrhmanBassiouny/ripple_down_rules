@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 
-from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, Session
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Tuple, Type, Union, Any, get_type_hints
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Type
 
 from .datastructures import (Case, PromptFor, CallableExpression, CaseAttribute, CaseQuery)
 from .datastructures.case import show_current_and_corner_cases
-from .prompt import prompt_user_for_expression, prompt_user_about_case
-from .utils import get_all_subclasses, is_iterable
+from .prompt import prompt_user_for_expression
+from .utils import get_all_subclasses
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -89,10 +88,9 @@ class Human(Expert):
     The Human Expert class, an expert that asks the human to provide differentiating features and conclusions.
     """
 
-    def __init__(self, use_loaded_answers: bool = False, session: Optional[Session] = None):
+    def __init__(self, use_loaded_answers: bool = False):
         self.all_expert_answers = []
         self.use_loaded_answers = use_loaded_answers
-        self.session = session
 
     def save_answers(self, path: str, append: bool = False):
         """
@@ -142,9 +140,9 @@ class Human(Expert):
         if self.use_loaded_answers:
             user_input = self.all_expert_answers.pop(0)
         if user_input:
-            condition = CallableExpression(user_input, bool, scope=case_query.scope, session=self.session)
+            condition = CallableExpression(user_input, bool, scope=case_query.scope)
         else:
-            user_input, condition = prompt_user_for_expression(case_query, PromptFor.Conditions, session=self.session)
+            user_input, condition = prompt_user_for_expression(case_query, PromptFor.Conditions)
         if not self.use_loaded_answers:
             self.all_expert_answers.append(user_input)
         case_query.conditions = condition
@@ -177,12 +175,11 @@ class Human(Expert):
         """
         if self.use_loaded_answers:
             expert_input = self.all_expert_answers.pop(0)
-            expression = CallableExpression(expert_input, case_query.attribute_type, session=self.session,
+            expression = CallableExpression(expert_input, case_query.attribute_type,
                                             scope=case_query.scope)
         else:
             show_current_and_corner_cases(case_query.case)
-            expert_input, expression = prompt_user_for_expression(case_query, PromptFor.Conclusion,
-                                                                  session=self.session)
+            expert_input, expression = prompt_user_for_expression(case_query, PromptFor.Conclusion)
             self.all_expert_answers.append(expert_input)
         case_query.target = expression
         return expression
@@ -195,7 +192,8 @@ class Human(Expert):
         :return: The category type.
         """
         cat_name = cat_name.lower()
-        self.known_categories = get_all_subclasses(CaseAttribute) if not self.known_categories else self.known_categories
+        self.known_categories = get_all_subclasses(
+            CaseAttribute) if not self.known_categories else self.known_categories
         self.known_categories.update(CaseAttribute.registry)
         category_type = None
         if cat_name in self.known_categories:

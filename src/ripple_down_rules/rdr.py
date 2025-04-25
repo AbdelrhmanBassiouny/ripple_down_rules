@@ -7,7 +7,7 @@ from types import ModuleType
 
 from matplotlib import pyplot as plt
 from ordered_set import OrderedSet
-from sqlalchemy.orm import DeclarativeBase as SQLTable, Session
+from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple, Callable, Set
 
 from .datastructures import Case, MCRDRMode, CallableExpression, CaseAttribute, CaseQuery
@@ -30,13 +30,11 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     The conclusions that the expert has accepted, such that they are not asked again.
     """
 
-    def __init__(self, start_rule: Optional[Rule] = None, session: Optional[Session] = None):
+    def __init__(self, start_rule: Optional[Rule] = None):
         """
         :param start_rule: The starting rule for the classifier.
-        :param session: The sqlalchemy orm session.
         """
         self.start_rule = start_rule
-        self.session = session
         self.fig: Optional[plt.Figure] = None
 
     def __call__(self, case: Union[Case, SQLTable]) -> CaseAttribute:
@@ -289,7 +287,7 @@ class SingleClassRDR(RDRWithCodeWriter):
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :return: The category that the case belongs to.
         """
-        expert = expert if expert else Human(session=self.session)
+        expert = expert if expert else Human()
         if case_query.target is None:
             target = expert.ask_for_conclusion(case_query)
         if not self.start_rule:
@@ -369,14 +367,13 @@ class MultiClassRDR(RDRWithCodeWriter):
     """
 
     def __init__(self, start_rule: Optional[Rule] = None,
-                 mode: MCRDRMode = MCRDRMode.StopOnly, session: Optional[Session] = None):
+                 mode: MCRDRMode = MCRDRMode.StopOnly):
         """
         :param start_rule: The starting rules for the classifier.
         :param mode: The mode of the classifier, either StopOnly or StopPlusRule, or StopPlusRuleCombined.
-        :param session: The sqlalchemy orm session.
         """
         start_rule = MultiClassTopRule() if not start_rule else start_rule
-        super(MultiClassRDR, self).__init__(start_rule, session=session)
+        super(MultiClassRDR, self).__init__(start_rule)
         self.mode: MCRDRMode = mode
 
     def classify(self, case: Union[Case, SQLTable]) -> List[Any]:
@@ -400,7 +397,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         :param add_extra_conclusions: Whether to add extra conclusions after classification is done.
         :return: The conclusions that the case belongs to.
         """
-        expert = expert if expert else Human(session=self.session)
+        expert = expert if expert else Human()
         if case_query.target is None:
             targets = expert.ask_for_conclusion(case_query)
         self.expert_accepted_conclusions = []

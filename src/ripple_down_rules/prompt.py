@@ -66,26 +66,33 @@ class IpythonShell:
         Run the embedded shell.
         """
         self.shell()
+        self.update_user_input_from_code_lines()
+
+    def update_user_input_from_code_lines(self):
+        """
+        Update the user input from the code lines captured in the shell.
+        """
         self.all_code_lines = extract_dependencies(self.shell.all_lines)
-        self.user_input = f"def _get_value(case):\n    "
-        self.user_input += '\n    '.join(self.all_code_lines)
+        if len(self.all_code_lines) == 1:
+            self.user_input = self.all_code_lines[0].replace('return', '').strip()
+        else:
+            self.user_input = f"def _get_value(case):\n    "
+            self.user_input += '\n    '.join(self.all_code_lines)
 
 
-def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor,
-                               session: Optional[Session] = None) -> Tuple[str, CallableExpression]:
+def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor) -> Tuple[str, CallableExpression]:
     """
     Prompt the user for an executable python expression to the given case query.
 
     :param case_query: The case query to prompt the user for.
     :param prompt_for: The type of information ask user about.
-    :param session: The sqlalchemy orm session.
     :return: A callable expression that takes a case and executes user expression on it.
     """
     while True:
         user_input, expression_tree = prompt_user_about_case(case_query, prompt_for)
         conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
         callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
-                                                 scope=case_query.scope, session=session)
+                                                 scope=case_query.scope)
         try:
             callable_expression(case_query.case)
             break

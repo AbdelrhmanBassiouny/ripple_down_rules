@@ -57,13 +57,13 @@ class TestAlchemyRDR(TestCase):
         use_loaded_answers = True
         draw_tree = False
         filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
-        expert = Human(use_loaded_answers=use_loaded_answers, session=self.session)
+        expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
 
         query = select(Animal)
         result = self.session.scalars(query).all()
-        scrdr = SingleClassRDR(session=self.session)
+        scrdr = SingleClassRDR()
         case_queries = [CaseQuery(c, "species", target=t) for c, t in zip(self.all_cases, self.targets)]
         scrdr.fit(case_queries, expert=expert,
                   animate_tree=draw_tree, session=self.session)
@@ -77,7 +77,7 @@ class TestAlchemyRDR(TestCase):
         expert, filename = self.get_expert_and_file_name(use_loaded_answers,
                                                          "mcrdr_expert_answers_stop_only_fit")
 
-        mcrdr = MultiClassRDR(session=self.session)
+        mcrdr = MultiClassRDR()
         case_queries = [CaseQuery(c, "species", target=t) for c, t in zip(self.all_cases, self.targets)]
         mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
 
@@ -153,7 +153,7 @@ class TestAlchemyRDR(TestCase):
 
     def get_expert_and_file_name(self, use_loaded_answers: bool, filename: str):
         filename = self.expert_answers_dir + "/" + filename
-        expert = Human(use_loaded_answers=use_loaded_answers, session=self.session)
+        expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
         return expert, filename
