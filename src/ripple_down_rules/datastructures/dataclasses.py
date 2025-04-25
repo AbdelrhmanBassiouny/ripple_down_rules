@@ -3,14 +3,15 @@ from __future__ import annotations
 import inspect
 from dataclasses import dataclass
 
+import typing_extensions
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import Any, Optional, Type, List, Tuple, Set, Dict, TYPE_CHECKING
 
 from .case import create_case, Case
 from ..utils import get_attribute_name, copy_case, get_hint_for_attribute, typing_to_python_type
 
-if TYPE_CHECKING:
-    from . import CallableExpression
+from .callable_expression import CallableExpression
+
 
 @dataclass
 class CaseQuery:
@@ -66,6 +67,9 @@ class CaseQuery:
         self.conditions = conditions
         self.prediction = prediction
         self.scope = scope if scope is not None else inspect.currentframe().f_back.f_globals
+        if self.target is not None and not isinstance(self.target, CallableExpression):
+            self.target = CallableExpression(conclusion=self.target, conclusion_type=self.attribute_type,
+                                             scope=self.scope)
 
     def _get_case(self) -> Any:
         if not isinstance(self.original_case, (Case, SQLTable)):
@@ -82,8 +86,20 @@ class CaseQuery:
         elif hasattr(self.original_case, self.attribute_name):
             hint, origin, args = get_hint_for_attribute(self.attribute_name, self.original_case)
             if origin is not None:
-                return typing_to_python_type(origin)
-            elif hint is not None:
+                origin = typing_to_python_type(origin)
+            if origin == typing_extensions.Union:
+                if len(args) == 2:
+                    if args[1] is type(None):
+                        return typing_to_python_type(args[0])
+                    elif args[0] is type(None):
+                        return typing_to_python_type(args[1])
+                elif len(args) == 1:
+                    return typing_to_python_type(args[0])
+                else:
+                    raise ValueError(f"Union with more than 2 types is not supported: {args}")
+            elif origin is not None:
+                return origin
+            if hint is not None:
                 return typing_to_python_type(hint)
 
     @property

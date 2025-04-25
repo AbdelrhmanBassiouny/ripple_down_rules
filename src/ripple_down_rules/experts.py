@@ -5,7 +5,10 @@ from abc import ABC, abstractmethod
 
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Type
 
-from .datastructures import (Case, PromptFor, CallableExpression, CaseAttribute, CaseQuery)
+from .datastructures.case import Case, CaseAttribute
+from .datastructures.callable_expression import CallableExpression
+from .datastructures.enums import PromptFor
+from .datastructures.dataclasses import CaseQuery
 from .datastructures.case import show_current_and_corner_cases
 from .prompt import prompt_user_for_expression
 from .utils import get_all_subclasses

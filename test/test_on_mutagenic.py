@@ -5,7 +5,7 @@ from unittest import skip
 
 from typing_extensions import List
 
-from ripple_down_rules.datastructures import CaseQuery
+from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, GeneralRDR
 

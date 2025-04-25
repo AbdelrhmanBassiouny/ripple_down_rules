@@ -9,7 +9,8 @@ from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column, relationshi
 from typing_extensions import Tuple, List, Set, Optional
 from ucimlrepo import fetch_ucirepo
 
-from .datastructures import Case, create_cases_from_dataframe, Category
+from .datastructures.case import Case, create_cases_from_dataframe
+from .datastructures.enums import Category
 
 
 def load_cached_dataset(cache_file):

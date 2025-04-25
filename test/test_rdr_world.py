@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from ripple_down_rules.datastructures import CaseQuery
+from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.rdr import SingleClassRDR
 
 

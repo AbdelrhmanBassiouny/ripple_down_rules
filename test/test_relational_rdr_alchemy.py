@@ -7,7 +7,8 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import MappedAsDataclass, DeclarativeBase, declared_attr, Mapped, mapped_column, relationship
 from typing_extensions import List, Any, Set
 
-from ripple_down_rules.datastructures import CaseQuery, CallableExpression
+from ripple_down_rules.datastructures.dataclasses import CaseQuery
+from ripple_down_rules.datastructures.callable_expression import CallableExpression
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.utils import render_tree

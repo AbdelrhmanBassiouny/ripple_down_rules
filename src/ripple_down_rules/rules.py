@@ -6,7 +6,9 @@ from enum import Enum
 from anytree import NodeMixin
 from typing_extensions import List, Optional, Self, Union, Dict, Any
 
-from .datastructures import CallableExpression, Case, SQLTable
+from .datastructures.callable_expression import CallableExpression
+from .datastructures.case import Case
+from sqlalchemy.orm import DeclarativeBase as SQLTable
 from .datastructures.enums import RDREdge, Stop
 from .utils import SubclassJSONSerializer, is_iterable, get_full_class_name
 

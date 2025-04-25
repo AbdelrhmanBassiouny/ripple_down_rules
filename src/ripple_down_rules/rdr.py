@@ -10,7 +10,10 @@ from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple, Callable, Set
 
-from .datastructures import Case, MCRDRMode, CallableExpression, CaseAttribute, CaseQuery
+from .datastructures.case import Case, CaseAttribute
+from .datastructures.callable_expression import CallableExpression
+from .datastructures.dataclasses import CaseQuery
+from .datastructures.enums import MCRDRMode
 from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .utils import draw_tree, make_set, copy_case, \
@@ -78,7 +81,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param kwargs_for_fit_case: The keyword arguments to pass to the fit_case method.
         """
         cases = [case_query.case for case_query in case_queries]
-        targets = [{case_query.attribute_name: case_query.target} for case_query in case_queries]
+        targets = [{case_query.attribute_name: case_query.target(case_query.case)} for case_query in case_queries]
         if animate_tree:
             plt.ion()
         i = 0
@@ -87,12 +90,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         while not stop_iterating:
             all_pred = 0
             for i, case_query in enumerate(case_queries):
-                target = {case_query.attribute_name: case_query.target}
                 pred_cat = self.fit_case(case_query, expert=expert, **kwargs_for_fit_case)
-                if isinstance(case_query.target, CallableExpression):
-                    target[case_query.attribute_name] = case_query.target(case_query.case)
-                else:
-                    target[case_query.attribute_name] = case_query.target
+                target = {case_query.attribute_name: case_query.target(case_query.case)}
                 if len(targets) < i + 1:
                     targets.append(target)
                 match = self.is_matching(pred_cat, target)
@@ -305,23 +304,19 @@ class SingleClassRDR(RDRWithCodeWriter):
             self.start_rule = SingleClassRule(conditions, target, corner_case=case,
                                               conclusion_name=case_query.attribute_name)
 
-        target = target if not isinstance(target, CallableExpression) else target(case_query.case)
-
         pred = self.evaluate(case_query.case)
-        conclusion = pred.conclusion if not isinstance(pred.conclusion, CallableExpression) else pred.conclusion(case)
-        if conclusion != target:
+        if pred.conclusion(case) != target(case):
             conditions = expert.ask_for_conditions(case_query, pred)
             pred.fit_rule(case_query.case, target, conditions=conditions)
 
         return self.classify(case_query.case)
 
-    def classify(self, case: Case) -> Optional[CaseAttribute]:
+    def classify(self, case: Case) -> Optional[Any]:
         """
         Classify a case by recursively evaluating the rules until a rule fires or the last rule is reached.
         """
         pred = self.evaluate(case)
-        conclusion = pred.conclusion if not isinstance(pred.conclusion, CallableExpression) else pred.conclusion(case)
-        return conclusion if pred.fired else self.default_conclusion
+        return pred.conclusion(case) if pred.fired else self.default_conclusion
 
     def evaluate(self, case: Case) -> SingleClassRule:
         """

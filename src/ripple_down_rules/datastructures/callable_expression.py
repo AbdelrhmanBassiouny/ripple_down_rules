@@ -4,7 +4,6 @@ import ast
 import logging
 from _ast import AST
 
-from sqlalchemy.orm import Session
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .case import create_case, Case
@@ -90,8 +89,9 @@ class CallableExpression(SubclassJSONSerializer):
     A callable that is constructed from a string statement written by an expert.
     """
 
-    def __init__(self, user_input: str, conclusion_type: Optional[Type] = None, expression_tree: Optional[AST] = None,
-                 scope: Optional[Dict[str, Any]] = None):
+    def __init__(self, user_input: Optional[str] = None, conclusion_type: Optional[Type] = None,
+                 expression_tree: Optional[AST] = None,
+                 scope: Optional[Dict[str, Any]] = None, conclusion: Optional[Any] = None):
         """
         Create a callable expression.
 
@@ -99,27 +99,35 @@ class CallableExpression(SubclassJSONSerializer):
         :param conclusion_type: The type of the output of the callable.
         :param expression_tree: The AST tree parsed from the user input.
         :param scope: The scope to use for the callable expression.
+        :param conclusion: The conclusion to use for the callable expression.
         """
+        if user_input is None and conclusion is None:
+            raise ValueError("Either user_input or conclusion must be provided.")
+        self.conclusion: Optional[Any] = conclusion
         self.user_input: str = user_input
         self.conclusion_type = conclusion_type
-        self.scope: Optional[Dict[str, Any]] = get_used_scope(self.user_input, scope) if scope is not None else {}
-        self.expression_tree: AST = expression_tree if expression_tree else parse_string_to_expression(self.user_input)
-        self.code = compile_expression_to_code(self.expression_tree)
-        self.visitor = VariableVisitor()
-        self.visitor.visit(self.expression_tree)
+        if conclusion is None:
+            self.scope: Optional[Dict[str, Any]] = get_used_scope(self.user_input, scope) if scope is not None else {}
+            self.expression_tree: AST = expression_tree if expression_tree else parse_string_to_expression(self.user_input)
+            self.code = compile_expression_to_code(self.expression_tree)
+            self.visitor = VariableVisitor()
+            self.visitor.visit(self.expression_tree)
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            if not isinstance(case, Case):
-                case = create_case(case, max_recursion_idx=3)
-            scope = {'case': case, **self.scope}
-            output = eval(self.code, scope)
-            if output is None:
-                output = scope['_get_value'](case)
-            # if self.conclusion_type is not None:
-            #     assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
-            #                                                       f" got {type(output)}")
-            return output
+            if self.user_input is not None:
+                if not isinstance(case, Case):
+                    case = create_case(case, max_recursion_idx=3)
+                scope = {'case': case, **self.scope}
+                output = eval(self.code, scope)
+                if output is None:
+                    output = scope['_get_value'](case)
+                if self.conclusion_type is not None:
+                    assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
+                                                                      f" got {type(output)}")
+                return output
+            else:
+                return self.conclusion
         except Exception as e:
             raise ValueError(f"Error during evaluation: {e}")
 
@@ -134,6 +142,8 @@ class CallableExpression(SubclassJSONSerializer):
         """
         Return the user string where each compare is written in a line using compare column offset start and end.
         """
+        if self.user_input is None:
+            return str(self.conclusion)
         binary_ops = sorted(self.visitor.binary_ops, key=lambda x: x.end_col_offset)
         binary_ops_indices = [b.end_col_offset for b in binary_ops]
         all_binary_ops = []
@@ -149,13 +159,16 @@ class CallableExpression(SubclassJSONSerializer):
     def _to_json(self) -> Dict[str, Any]:
         return {"user_input": self.user_input, "conclusion_type": get_full_class_name(self.conclusion_type),
                 "scope": {k: get_full_class_name(v) for k, v in self.scope.items()
-                          if hasattr(v, '__module__') and hasattr(v, '__name__')}
+                          if hasattr(v, '__module__') and hasattr(v, '__name__')},
+                "conclusion": self.conclusion.to_json()
+                if isinstance(self.conclusion, SubclassJSONSerializer) else self.conclusion,
                 }
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> CallableExpression:
         return cls(user_input=data["user_input"], conclusion_type=get_type_from_string(data["conclusion_type"]),
-                   scope={k: get_type_from_string(v) for k, v in data["scope"].items()})
+                   scope={k: get_type_from_string(v) for k, v in data["scope"].items()},
+                   conclusion=SubclassJSONSerializer.from_json(data["conclusion"]))
 
 
 def compile_expression_to_code(expression_tree: AST) -> Any:

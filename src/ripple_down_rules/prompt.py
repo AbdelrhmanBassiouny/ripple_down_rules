@@ -6,7 +6,9 @@ from IPython.terminal.embed import InteractiveShellEmbed
 from traitlets.config import Config
 from typing_extensions import List, Optional, Tuple, Dict
 
-from .datastructures import PromptFor, CallableExpression, parse_string_to_expression, CaseQuery
+from .datastructures.enums import PromptFor
+from .datastructures.callable_expression import CallableExpression, parse_string_to_expression
+from .datastructures.dataclasses import CaseQuery
 from .utils import extract_dependencies, contains_return_statement
 
 

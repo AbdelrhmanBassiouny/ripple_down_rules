@@ -6,8 +6,9 @@ from typing_extensions import List
 
 from ripple_down_rules.datasets import Habitat, Species
 from ripple_down_rules.datasets import load_zoo_dataset
-from ripple_down_rules.datastructures import Case, MCRDRMode, \
-    Case, CaseAttribute, Category, CaseQuery
+from ripple_down_rules.datastructures.case import Case
+from ripple_down_rules.datastructures.dataclasses import CaseQuery
+from ripple_down_rules.datastructures.enums import MCRDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set, flatten_list

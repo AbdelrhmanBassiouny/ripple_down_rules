@@ -5,7 +5,7 @@ from unittest import TestCase
 
 from typing_extensions import List, Optional, Any
 
-from ripple_down_rules.datastructures import CaseQuery, CallableExpression
+from ripple_down_rules.datastructures.dataclasses import CaseQuery, CallableExpression
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.utils import render_tree
