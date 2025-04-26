@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib
+import sys
 from abc import ABC, abstractmethod
 from copy import copy
 from dataclasses import is_dataclass
+from io import TextIOWrapper
 from types import ModuleType
 
 from matplotlib import pyplot as plt
@@ -188,13 +190,15 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
 class RDRWithCodeWriter(RippleDownRules, ABC):
 
     @abstractmethod
-    def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = ""):
+    def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = "",
+                                           defs_file: Optional[str] = None):
         """
         Write the rules as source code to a file.
 
         :param rule: The rule to write as source code.
         :param file: The file to write the source code to.
         :param parent_indent: The indentation of the parent rule.
+        :param defs_file: The file to write the definitions to.
         """
         pass
 
@@ -205,12 +209,19 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :param file_path: The path to the file to write the source code to.
         """
         func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
-        with open(file_path + f"/{self.generated_python_file_name}.py", "w") as f:
-            f.write(self._get_imports() + "\n\n")
+        file_name = file_path + f"/{self.generated_python_file_name}.py"
+        defs_file_name = file_path + f"/{self.generated_python_defs_file_name}.py"
+        imports = self._get_imports()
+        # clear the files first
+        with open(defs_file_name, "w") as f:
+            f.write(imports + "\n\n")
+        with open(file_name, "w") as f:
+            imports += f"from .{self.generated_python_defs_file_name} import *\n"
+            f.write(imports + "\n\n")
             f.write(func_def)
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
-            self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4)
+            self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4, defs_file=defs_file_name)
 
     @property
     @abstractmethod
@@ -229,7 +240,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
         if self.conclusion_type.__module__ != "builtins":
             imports += f"from {self.conclusion_type.__module__} import {self.conclusion_type.__name__}\n"
-        imports += "from ripple_down_rules.datastructures import Case, create_case\n"
+        imports += "from ripple_down_rules.datastructures.case import Case, create_case\n"
         for rule in [self.start_rule] + list(self.start_rule.descendants):
             if rule.conditions:
                 if rule.conditions.scope is not None and len(rule.conditions.scope) > 0:
@@ -242,11 +253,22 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :param package_name: The name of the package that contains the RDR classifier function.
         :return: The module that contains the rdr classifier function.
         """
-        return importlib.import_module(f"{package_name.strip('./')}.{self.generated_python_file_name}").classify
+        # remove from imports if exists first
+        name = f"{package_name.strip('./')}.{self.generated_python_file_name}"
+        try:
+            module = importlib.import_module(name)
+            del sys.modules[name]
+        except ModuleNotFoundError:
+            pass
+        return importlib.import_module(name).classify
 
     @property
     def generated_python_file_name(self) -> str:
         return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_rdr"
+
+    @property
+    def generated_python_defs_file_name(self) -> str:
+        return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_defs"
 
     @property
     def case_type(self) -> Type:
@@ -329,19 +351,22 @@ class SingleClassRDR(RDRWithCodeWriter):
         matched_rule = self.start_rule(case)
         return matched_rule if matched_rule else self.start_rule
 
-    def write_rules_as_source_code_to_file(self, rule: SingleClassRule, file, parent_indent: str = ""):
+    def write_rules_as_source_code_to_file(self, rule: SingleClassRule, file: TextIOWrapper, parent_indent: str = "",
+                                           defs_file: Optional[str] = None):
         """
         Write the rules as source code to a file.
         """
         if rule.conditions:
-            file.write(rule.write_condition_as_source_code(parent_indent))
+            if_clause = rule.write_condition_as_source_code(parent_indent, defs_file)
+            file.write(if_clause)
             if rule.refinement:
-                self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ")
+                self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ",
+                                                        defs_file=defs_file)
 
             file.write(rule.write_conclusion_as_source_code(parent_indent))
 
             if rule.alternative:
-                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent)
+                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file)
 
     @property
     def conclusion_type_hint(self) -> str:
@@ -931,7 +956,7 @@ class GeneralRDR(RippleDownRules):
         # import rdr type
         imports += f"from ripple_down_rules.rdr import GeneralRDR\n"
         # add case type
-        imports += f"from ripple_down_rules.datastructures import Case, create_case\n"
+        imports += f"from ripple_down_rules.datastructures.case import Case, create_case\n"
         imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
         # add conclusion type imports
         for rdr in self.start_rules_dict.values():

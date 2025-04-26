@@ -1,3 +1,5 @@
+import os
+
 from typing_extensions import List, Any, Tuple
 
 from ripple_down_rules.datasets import Species, Habitat
@@ -10,17 +12,21 @@ from ripple_down_rules.utils import make_set, is_iterable, flatten_list
 
 
 def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "species",
-                  expert_answers_dir: str = "./test_expert_answers",
-                  expert_answers_file: str = "/scrdr_expert_answers_fit",
-                  draw_tree: bool = False) -> SingleClassRDR:
-    filename = expert_answers_dir + expert_answers_file
-    expert = Human(use_loaded_answers=True)
-    expert.load_answers(filename)
+                  expert_answers_dir: str = "test_expert_answers",
+                  expert_answers_file: str = "scrdr_expert_answers_fit",
+                  draw_tree: bool = False,
+                  load_answers: bool = True,
+                  save_answers: bool = False) -> SingleClassRDR:
+    filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
+    expert = Human(use_loaded_answers=load_answers)
+    if load_answers:
+        expert.load_answers(filename)
 
     scrdr = SingleClassRDR()
     case_queries = [CaseQuery(case, attribute_name, target=target) for case, target in zip(cases, targets)]
-    scrdr.fit(case_queries, expert=expert,
-              animate_tree=draw_tree)
+    scrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
+    if save_answers:
+        expert.save_answers(filename)
     for case, target in zip(cases, targets):
         cat = scrdr.classify(case)
         assert cat == target

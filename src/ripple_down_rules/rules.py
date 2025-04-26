@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from enum import Enum
 
@@ -81,26 +82,42 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
 
         :param parent_indent: The indentation of the parent rule.
         """
-        if isinstance(self.conclusion, CallableExpression):
-            conclusion = self.conclusion.parsed_user_input
-        elif isinstance(self.conclusion, Enum):
-            conclusion = str(self.conclusion)
-        else:
-            conclusion = self.conclusion
-        return self._conclusion_source_code_clause(conclusion, parent_indent=parent_indent)
+        conclusion = self.conclusion
+        if isinstance(conclusion, CallableExpression):
+            if self.conclusion.user_input is not None:
+                conclusion = self.conclusion.user_input
+            else:
+                conclusion = self.conclusion.conclusion
+        if isinstance(conclusion, Enum):
+            conclusion = str(conclusion)
+        return self._conclusion_source_code(conclusion, parent_indent=parent_indent)
 
     @abstractmethod
-    def _conclusion_source_code_clause(self, conclusion: Any, parent_indent: str = "") -> str:
+    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
         pass
 
-    def write_condition_as_source_code(self, parent_indent: str = "") -> str:
+    def write_condition_as_source_code(self, parent_indent: str = "", defs_file: Optional[str] = None) -> str:
         """
         Get the source code representation of the conditions of the rule.
 
         :param parent_indent: The indentation of the parent rule.
+        :param defs_file: The file to write the conditions to if they are a definition.
         """
         if_clause = self._if_statement_source_code_clause()
-        return f"{parent_indent}{if_clause} {self.conditions.user_input}:\n"
+        if '\n' not in self.conditions.user_input:
+            return f"{parent_indent}{if_clause} {self.conditions.user_input}:\n"
+        elif "def " in self.conditions.user_input:
+            if defs_file is None:
+                raise ValueError("Cannot write conditions to source code as definitions python file was not given.")
+            # This means the conditions are a definition that should be written and then called
+            conditions_lines = self.conditions.user_input.split('\n')
+            # use regex to replace the function name
+            new_function_name = f"def conditions_{id(self)}"
+            conditions_lines[0] = re.sub(r"def (\w+)", new_function_name, conditions_lines[0])
+            def_code = "\n".join(conditions_lines)
+            with open(defs_file, 'a') as f:
+                f.write(def_code + "\n")
+            return f"\n{parent_indent}{if_clause} {new_function_name.replace('def ', '')}(case):\n"
 
     @abstractmethod
     def _if_statement_source_code_clause(self) -> str:
@@ -238,8 +255,23 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         loaded_rule.alternative = SingleClassRule.from_json(data["alternative"])
         return loaded_rule
 
-    def _conclusion_source_code_clause(self, conclusion: Any, parent_indent: str = "") -> str:
-        return f"{parent_indent}{' ' * 4}return {conclusion}\n"
+    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
+        conclusion = str(conclusion)
+        indent = f"{parent_indent}{' ' * 4}"
+        if '\n' not in conclusion:
+            return f"{indent}return {conclusion}\n"
+        elif "def " in conclusion:
+            # This means the conclusion is a definition that should be written and then called
+            conclusion_lines = conclusion.split('\n')
+            # use regex to replace the function name
+            new_function_name = f"def conclusion_{id(self)}"
+            conclusion_lines[0] = re.sub(r"def (\w+)", new_function_name, conclusion_lines[0])
+            conclusion_lines = [f"{indent}{line}" for line in conclusion_lines]
+            conclusion_lines.append(f"{indent}return {new_function_name}(case)\n")
+            return "\n".join(conclusion_lines)
+        else:
+            raise ValueError(f"Conclusion is format is not valid, it should be a one line string or "
+                             f"contain a function definition. Instead got:\n{conclusion}\n")
 
     def _if_statement_source_code_clause(self) -> str:
         return "elif" if self.weight == RDREdge.Alternative.value else "if"
@@ -284,7 +316,7 @@ class MultiClassStopRule(Rule, HasAlternativeRule):
         loaded_rule.alternative = MultiClassStopRule.from_json(data["alternative"])
         return loaded_rule
 
-    def _conclusion_source_code_clause(self, conclusion: Any, parent_indent: str = "") -> str:
+    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
         return f"{parent_indent}{' ' * 4}pass\n"
 
     def _if_statement_source_code_clause(self) -> str:
@@ -329,7 +361,7 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         loaded_rule.alternative = MultiClassTopRule.from_json(data["alternative"])
         return loaded_rule
 
-    def _conclusion_source_code_clause(self, conclusion: Any, parent_indent: str = "") -> str:
+    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
         if is_iterable(conclusion):
             conclusion_str = "{" + ", ".join([str(c) for c in conclusion]) + "}"
         else:

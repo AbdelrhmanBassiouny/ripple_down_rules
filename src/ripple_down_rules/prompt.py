@@ -27,7 +27,7 @@ class CustomInteractiveShell(InteractiveShellEmbed):
             self.history_manager.store_inputs(line_num=self.execution_count, source=raw_cell)
             self.ask_exit()
             return None
-        result = super().run_cell(raw_cell, store_history=True, **kwargs)
+        result = super().run_cell(raw_cell, **kwargs)
         if not result.error_in_exec:
             self.all_lines.append(raw_cell)
         return result

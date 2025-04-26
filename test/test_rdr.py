@@ -1,5 +1,6 @@
 import importlib
 import os
+import time
 from unittest import TestCase, skip
 
 from typing_extensions import List
@@ -52,27 +53,34 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def test_fit_scrdr(self):
-        use_loaded_answers = True
-        save_answers = False
-        draw_tree = False
-        filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
-        expert = Human(use_loaded_answers=use_loaded_answers)
-        if use_loaded_answers:
-            expert.load_answers(filename)
-
-        scrdr = SingleClassRDR()
-        scrdr.fit(self.case_queries, expert=expert,
-                  animate_tree=draw_tree)
+        scrdr = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False,
+                              expert_answers_dir=self.expert_answers_dir,
+                              expert_answers_file="scrdr_expert_answers_fit",
+                              load_answers=True)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/scrdr")
 
-        cat = scrdr.classify(self.all_cases[50])
-        self.assertEqual(cat, self.targets[50])
+    def test_fit_multi_line_scrdr(self):
+        n = 20
+        scrdr = get_fit_scrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,
+                              expert_answers_dir=self.expert_answers_dir,
+                              expert_answers_file="scrdr_multi_line_expert_answers_fit",
+                              load_answers=True,
+                              save_answers=False)
+        render_tree(scrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/scrdr_multi_line")
 
-        if save_answers:
-            cwd = os.getcwd()
-            file = os.path.join(cwd, filename)
-            expert.save_answers(file)
+    def test_write_multi_line_scrdr_to_python_file(self):
+        n = 20
+        scrdr = get_fit_scrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,
+                              expert_answers_dir=self.expert_answers_dir,
+                              expert_answers_file="scrdr_multi_line_expert_answers_fit",
+                              load_answers=True)
+        scrdr.write_to_python_file(self.generated_rdrs_dir)
+        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
+        for case, target in zip(self.all_cases[:n], self.targets[:n]):
+            cat = classify_species_scrdr(case)
+            self.assertEqual(cat, target)
 
     def test_write_scrdr_to_python_file(self):
         scrdr = get_fit_scrdr(self.all_cases, self.targets)
