@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import re
 import sys
 from abc import ABC, abstractmethod
 from copy import copy
@@ -21,7 +22,7 @@ from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .utils import draw_tree, make_set, copy_case, \
     get_hint_for_attribute, SubclassJSONSerializer, is_iterable, make_list, get_type_from_string, \
-    get_case_attribute_type
+    get_case_attribute_type, ask_llm
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -202,21 +203,22 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         """
         pass
 
-    def write_to_python_file(self, file_path: str):
+    def write_to_python_file(self, file_path: str, postfix: str = ""):
         """
         Write the tree of rules as source code to a file.
 
         :param file_path: The path to the file to write the source code to.
+        :param postfix: The postfix to add to the file name.
         """
         func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
-        file_name = file_path + f"/{self.generated_python_file_name}.py"
-        defs_file_name = file_path + f"/{self.generated_python_defs_file_name}.py"
+        file_name = file_path + f"/{self.generated_python_file_name}{postfix}.py"
+        defs_file_name = file_path + f"/{self.generated_python_defs_file_name}{postfix}.py"
         imports = self._get_imports()
         # clear the files first
         with open(defs_file_name, "w") as f:
             f.write(imports + "\n\n")
         with open(file_name, "w") as f:
-            imports += f"from .{self.generated_python_defs_file_name} import *\n"
+            imports += f"from .{self.generated_python_defs_file_name}{postfix} import *\n"
             f.write(imports + "\n\n")
             f.write(func_def)
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
@@ -248,13 +250,14 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                         imports += f"from {v.__module__} import {v.__name__}\n"
         return imports
 
-    def get_rdr_classifier_from_python_file(self, package_name) -> Callable[[Any], Any]:
+    def get_rdr_classifier_from_python_file(self, package_name: str, postfix: str = "") -> Callable[[Any], Any]:
         """
         :param package_name: The name of the package that contains the RDR classifier function.
+        :param postfix: The postfix to add to the file name.
         :return: The module that contains the rdr classifier function.
         """
         # remove from imports if exists first
-        name = f"{package_name.strip('./')}.{self.generated_python_file_name}"
+        name = f"{package_name.strip('./')}.{self.generated_python_file_name}{postfix}"
         try:
             module = importlib.import_module(name)
             del sys.modules[name]
@@ -264,11 +267,24 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
 
     @property
     def generated_python_file_name(self) -> str:
-        return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_rdr"
+        return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_{self.acronym.lower()}"
 
     @property
     def generated_python_defs_file_name(self) -> str:
-        return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_defs"
+        return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_{self.acronym.lower()}_defs"
+
+    @property
+    def acronym(self) -> str:
+        """
+        :return: The acronym of the classifier.
+        """
+        if self.__class__.__name__ == "GeneralRDR":
+            return "GRDR"
+        elif self.__class__.__name__ == "MultiClassRDR":
+            return "MCRDR"
+        else:
+            return "SCRDR"
+
 
     @property
     def case_type(self) -> Type:
@@ -360,6 +376,7 @@ class SingleClassRDR(RDRWithCodeWriter):
             if_clause = rule.write_condition_as_source_code(parent_indent, defs_file)
             file.write(if_clause)
             if rule.refinement:
+
                 self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ",
                                                         defs_file=defs_file)
 
@@ -474,25 +491,22 @@ class MultiClassRDR(RDRWithCodeWriter):
         return self.conclusions
 
     def write_rules_as_source_code_to_file(self, rule: Union[MultiClassTopRule, MultiClassStopRule],
-                                           file, parent_indent: str = ""):
-        """
-        Write the rules as source code to a file.
-
-        :
-        """
+                                           file, parent_indent: str = "", defs_file: Optional[str] = None):
         if rule == self.start_rule:
             file.write(f"{parent_indent}conclusions = set()\n")
         if rule.conditions:
-            file.write(rule.write_condition_as_source_code(parent_indent))
+            if_clause = rule.write_condition_as_source_code(parent_indent, defs_file)
+            file.write(if_clause)
             conclusion_indent = parent_indent
             if hasattr(rule, "refinement") and rule.refinement:
-                self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ")
+                self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ",
+                                                        defs_file=defs_file)
                 conclusion_indent = parent_indent + " " * 4
                 file.write(f"{conclusion_indent}else:\n")
             file.write(rule.write_conclusion_as_source_code(conclusion_indent))
 
             if rule.alternative:
-                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent)
+                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file)
 
     @property
     def conclusion_type_hint(self) -> str:

@@ -6,6 +6,7 @@ import importlib
 import json
 import logging
 import os
+import re
 from collections import UserDict
 from copy import deepcopy
 from dataclasses import is_dataclass, fields
@@ -13,6 +14,7 @@ from types import NoneType
 
 import matplotlib
 import networkx as nx
+import requests
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
@@ -23,11 +25,49 @@ from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get
     get_origin, get_args, Tuple, Optional, List, Union, Self
 
 if TYPE_CHECKING:
-    from .datastructures import Case
+    from .datastructures.case import Case
+    from .rules import Rule
 
 import ast
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def get_rule_conclusion_as_source_code(rule: Rule, conclusion: str, parent_indent: str = "") -> str:
+    """
+    Convert the conclusion of a rule to source code.
+
+    :param rule: The rule to get the conclusion from.
+    :param conclusion: The conclusion to convert to source code.
+    :param parent_indent: The indentation to use for the source code.
+    :return: The source code of the conclusion.
+    """
+    indent = f"{parent_indent}{' ' * 4}"
+    if "def " in conclusion:
+        # This means the conclusion is a definition that should be written and then called
+        conclusion_lines = conclusion.split('\n')
+        # use regex to replace the function name
+        new_function_name = f"def conclusion_{id(rule)}"
+        conclusion_lines[0] = re.sub(r"def (\w+)", new_function_name, conclusion_lines[0])
+        conclusion_lines = [f"{indent}{line}" for line in conclusion_lines]
+        conclusion_lines.append(f"{indent}return {new_function_name.replace('def ', '')}(case)\n")
+        return "\n".join(conclusion_lines)
+    else:
+        raise ValueError(f"Conclusion is format is not valid, it should be a one line string or "
+                         f"contain a function definition. Instead got:\n{conclusion}\n")
+
+
+def ask_llm(prompt):
+    try:
+        response = requests.post("http://localhost:11434/api/generate", json={
+            "model": "codellama:7b-instruct",  # or "phi"
+            "prompt": prompt,
+            "stream": False,
+        })
+        result = response.json()
+        return result.get("response", "").strip()
+    except Exception as e:
+        return f"❌ Local LLM error: {e}"
 
 
 def get_case_attribute_type(original_case: Any, attribute_name: str,

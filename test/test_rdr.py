@@ -76,8 +76,9 @@ class TestRDR(TestCase):
                               expert_answers_dir=self.expert_answers_dir,
                               expert_answers_file="scrdr_multi_line_expert_answers_fit",
                               load_answers=True)
-        scrdr.write_to_python_file(self.generated_rdrs_dir)
-        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
+        scrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_multi_line")
+        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir,
+                                                                           postfix="_multi_line")
         for case, target in zip(self.all_cases[:n], self.targets[:n]):
             cat = classify_species_scrdr(case)
             self.assertEqual(cat, target)
@@ -95,6 +96,20 @@ class TestRDR(TestCase):
         mcrdr.write_to_python_file(self.generated_rdrs_dir)
         classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, target in zip(self.all_cases, self.targets):
+            cat = classify_species_mcrdr(case)
+            self.assertEqual(make_set(cat), make_set(target))
+
+    def test_write_mcrdr_multi_line_to_python_file(self):
+        n = 20
+        mcrdr = get_fit_mcrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,
+                              expert_answers_dir=self.expert_answers_dir,
+                              expert_answers_file="mcrdr_multi_line_expert_answers_fit",
+                              load_answers=True,
+                              save_answers=False)
+        mcrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_multi_line")
+        classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir,
+                                                                           postfix="_multi_line")
+        for case, target in zip(self.all_cases[:n], self.targets[:n]):
             cat = classify_species_mcrdr(case)
             self.assertEqual(make_set(cat), make_set(target))
 

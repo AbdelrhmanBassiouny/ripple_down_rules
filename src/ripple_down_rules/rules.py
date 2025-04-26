@@ -11,7 +11,8 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer, is_iterable, get_full_class_name, conclusion_to_json
+from .utils import SubclassJSONSerializer, is_iterable, get_full_class_name, conclusion_to_json, \
+    get_rule_conclusion_as_source_code
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
@@ -44,6 +45,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self.conditions = conditions if conditions else None
         self.conclusion_name: Optional[str] = conclusion_name
         self.json_serialization: Optional[Dict[str, Any]] = None
+        self._name: Optional[str] = None
 
     def _post_detach(self, parent):
         """
@@ -145,7 +147,14 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         """
         Get the name of the rule, which is the conditions and the conclusion.
         """
-        return self.__str__()
+        return self._name if self._name is not None else self.__str__()
+
+    @name.setter
+    def name(self, new_name: str):
+        """
+        Set the name of the rule.
+        """
+        self._name = new_name
 
     def __str__(self, sep="\n"):
         """
@@ -257,21 +266,11 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
 
     def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
         conclusion = str(conclusion)
-        indent = f"{parent_indent}{' ' * 4}"
+        indent = parent_indent + " " * 4
         if '\n' not in conclusion:
             return f"{indent}return {conclusion}\n"
-        elif "def " in conclusion:
-            # This means the conclusion is a definition that should be written and then called
-            conclusion_lines = conclusion.split('\n')
-            # use regex to replace the function name
-            new_function_name = f"def conclusion_{id(self)}"
-            conclusion_lines[0] = re.sub(r"def (\w+)", new_function_name, conclusion_lines[0])
-            conclusion_lines = [f"{indent}{line}" for line in conclusion_lines]
-            conclusion_lines.append(f"{indent}return {new_function_name}(case)\n")
-            return "\n".join(conclusion_lines)
         else:
-            raise ValueError(f"Conclusion is format is not valid, it should be a one line string or "
-                             f"contain a function definition. Instead got:\n{conclusion}\n")
+            return get_rule_conclusion_as_source_code(self, conclusion, parent_indent=parent_indent)
 
     def _if_statement_source_code_clause(self) -> str:
         return "elif" if self.weight == RDREdge.Alternative.value else "if"
@@ -362,11 +361,21 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         return loaded_rule
 
     def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
-        if is_iterable(conclusion):
-            conclusion_str = "{" + ", ".join([str(c) for c in conclusion]) + "}"
+        conclusion_str = str(conclusion)
+        indent = parent_indent + " " * 4
+        statement = ""
+        if '\n' not in conclusion_str:
+            if is_iterable(conclusion):
+                conclusion_str = "{" + ", ".join([str(c) for c in conclusion]) + "}"
+            else:
+                conclusion_str = "{" + str(conclusion) + "}"
         else:
-            conclusion_str = "{" + str(conclusion) + "}"
-        statement = f"{parent_indent}{' ' * 4}conclusions.update({conclusion_str})\n"
+            conclusion_str = get_rule_conclusion_as_source_code(self, conclusion_str, parent_indent=parent_indent)
+            lines = conclusion_str.split("\n")
+            conclusion_str = lines[-1].replace("return ", "")
+            statement += "\n".join(lines[:-1]) + "\n"
+
+        statement += f"{indent}conclusions.update({conclusion_str})\n"
         if self.alternative is None:
             statement += f"{parent_indent}return conclusions\n"
         return statement
