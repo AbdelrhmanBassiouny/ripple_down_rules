@@ -12,6 +12,7 @@ from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import render_tree, make_set
+from test_helpers.helpers import get_fit_scrdr
 
 
 class TestAlchemyRDR(TestCase):
@@ -94,7 +95,7 @@ class TestAlchemyRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
 
-        fit_scrdr, _ = self.get_fit_scrdr(draw_tree=False)
+        fit_scrdr, _ = get_fit_scrdr(self.all_cases, self.targets)
 
         grdr = GeneralRDR()
         grdr.add_rdr(fit_scrdr)
@@ -140,16 +141,6 @@ class TestAlchemyRDR(TestCase):
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
-
-    def get_fit_scrdr(self, draw_tree=False) -> SingleClassRDR:
-        filename = self.expert_answers_dir + "/scrdr_expert_answers_fit"
-        expert = Human(use_loaded_answers=True)
-        expert.load_answers(filename)
-
-        scrdr = SingleClassRDR()
-        case_queries = [CaseQuery(c, "species", target=t) for c, t in zip(self.all_cases, self.targets)]
-        scrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-        return scrdr
 
     def get_expert_and_file_name(self, use_loaded_answers: bool, filename: str):
         filename = self.expert_answers_dir + "/" + filename
