@@ -83,6 +83,32 @@ class TestRDR(TestCase):
             cat = classify_species_scrdr(case_query.case)
             self.assertEqual(cat, target)
 
+    def test_fit_mcrdr_with_no_targets(self):
+        # Test with no targets
+        mcrdr = get_fit_mcrdr(self.all_cases[:20], [], draw_tree=False,
+                              expert_answers_dir=self.expert_answers_dir,
+                              expert_answers_file="mcrdr_expert_answers_fit_no_targets",
+                              load_answers=True,
+                              save_answers=False)
+        render_tree(mcrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/mcrdr_no_targets")
+        for case, target in zip(self.all_cases[:20], self.targets[:20]):
+            cat = mcrdr.classify(case)
+            self.assertEqual(make_set(cat), make_set(target))
+
+    def test_write_mcrdr_no_targets_to_python_file(self):
+        # Test with no targets
+        mcrdr = get_fit_mcrdr(self.all_cases[:20], [], draw_tree=False,
+                              expert_answers_dir=self.expert_answers_dir,
+                              expert_answers_file="mcrdr_expert_answers_fit_no_targets",
+                              load_answers=True, save_answers=False)
+        mcrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_no_targets")
+        classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir,
+                                                                           postfix="_no_targets")
+        for case, target in zip(self.all_cases[:20], self.targets[:20]):
+            cat = classify_species_mcrdr(case)
+            self.assertEqual(make_set(cat), make_set(target))
+
     def test_fit_multi_line_scrdr(self):
         n = 20
         scrdr, _ = get_fit_scrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,

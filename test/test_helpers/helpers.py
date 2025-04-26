@@ -37,6 +37,7 @@ def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
 
 
 def get_fit_mcrdr(cases: List[Any], targets: List[Any], attribute_name: str = "species",
+                  attribute_type: Type = Species,
                   expert_answers_dir: str = "test_expert_answers",
                   expert_answers_file: str = "mcrdr_expert_answers_stop_only_fit",
                   draw_tree: bool = False,
@@ -46,14 +47,16 @@ def get_fit_mcrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
     expert = Human(use_loaded_answers=load_answers)
     if load_answers:
         expert.load_answers(filename)
+    targets = [None for _ in cases] if targets is None or len(targets) == 0 else targets
     mcrdr = MultiClassRDR()
-    case_queries = [CaseQuery(case, attribute_name, target=target) for case, target in zip(cases, targets)]
+    case_queries = [CaseQuery(case, attribute_name, target=target, attribute_type=attribute_type)
+                    for case, target in zip(cases, targets)]
     mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
     if save_answers:
         expert.save_answers(filename)
-    for case, target in zip(cases, targets):
-        cat = mcrdr.classify(case)
-        assert make_set(cat) == make_set(target)
+    for case_query in case_queries:
+        cat = mcrdr.classify(case_query.case)
+        assert make_set(cat) == make_set(case_query.target_value)
     return mcrdr
 
 

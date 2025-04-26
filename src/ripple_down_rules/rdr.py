@@ -302,11 +302,12 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :return: The type of the conclusion of the RDR classifier.
         """
         if isinstance(self.start_rule.conclusion, CallableExpression):
-            return self.start_rule.conclusion.conclusion_type
+            conclusion = self.start_rule.conclusion(self.start_rule.corner_case)
         else:
-            if isinstance(self.start_rule.conclusion, set):
-                return type(list(self.start_rule.conclusion)[0])
-            return type(self.start_rule.conclusion)
+            conclusion = self.start_rule.conclusion
+        if isinstance(conclusion, set):
+            return type(list(conclusion)[0])
+        return type(conclusion)
 
     @property
     def attribute_name(self) -> str:
@@ -515,6 +516,7 @@ class MultiClassRDR(RDRWithCodeWriter):
     def _get_imports(self) -> str:
         imports = super()._get_imports()
         imports += "from typing_extensions import Set\n"
+        imports += "from ripple_down_rules.utils import make_set\n"
         return imports
 
     def update_start_rule(self, case_query: CaseQuery, expert: Expert):

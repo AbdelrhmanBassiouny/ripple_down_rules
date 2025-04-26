@@ -372,10 +372,10 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         else:
             conclusion_str = get_rule_conclusion_as_source_code(self, conclusion_str, parent_indent=parent_indent)
             lines = conclusion_str.split("\n")
-            conclusion_str = lines[-1].replace("return ", "")
-            statement += "\n".join(lines[:-1]) + "\n"
+            conclusion_str = lines[-2].replace("return ", "").strip()
+            statement += "\n".join(lines[:-2]) + "\n"
 
-        statement += f"{indent}conclusions.update({conclusion_str})\n"
+        statement += f"{indent}conclusions.update(make_set({conclusion_str}))\n"
         if self.alternative is None:
             statement += f"{parent_indent}return conclusions\n"
         return statement
