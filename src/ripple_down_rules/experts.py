@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Type
+from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Type, Any
 
 from .datastructures.case import Case, CaseAttribute
 from .datastructures.callable_expression import CallableExpression
@@ -11,7 +11,7 @@ from .datastructures.enums import PromptFor
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.case import show_current_and_corner_cases
 from .prompt import prompt_user_for_expression
-from .utils import get_all_subclasses
+from .utils import get_all_subclasses, make_list
 
 if TYPE_CHECKING:
     from .rdr import Rule
@@ -212,9 +212,9 @@ class Human(Expert):
         question = f"Can a case have multiple values of the new category {category_name}? (y/n):"
         return not self.ask_yes_no_question(question)
 
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: CaseAttribute,
-                                     targets: Optional[List[CaseAttribute]] = None,
-                                     current_conclusions: Optional[List[CaseAttribute]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Any,
+                                     targets: Optional[List[Any]] = None,
+                                     current_conclusions: Optional[List[Any]] = None) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
@@ -226,9 +226,8 @@ class Human(Expert):
         question = ""
         if not self.use_loaded_answers:
             targets = targets or []
-            targets = targets if isinstance(targets, list) else [targets]
-            x.conclusions = current_conclusions
-            x.targets = targets
+            x.conclusions = make_list(current_conclusions)
+            x.targets = make_list(targets)
             question = f"Is the conclusion {conclusion} correct for the case (y/n):" \
                        f"\n{str(x)}"
         return self.ask_yes_no_question(question)

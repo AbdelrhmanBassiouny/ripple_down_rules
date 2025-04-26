@@ -7,7 +7,7 @@ from _ast import AST
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .case import create_case, Case
-from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string
+from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -106,8 +106,9 @@ class CallableExpression(SubclassJSONSerializer):
         self.conclusion: Optional[Any] = conclusion
         self.user_input: str = user_input
         self.conclusion_type = conclusion_type
+        self.scope: Optional[Dict[str, Any]] = scope if scope is not None else {}
         if conclusion is None:
-            self.scope: Optional[Dict[str, Any]] = get_used_scope(self.user_input, scope) if scope is not None else {}
+            self.scope = get_used_scope(self.user_input, self.scope)
             self.expression_tree: AST = expression_tree if expression_tree else parse_string_to_expression(self.user_input)
             self.code = compile_expression_to_code(self.expression_tree)
             self.visitor = VariableVisitor()
@@ -138,6 +139,21 @@ class CallableExpression(SubclassJSONSerializer):
         new_user_input = f"({self.user_input}) and ({other.user_input})"
         return CallableExpression(new_user_input, conclusion_type=self.conclusion_type)
 
+    def __eq__(self, other):
+        """
+        Check if two callable expressions are equal.
+        """
+        if not isinstance(other, CallableExpression):
+            return False
+        return self.user_input == other.user_input and self.conclusion == other.conclusion
+
+    def __hash__(self):
+        """
+        Hash the callable expression.
+        """
+        conclusion_hash = self.conclusion if not isinstance(self.conclusion, set) else frozenset(self.conclusion)
+        return hash((self.user_input, conclusion_hash))
+
     def __str__(self):
         """
         Return the user string where each compare is written in a line using compare column offset start and end.
@@ -160,8 +176,7 @@ class CallableExpression(SubclassJSONSerializer):
         return {"user_input": self.user_input, "conclusion_type": get_full_class_name(self.conclusion_type),
                 "scope": {k: get_full_class_name(v) for k, v in self.scope.items()
                           if hasattr(v, '__module__') and hasattr(v, '__name__')},
-                "conclusion": self.conclusion.to_json()
-                if isinstance(self.conclusion, SubclassJSONSerializer) else self.conclusion,
+                "conclusion": conclusion_to_json(self.conclusion),
                 }
 
     @classmethod

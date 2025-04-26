@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import builtins
 import importlib
 import json
 import logging
@@ -8,6 +9,7 @@ import os
 from collections import UserDict
 from copy import deepcopy
 from dataclasses import is_dataclass, fields
+from types import NoneType
 
 import matplotlib
 import networkx as nx
@@ -26,6 +28,48 @@ if TYPE_CHECKING:
 import ast
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def get_case_attribute_type(original_case: Any, attribute_name: str,
+                            known_value: Optional[Any] = None) -> Type:
+    """
+    :param original_case: The case to get the attribute from.
+    :param attribute_name: The name of the attribute.
+    :param known_value: A known value of the attribute.
+    :return: The type of the attribute.
+    """
+    if known_value is not None:
+        return type(known_value)
+    elif hasattr(original_case, attribute_name):
+        hint, origin, args = get_hint_for_attribute(attribute_name, original_case)
+        if origin is not None:
+            origin = typing_to_python_type(origin)
+        if origin == Union:
+            if len(args) == 2:
+                if args[1] is type(None):
+                    return typing_to_python_type(args[0])
+                elif args[0] is type(None):
+                    return typing_to_python_type(args[1])
+            elif len(args) == 1:
+                return typing_to_python_type(args[0])
+            else:
+                raise ValueError(f"Union with more than 2 types is not supported: {args}")
+        elif origin is not None:
+            return origin
+        if hint is not None:
+            return typing_to_python_type(hint)
+
+
+def conclusion_to_json(conclusion):
+    if is_iterable(conclusion):
+        conclusions = {'_type': get_full_class_name(type(conclusion)), 'value': []}
+        for c in conclusion:
+            conclusions['value'].append(conclusion_to_json(c))
+    elif hasattr(conclusion, 'to_json'):
+        conclusions = conclusion.to_json()
+    else:
+        conclusions = {'_type': get_full_class_name(type(conclusion)), 'value': conclusion}
+    return conclusions
 
 
 def contains_return_statement(source: str) -> bool:
@@ -292,6 +336,8 @@ def get_type_from_string(type_path: str):
     """
     module_path, class_name = type_path.rsplit(".", 1)
     module = importlib.import_module(module_path)
+    if module == builtins and class_name == 'NoneType':
+        return type(None)
     return getattr(module, class_name)
 
 
@@ -389,6 +435,8 @@ class SubclassJSONSerializer:
         data_type = get_type_from_string(data["_type"])
         if len(data) == 1:
             return data_type
+        if data_type == NoneType:
+            return None
         if data_type.__module__ == 'builtins':
             if is_iterable(data['value']) and not isinstance(data['value'], dict):
                 return data_type([cls.from_json(d) for d in data['value']])

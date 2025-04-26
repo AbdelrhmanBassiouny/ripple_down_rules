@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from ripple_down_rules.rdr import SingleClassRDR
+from ripple_down_rules.rdr import SingleClassRDR, GeneralRDR
 
 
 @dataclass
@@ -84,8 +84,9 @@ def main():
             i += 1
 
     print(all_views)
-    case_queries = [CaseQuery(view, "correct") for view in all_views]
-    rdr = SingleClassRDR(default_conclusion=False)
+    case_queries = [CaseQuery(view, "correct", mutually_exclusive=True,
+                              default_value=False) for view in all_views]
+    rdr = GeneralRDR()
     rdr.fit(case_queries)
     for case_query in case_queries:
         print(f"Case: {case_query}, Classification: {rdr.classify(case_query.case)}")

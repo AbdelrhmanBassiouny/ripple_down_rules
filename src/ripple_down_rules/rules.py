@@ -10,7 +10,7 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer, is_iterable, get_full_class_name
+from .utils import SubclassJSONSerializer, is_iterable, get_full_class_name, conclusion_to_json
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
@@ -107,17 +107,6 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         pass
 
     def _to_json(self) -> Dict[str, Any]:
-        def conclusion_to_json(conclusion):
-            if is_iterable(conclusion):
-                conclusions = {'_type': get_full_class_name(type(conclusion)), 'value': []}
-                for c in conclusion:
-                    conclusions['value'].append(conclusion_to_json(c))
-            elif hasattr(conclusion, 'to_json'):
-                conclusions = conclusion.to_json()
-            else:
-                conclusions = {'_type': get_full_class_name(type(conclusion)), 'value': conclusion}
-            return conclusions
-
         json_serialization = {"conditions": self.conditions.to_json(),
                               "conclusion": conclusion_to_json(self.conclusion),
                               "parent": self.parent.json_serialization if self.parent else None,

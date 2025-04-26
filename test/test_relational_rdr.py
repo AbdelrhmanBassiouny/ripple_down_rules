@@ -44,7 +44,7 @@ class Robot(PhysicalObject):
 
 class RelationalRDRTestCase(TestCase):
     case: Any
-    target: Any
+    case_query: Any
     test_results_dir: str = "./test_results"
     expert_answers_dir: str = "./test_expert_answers"
     robot: Robot
@@ -71,8 +71,8 @@ class RelationalRDRTestCase(TestCase):
         cls.part_d.contained_objects = [cls.part_e]
         cls.part_e.contained_objects = [cls.part_f]
         cls.robot: Robot = robot
-        cls.target = CaseQuery(robot, attribute_name="contained_objects",
-                               target=[cls.part_b, cls.part_c, cls.part_d, cls.part_e])
+        cls.case_query = CaseQuery(robot, attribute_name="contained_objects",
+                                   target=[cls.part_b, cls.part_c, cls.part_d, cls.part_e])
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -86,7 +86,7 @@ class RelationalRDRTestCase(TestCase):
         cat = scrdr.fit_case(CaseQuery(self.robot, "contained_objects"), expert=expert)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + "/relational_scrdr_classify")
-        assert cat == self.target.target
+        assert cat == self.case_query.target(self.case_query.case)
 
         if save_answers:
             cwd = os.getcwd()
@@ -105,4 +105,4 @@ class RelationalRDRTestCase(TestCase):
         conclusion = CallableExpression(user_input, list)
         print(conclusion)
         print(conclusion(self.robot))
-        assert conclusion(self.robot) == self.target.target
+        assert conclusion(self.robot) == self.case_query.target(self.case_query.case)

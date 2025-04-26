@@ -3,14 +3,12 @@ from __future__ import annotations
 import inspect
 from dataclasses import dataclass
 
-import typing_extensions
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Type, List, Tuple, Set, Dict, TYPE_CHECKING
-
-from .case import create_case, Case
-from ..utils import get_attribute_name, copy_case, get_hint_for_attribute, typing_to_python_type
+from typing_extensions import Any, Optional, Dict
 
 from .callable_expression import CallableExpression
+from .case import create_case, Case
+from ..utils import copy_case, get_case_attribute_type
 
 
 @dataclass
@@ -53,16 +51,20 @@ class CaseQuery:
 
     def __init__(self, case: Any, attribute_name: str,
                  target: Optional[Any] = None,
-                 mutually_exclusive: bool = False,
+                 mutually_exclusive: Optional[bool] = None,
                  conditions: Optional[CallableExpression] = None,
                  prediction: Optional[CallableExpression] = None,
-                 scope: Optional[Dict[str, Any]] = None,):
+                 scope: Optional[Dict[str, Any]] = None,
+                 default_value: Optional[Any] = None):
         self.original_case = case
         self.case = self._get_case()
 
         self.attribute_name = attribute_name
         self.target = target
-        self.attribute_type = self._get_attribute_type()
+        self.default_value = default_value
+        target_value = self.target_value
+        known_value = target_value if target_value is not None else default_value
+        self.attribute_type = get_case_attribute_type(self.original_case, self.attribute_name, known_value)
         self.mutually_exclusive = mutually_exclusive
         self.conditions = conditions
         self.prediction = prediction
@@ -76,31 +78,6 @@ class CaseQuery:
             return create_case(self.original_case, max_recursion_idx=3)
         else:
             return self.original_case
-
-    def _get_attribute_type(self) -> Type:
-        """
-        :return: The type of the attribute.
-        """
-        if self.target is not None:
-            return type(self.target)
-        elif hasattr(self.original_case, self.attribute_name):
-            hint, origin, args = get_hint_for_attribute(self.attribute_name, self.original_case)
-            if origin is not None:
-                origin = typing_to_python_type(origin)
-            if origin == typing_extensions.Union:
-                if len(args) == 2:
-                    if args[1] is type(None):
-                        return typing_to_python_type(args[0])
-                    elif args[0] is type(None):
-                        return typing_to_python_type(args[1])
-                elif len(args) == 1:
-                    return typing_to_python_type(args[0])
-                else:
-                    raise ValueError(f"Union with more than 2 types is not supported: {args}")
-            elif origin is not None:
-                return origin
-            if hint is not None:
-                return typing_to_python_type(hint)
 
     @property
     def name(self):
@@ -116,6 +93,15 @@ class CaseQuery:
         """
         return self.case._name if isinstance(self.case, Case) else self.case.__class__.__name__
 
+    @property
+    def target_value(self) -> Any:
+        """
+        :return: The target value of the case query.
+        """
+        if isinstance(self.target, CallableExpression):
+            return self.target(self.case)
+        return self.target
+
     def __str__(self):
         header = f"CaseQuery: {self.name}"
         target = f"Target: {self.name} |= {self.target if self.target is not None else '?'}"
@@ -127,5 +113,8 @@ class CaseQuery:
         return self.__str__()
 
     def __copy__(self):
-        return CaseQuery(copy_case(self.case), self.attribute_name, self.target, self.mutually_exclusive,
-                         self.conditions, self.prediction, self.scope)
+        case_query_cp = CaseQuery(copy_case(self.case), self.attribute_name, self.target, self.mutually_exclusive,
+                                  self.conditions, self.prediction, self.scope, self.default_value)
+        case_query_cp.original_case = self.original_case
+        case_query_cp.attribute_type = self.attribute_type
+        return case_query_cp
