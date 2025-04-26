@@ -117,8 +117,10 @@ class CaseQuery:
         return self.__str__()
 
     def __copy__(self):
-        case_query_cp = CaseQuery(copy_case(self.case), self.attribute_name, self.target, self.mutually_exclusive,
-                                  self.conditions, self.prediction, self.scope, self.default_value)
+        case_query_cp = CaseQuery(copy_case(self.case), self.attribute_name, target=self.target,
+                                  attribute_type=self.attribute_type,
+                                  mutually_exclusive=self.mutually_exclusive,
+                                  conditions=self.conditions, prediction=self.prediction, scope=self.scope,
+                                  default_value=self.default_value)
         case_query_cp.original_case = self.original_case
-        case_query_cp.attribute_type = self.attribute_type
         return case_query_cp

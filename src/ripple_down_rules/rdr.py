@@ -822,7 +822,8 @@ class GeneralRDR(RippleDownRules):
             case_query_cp = copy(case_query)
             case_query_cp.case = original_case_query_cp.case
             if case_query_cp.target is None:
-                self.classify(case) if self.start_rule and self.start_rule.conditions else []
+                conclusions = self.classify(case) if self.start_rule and self.start_rule.conditions else []
+                self.update_case(case_query_cp, conclusions)
                 expert.ask_for_conclusion(case_query_cp)
                 case_query.target = case_query_cp.target
 

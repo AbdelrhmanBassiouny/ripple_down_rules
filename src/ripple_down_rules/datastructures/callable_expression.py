@@ -7,7 +7,7 @@ from _ast import AST
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .case import create_case, Case
-from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json
+from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json, is_iterable
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -124,8 +124,12 @@ class CallableExpression(SubclassJSONSerializer):
                 if output is None:
                     output = scope['_get_value'](case)
                 if self.conclusion_type is not None:
-                    assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
-                                                                      f" got {type(output)}")
+                    if is_iterable(output) and isinstance(output, self.conclusion_type):
+                        assert isinstance(list(output)[0], self.conclusion_type), (f"Expected output type {self.conclusion_type},"
+                                                                                 f" got {type(output)}")
+                    else:
+                        assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
+                                                                          f" got {type(output)}")
                 return output
             else:
                 return self.conclusion

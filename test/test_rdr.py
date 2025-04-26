@@ -109,6 +109,23 @@ class TestRDR(TestCase):
             cat = classify_species_mcrdr(case)
             self.assertEqual(make_set(cat), make_set(target))
 
+    @skip("Test is not implemented yet")
+    def test_fit_grdr_with_no_targets(self):
+        # Test with no targets
+        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets, draw_tree=False,
+                                         expert_answers_dir=self.expert_answers_dir,
+                                         expert_answers_file="grdr_expert_answers_fit_no_targets",
+                                         load_answers=False, save_answers=True, no_targets=True)
+        render_tree(grdr.start_rules[0], use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/grdr_no_targets")
+        for case, case_targets in zip(self.all_cases[:20], all_targets):
+            cat = grdr.classify(case)
+            for cat_name, cat_val in cat.items():
+                if cat_name == "habitats":
+                    self.assertEqual(cat_val, case_targets['habitats'])
+                elif cat_name == "species":
+                    self.assertEqual(cat_val[0], case_targets['species'])
+
     def test_fit_multi_line_scrdr(self):
         n = 20
         scrdr, _ = get_fit_scrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,
