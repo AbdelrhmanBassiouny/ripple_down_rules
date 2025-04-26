@@ -1,6 +1,6 @@
 import os
 
-from typing_extensions import List, Any, Tuple
+from typing_extensions import List, Any, Tuple, Type
 
 from ripple_down_rules.datasets import Species, Habitat
 from ripple_down_rules.datastructures.case import Case
@@ -12,25 +12,28 @@ from ripple_down_rules.utils import make_set, is_iterable, flatten_list
 
 
 def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "species",
+                  attribute_type: Type = Species,
                   expert_answers_dir: str = "test_expert_answers",
                   expert_answers_file: str = "scrdr_expert_answers_fit",
                   draw_tree: bool = False,
                   load_answers: bool = True,
-                  save_answers: bool = False) -> SingleClassRDR:
+                  save_answers: bool = False) -> Tuple[SingleClassRDR, List[CaseQuery]]:
     filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
     expert = Human(use_loaded_answers=load_answers)
     if load_answers:
         expert.load_answers(filename)
 
+    targets = [None for _ in cases] if targets is None or len(targets) == 0 else targets
     scrdr = SingleClassRDR()
-    case_queries = [CaseQuery(case, attribute_name, target=target) for case, target in zip(cases, targets)]
+    case_queries = [CaseQuery(case, attribute_name, target=target, attribute_type=attribute_type)
+                    for case, target in zip(cases, targets)]
     scrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
     if save_answers:
         expert.save_answers(filename)
-    for case, target in zip(cases, targets):
-        cat = scrdr.classify(case)
-        assert cat == target
-    return scrdr
+    for case_query in case_queries:
+        cat = scrdr.classify(case_query.case)
+        assert cat == case_query.target_value
+    return scrdr, case_queries
 
 
 def get_fit_mcrdr(cases: List[Any], targets: List[Any], attribute_name: str = "species",
@@ -62,7 +65,7 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
     if load_answers:
         expert.load_answers(filename)
 
-    fit_scrdr = get_fit_scrdr(cases, targets, draw_tree=False)
+    fit_scrdr, _ = get_fit_scrdr(cases, targets, draw_tree=False)
 
     grdr = GeneralRDR()
     grdr.add_rdr(fit_scrdr)

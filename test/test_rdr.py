@@ -53,29 +53,52 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def test_fit_scrdr(self):
-        scrdr = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False,
-                              expert_answers_dir=self.expert_answers_dir,
-                              expert_answers_file="scrdr_expert_answers_fit",
-                              load_answers=True)
+        scrdr, _ = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False,
+                                 expert_answers_dir=self.expert_answers_dir,
+                                 expert_answers_file="scrdr_expert_answers_fit",
+                                 load_answers=True)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/scrdr")
 
+    def test_fit_scrdr_with_no_targets(self):
+        # Test with no targets
+        scrdr, case_queries = get_fit_scrdr(self.all_cases[:20], [], draw_tree=False,
+                                            expert_answers_dir=self.expert_answers_dir,
+                                            expert_answers_file="scrdr_expert_answers_fit_no_targets",
+                                            load_answers=True,
+                                            save_answers=False)
+        render_tree(scrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/scrdr_no_targets")
+
+    def test_write_scrdr_no_targets_to_python_file(self):
+        # Test with no targets
+        scrdr, case_queries = get_fit_scrdr(self.all_cases[:20], [], draw_tree=False,
+                                            expert_answers_dir=self.expert_answers_dir,
+                                            expert_answers_file="scrdr_expert_answers_fit_no_targets",
+                                            load_answers=True, save_answers=False)
+        scrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_no_targets")
+        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir,
+                                                                           postfix="_no_targets")
+        for case_query, target in zip(case_queries, self.targets):
+            cat = classify_species_scrdr(case_query.case)
+            self.assertEqual(cat, target)
+
     def test_fit_multi_line_scrdr(self):
         n = 20
-        scrdr = get_fit_scrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,
-                              expert_answers_dir=self.expert_answers_dir,
-                              expert_answers_file="scrdr_multi_line_expert_answers_fit",
-                              load_answers=True,
-                              save_answers=False)
+        scrdr, _ = get_fit_scrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,
+                                 expert_answers_dir=self.expert_answers_dir,
+                                 expert_answers_file="scrdr_multi_line_expert_answers_fit",
+                                 load_answers=True,
+                                 save_answers=False)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/scrdr_multi_line")
 
     def test_write_multi_line_scrdr_to_python_file(self):
         n = 20
-        scrdr = get_fit_scrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,
-                              expert_answers_dir=self.expert_answers_dir,
-                              expert_answers_file="scrdr_multi_line_expert_answers_fit",
-                              load_answers=True)
+        scrdr, _ = get_fit_scrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,
+                                 expert_answers_dir=self.expert_answers_dir,
+                                 expert_answers_file="scrdr_multi_line_expert_answers_fit",
+                                 load_answers=True)
         scrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_multi_line")
         classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir,
                                                                            postfix="_multi_line")
@@ -84,7 +107,7 @@ class TestRDR(TestCase):
             self.assertEqual(cat, target)
 
     def test_write_scrdr_to_python_file(self):
-        scrdr = get_fit_scrdr(self.all_cases, self.targets)
+        scrdr, _ = get_fit_scrdr(self.all_cases, self.targets)
         scrdr.write_to_python_file(self.generated_rdrs_dir)
         classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, target in zip(self.all_cases, self.targets):

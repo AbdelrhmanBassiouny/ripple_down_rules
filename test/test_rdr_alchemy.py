@@ -94,7 +94,7 @@ class TestAlchemyRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
 
-        fit_scrdr = self.get_fit_scrdr(draw_tree=False)
+        fit_scrdr, _ = self.get_fit_scrdr(draw_tree=False)
 
         grdr = GeneralRDR()
         grdr.add_rdr(fit_scrdr)

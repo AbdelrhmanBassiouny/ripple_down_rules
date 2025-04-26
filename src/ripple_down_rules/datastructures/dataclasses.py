@@ -4,7 +4,7 @@ import inspect
 from dataclasses import dataclass
 
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Dict
+from typing_extensions import Any, Optional, Dict, Type
 
 from .callable_expression import CallableExpression
 from .case import create_case, Case
@@ -51,6 +51,7 @@ class CaseQuery:
 
     def __init__(self, case: Any, attribute_name: str,
                  target: Optional[Any] = None,
+                 attribute_type: Optional[Type] = None,
                  mutually_exclusive: Optional[bool] = None,
                  conditions: Optional[CallableExpression] = None,
                  prediction: Optional[CallableExpression] = None,
@@ -62,9 +63,12 @@ class CaseQuery:
         self.attribute_name = attribute_name
         self.target = target
         self.default_value = default_value
-        target_value = self.target_value
-        known_value = target_value if target_value is not None else default_value
-        self.attribute_type = get_case_attribute_type(self.original_case, self.attribute_name, known_value)
+        if attribute_type is None:
+            target_value = self.target_value
+            known_value = target_value if target_value is not None else default_value
+            self.attribute_type = get_case_attribute_type(self.original_case, self.attribute_name, known_value)
+        else:
+            self.attribute_type = attribute_type
         self.mutually_exclusive = mutually_exclusive
         self.conditions = conditions
         self.prediction = prediction

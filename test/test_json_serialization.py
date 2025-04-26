@@ -35,7 +35,7 @@ class TestJSONSerialization(TestCase):
         cls.all_cases, cls.targets = load_zoo_dataset(cls.cache_dir + "/zoo_dataset.pkl")
 
     def test_scrdr_json_serialization(self):
-        scrdr = get_fit_scrdr(self.all_cases, self.targets)
+        scrdr, _ = get_fit_scrdr(self.all_cases, self.targets)
         filename = f"{self.cache_dir}/scrdr.json"
         scrdr.save(filename)
         scrdr = SingleClassRDR.load(filename)
