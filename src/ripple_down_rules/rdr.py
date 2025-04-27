@@ -85,7 +85,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param animate_tree: Whether to draw the tree while fitting the classifier.
         :param kwargs_for_fit_case: The keyword arguments to pass to the fit_case method.
         """
-        cases = [case_query.case for case_query in case_queries]
         targets = []
         if animate_tree:
             plt.ion()
@@ -93,21 +92,22 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         stop_iterating = False
         num_rules: int = 0
         while not stop_iterating:
-            all_pred = 0
-            for i, case_query in enumerate(case_queries):
+            for case_query in case_queries:
                 pred_cat = self.fit_case(case_query, expert=expert, **kwargs_for_fit_case)
+                if case_query.target is None:
+                    continue
                 target = {case_query.attribute_name: case_query.target(case_query.case)}
                 if len(targets) < len(case_queries):
                     targets.append(target)
-                match = self.is_matching(pred_cat, target)
+                match = self.is_matching(case_query, pred_cat)
                 if not match:
                     print(f"Predicted: {pred_cat} but expected: {target}")
-                all_pred += int(match)
                 if animate_tree and self.start_rule.size > num_rules:
                     num_rules = self.start_rule.size
                     self.update_figures()
             i += 1
-            all_predictions = [1 if self.is_matching(self.classify(case), t) else 0 for t, case in zip(targets, cases)]
+            all_predictions = [1 if self.is_matching(case_query) else 0 for case_query in case_queries
+                               if case_query.target is not None]
             all_pred = sum(all_predictions)
             print(f"Accuracy: {all_pred}/{len(targets)}")
             all_predicted = targets and all_pred == len(targets)
@@ -120,47 +120,42 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             plt.ioff()
             plt.show()
 
+    def is_matching(self, case_query: CaseQuery, pred_cat: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        :param case_query: The case query to check.
+        :param pred_cat: The predicted category.
+        :return: Whether the classifier prediction is matching case_query target or not.
+        """
+        if case_query.target is None:
+            return False
+        if pred_cat is None:
+            pred_cat = self.classify(case_query.case)
+        if not isinstance(pred_cat, dict):
+            pred_cat = {case_query.attribute_name: pred_cat}
+        target = {case_query.attribute_name: case_query.target_value}
+        precision, recall = self.calculate_precision_and_recall(pred_cat, target)
+        return all(recall) and all(precision)
+
     @staticmethod
-    def calculate_precision_and_recall(pred_cat: List[CaseAttribute], target: List[CaseAttribute]) -> Tuple[
+    def calculate_precision_and_recall(pred_cat: Dict[str, Any], target: Dict[str, Any]) -> Tuple[
         List[bool], List[bool]]:
         """
         :param pred_cat: The predicted category.
         :param target: The target category.
         :return: The precision and recall of the classifier.
         """
-        pred_cat = pred_cat if is_iterable(pred_cat) else [pred_cat]
-        target = target if is_iterable(target) else [target]
         recall = []
         precision = []
-        if isinstance(pred_cat, dict):
-            for pred_key, pred_value in pred_cat.items():
-                if pred_key not in target:
-                    continue
-                precision.extend([v in make_set(target[pred_key]) for v in make_set(pred_value)])
-            for target_key, target_value in target.items():
-                if target_key not in pred_cat:
-                    recall.append(False)
-                    continue
-                if is_iterable(target_value):
-                    recall.extend([v in pred_cat[target_key] for v in target_value])
-                else:
-                    recall.append(target_value == pred_cat[target_key])
-        else:
-            if isinstance(target, dict):
-                target = list(target.values())
-            recall = [not yi or (yi in pred_cat) for yi in target]
-            target_types = [type(yi) for yi in target]
-            precision = [(pred in target) or (type(pred) not in target_types) for pred in pred_cat]
+        for pred_key, pred_value in pred_cat.items():
+            if pred_key not in target:
+                continue
+            precision.extend([v in make_set(target[pred_key]) for v in make_set(pred_value)])
+        for target_key, target_value in target.items():
+            if target_key not in pred_cat:
+                recall.append(False)
+                continue
+            recall.extend([v in make_set(pred_cat[target_key]) for v in make_set(target_value)])
         return precision, recall
-
-    def is_matching(self, pred_cat: List[CaseAttribute], target: List[CaseAttribute]) -> bool:
-        """
-        :param pred_cat: The predicted category.
-        :param target: The target category.
-        :return: Whether the classifier is matching or not.
-        """
-        precision, recall = self.calculate_precision_and_recall(pred_cat, target)
-        return all(recall) and all(precision)
 
     def update_figures(self):
         """
@@ -330,7 +325,7 @@ class SingleClassRDR(RDRWithCodeWriter):
         self.default_conclusion: Optional[Any] = default_conclusion
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
-            -> Union[CaseAttribute, CallableExpression]:
+            -> Union[CaseAttribute, CallableExpression, None]:
         """
         Classify a case, and ask the user for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category if provided.
@@ -344,6 +339,8 @@ class SingleClassRDR(RDRWithCodeWriter):
             self.default_conclusion = case_query.default_value
         case = case_query.case
         target = expert.ask_for_conclusion(case_query) if case_query.target is None else case_query.target
+        if target is None:
+            return self.classify(case)
         if not self.start_rule:
             conditions = expert.ask_for_conditions(case_query)
             self.start_rule = SingleClassRule(conditions, target, corner_case=case,
@@ -444,7 +441,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         return make_set(self.conclusions)
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None,
-                 add_extra_conclusions: bool = False) -> List[Union[CaseAttribute, CallableExpression]]:
+                 add_extra_conclusions: bool = False) -> Set[Union[CaseAttribute, CallableExpression, None]]:
         """
         Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
          or missing by comparing the case with the target category if provided.
@@ -457,6 +454,8 @@ class MultiClassRDR(RDRWithCodeWriter):
         expert = expert if expert else Human()
         if case_query.target is None:
             expert.ask_for_conclusion(case_query)
+        if case_query.target is None:
+            return self.classify(case_query.case)
         self.update_start_rule(case_query, expert)
         self.expert_accepted_conclusions = []
         user_conclusions = []
@@ -480,7 +479,7 @@ class MultiClassRDR(RDRWithCodeWriter):
                     self.add_conclusion(evaluated_rule, case_query.case)
 
             if not next_rule:
-                if not make_set(target).intersection(make_set(self.conclusions)):
+                if not make_set(target).issubset(make_set(self.conclusions)):
                     # Nothing fired and there is a target that should have been in the conclusions
                     self.add_rule_for_case(case_query, expert)
                     # Have to check all rules again to make sure only this new rule fires
@@ -784,14 +783,14 @@ class GeneralRDR(RippleDownRules):
                         conclusions[attribute_name] = pred_atts
                         new_conclusions[attribute_name] = pred_atts
                 else:
-                    pred_atts = make_list(pred_atts)
+                    pred_atts = make_set(pred_atts)
                     if attribute_name in conclusions:
-                        pred_atts = [p for p in pred_atts if p not in conclusions[attribute_name]]
+                        pred_atts = {p for p in pred_atts if p not in conclusions[attribute_name]}
                     if len(pred_atts) > 0:
                         new_conclusions[attribute_name] = pred_atts
                         if attribute_name not in conclusions:
-                            conclusions[attribute_name] = []
-                        conclusions[attribute_name].extend(pred_atts)
+                            conclusions[attribute_name] = set()
+                        conclusions[attribute_name].update(pred_atts)
                 if attribute_name in new_conclusions:
                     mutually_exclusive = True if isinstance(rdr, SingleClassRDR) else False
                     GeneralRDR.update_case(CaseQuery(case_cp, attribute_name, rdr.conclusion_type, mutually_exclusive),
@@ -829,6 +828,8 @@ class GeneralRDR(RippleDownRules):
                 conclusions = self.classify(case) if self.start_rule and self.start_rule.conditions else []
                 self.update_case(case_query_cp, conclusions)
                 expert.ask_for_conclusion(case_query_cp)
+                if case_query_cp.target is None:
+                    continue
                 case_query.target = case_query_cp.target
 
             if case_query.attribute_name not in self.start_rules_dict:

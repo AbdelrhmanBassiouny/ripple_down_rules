@@ -169,17 +169,19 @@ class Human(Expert):
             extra_conclusions[category] = self._get_conditions(case, {category.__class__.__name__: category})
         return extra_conclusions
 
-    def ask_for_conclusion(self, case_query: CaseQuery) -> CaseQuery:
+    def ask_for_conclusion(self, case_query: CaseQuery) -> Optional[CallableExpression]:
         """
         Ask the expert to provide a conclusion for the case.
 
         :param case_query: The case query containing the case to find a conclusion for.
-        :return: The case query updated with the conclusion for the case.
+        :return: The conclusion for the case as a callable expression.
         """
+        expression: Optional[CallableExpression] = None
         if self.use_loaded_answers:
             expert_input = self.all_expert_answers.pop(0)
-            expression = CallableExpression(expert_input, case_query.attribute_type,
-                                            scope=case_query.scope)
+            if expert_input is not None:
+                expression = CallableExpression(expert_input, case_query.attribute_type,
+                                                scope=case_query.scope)
         else:
             show_current_and_corner_cases(case_query.case)
             expert_input, expression = prompt_user_for_expression(case_query, PromptFor.Conclusion)

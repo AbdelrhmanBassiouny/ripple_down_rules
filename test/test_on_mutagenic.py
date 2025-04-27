@@ -162,8 +162,8 @@ def get_two_molecules_model(draw_tree=False, load_answers=True, save_answers=Fal
 
     molecule_1 = make_molecule_1()
     molecule_2 = make_molecule_2()
-    case_queries = [CaseQuery(molecule_1, attribute_name="mutagenic", target=molecule_1.mutagenic),
-                    CaseQuery(molecule_2, attribute_name="mutagenic", target=molecule_2.mutagenic), ]
+    case_queries = [CaseQuery(molecule_1, "mutagenic", bool, True, _target=molecule_1.mutagenic),
+                    CaseQuery(molecule_2, "mutagenic", bool, True, _target=molecule_2.mutagenic), ]
 
     rdr = SingleClassRDR()
     rdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
@@ -171,9 +171,9 @@ def get_two_molecules_model(draw_tree=False, load_answers=True, save_answers=Fal
     for case_query in case_queries:
         r = rdr.classify(case_query.case)
         if isinstance(rdr, GeneralRDR):
-            assert r[case_query.attribute_name] == case_query.target
+            assert r[case_query.attribute_name] == case_query.target_value
         else:
-            assert r == case_query.target
+            assert r == case_query.target_value
 
     if save_answers:
         cwd = os.getcwd()

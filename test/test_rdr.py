@@ -109,19 +109,23 @@ class TestRDR(TestCase):
             cat = classify_species_mcrdr(case)
             self.assertEqual(make_set(cat), make_set(target))
 
-    @skip("Test is not implemented yet")
+    # @skip("Test is not implemented yet")
     def test_fit_grdr_with_no_targets(self):
+        draw_tree = False
         # Test with no targets
-        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets, draw_tree=False,
+        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets, draw_tree=draw_tree,
                                          expert_answers_dir=self.expert_answers_dir,
                                          expert_answers_file="grdr_expert_answers_fit_no_targets",
-                                         load_answers=False, save_answers=True, no_targets=True)
-        render_tree(grdr.start_rules[0], use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/grdr_no_targets")
+                                         load_answers=True, save_answers=False, append=False, no_targets=True)
+        if draw_tree:
+            for conclusion_name, rdr in grdr.start_rules_dict.items():
+                render_tree(rdr.start_rule, use_dot_exporter=True,
+                            filename=self.test_results_dir + f"/grdr_no_targets_{conclusion_name}")
         for case, case_targets in zip(self.all_cases[:20], all_targets):
             cat = grdr.classify(case)
             for cat_name, cat_val in cat.items():
-                self.assertEqual(make_set(cat_val), make_set(case_targets[cat_name]))
+                if cat_name in case_targets:
+                    self.assertEqual(make_set(cat_val), make_set(case_targets[cat_name]))
 
     def test_fit_multi_line_scrdr(self):
         n = 20
@@ -183,10 +187,7 @@ class TestRDR(TestCase):
         for case, case_targets in zip(self.all_cases[:len(all_targets)], all_targets):
             cat = classify_animal_grdr(case)
             for cat_name, cat_val in cat.items():
-                if cat_name == "habitats":
-                    self.assertEqual(cat_val, case_targets['habitats'])
-                elif cat_name == "species":
-                    self.assertEqual(cat_val[0], case_targets['species'])
+                self.assertEqual(make_set(cat_val), make_set(case_targets[cat_name]))
 
     def test_classify_mcrdr(self):
         use_loaded_answers = True

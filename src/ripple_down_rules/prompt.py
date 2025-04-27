@@ -70,15 +70,22 @@ class IpythonShell:
         """
         Update the user input from the code lines captured in the shell.
         """
-        self.all_code_lines = extract_dependencies(self.shell.all_lines)
-        if len(self.all_code_lines) == 1:
-            self.user_input = self.all_code_lines[0].replace('return', '').strip()
+        if len(self.shell.all_lines) == 1 and self.shell.all_lines[0].replace('return', '').strip() == '':
+            self.user_input = None
         else:
-            self.user_input = f"def _get_value(case):\n    "
-            self.user_input += '\n    '.join(self.all_code_lines)
+            self.all_code_lines = extract_dependencies(self.shell.all_lines)
+            if len(self.all_code_lines) == 1:
+                if self.all_code_lines[0].strip() == '':
+                    self.user_input = None
+                else:
+                    self.user_input = self.all_code_lines[0].replace('return', '').strip()
+            else:
+                self.user_input = f"def _get_value(case):\n    "
+                self.user_input += '\n    '.join(self.all_code_lines)
 
 
-def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor) -> Tuple[str, CallableExpression]:
+def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor)\
+        -> Tuple[Optional[str], Optional[CallableExpression]]:
     """
     Prompt the user for an executable python expression to the given case query.
 
@@ -88,6 +95,13 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor) -> 
     """
     while True:
         user_input, expression_tree = prompt_user_about_case(case_query, prompt_for)
+        if user_input is None:
+            if prompt_for == PromptFor.Conclusion:
+                print("No conclusion provided. Exiting.")
+                return None, None
+            else:
+                print("Conditions must be provided. Please try again.")
+                continue
         conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
         callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
                                                  scope=case_query.scope)
@@ -100,7 +114,7 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor) -> 
     return user_input, callable_expression
 
 
-def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor) -> Tuple[str, AST]:
+def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor) -> Tuple[Optional[str], Optional[AST]]:
     """
     Prompt the user for input.
 
@@ -111,12 +125,12 @@ def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor) -> Tupl
     prompt_str = f"Give {prompt_for} for {case_query.name}"
     scope = {'case': case_query.case, **case_query.scope}
     shell = IpythonShell(scope=scope, header=prompt_str)
-    user_input, expression_tree = prompt_user_input_and_parse_to_expression(shell=shell)
-    return user_input, expression_tree
+    return prompt_user_input_and_parse_to_expression(shell=shell)
 
 
 def prompt_user_input_and_parse_to_expression(shell: Optional[IpythonShell] = None,
-                                              user_input: Optional[str] = None) -> Tuple[str, ast.AST]:
+                                              user_input: Optional[str] = None)\
+        -> Tuple[Optional[str], Optional[ast.AST]]:
     """
     Prompt the user for input.
 
@@ -129,6 +143,8 @@ def prompt_user_input_and_parse_to_expression(shell: Optional[IpythonShell] = No
             shell = IpythonShell() if shell is None else shell
             shell.run()
             user_input = shell.user_input
+            if user_input is None:
+                return None, None
             print(user_input)
         try:
             return user_input, parse_string_to_expression(user_input)

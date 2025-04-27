@@ -65,6 +65,7 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
                  expert_answers_file: str = "grdr_expert_answers_fit", draw_tree: bool = False,
                  load_answers: bool = True,
                  save_answers: bool = False,
+                 append: bool = False,
                  no_targets: bool = False) -> Tuple[GeneralRDR, List[dict]]:
     filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
     expert = Human(use_loaded_answers=load_answers)
@@ -86,14 +87,24 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
                               True if name == "species" else False, _target=target)
                     for case, targets in zip(cases[:n], all_targets)
                     for name, target in targets.items()]
-    grdr.fit(case_queries, expert=expert,
-             animate_tree=draw_tree)
+    try:
+        grdr.fit(case_queries, expert=expert,
+                 animate_tree=draw_tree)
+    # catch pop from empty list error
+    except IndexError as e:
+        if append:
+            expert.use_loaded_answers = False
+            grdr.fit(case_queries, expert=expert,
+                     animate_tree=draw_tree)
+        else:
+            raise e
     if save_answers:
-        expert.save_answers(filename)
+        expert.save_answers(filename, append=append)
     for case, case_targets in zip(cases[:n], true_targets):
         cat = grdr.classify(case)
         for cat_name, cat_val in cat.items():
-            assert make_set(cat_val) == make_set(case_targets[cat_name])
+            if cat_name in case_targets:
+                assert make_set(cat_val) == make_set(case_targets[cat_name])
     return grdr, true_targets
 
 
