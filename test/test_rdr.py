@@ -313,17 +313,8 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def test_fit_grdr(self):
-        use_loaded_answers = True
-        save_answers = False
-        draw_tree = False
-
-        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets, draw_tree=draw_tree,
-                                         load_answers=use_loaded_answers)
-        for rule in grdr.start_rules:
-            render_tree(rule, use_dot_exporter=True,
-                        filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
-
-        if save_answers:
-            cwd = os.getcwd()
-            file = os.path.join(cwd, self.expert_answers_dir + filename)
-            grdr.expert.save_answers(file)
+        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets, draw_tree=False,
+                                         load_answers=True, save_answers=False)
+        for conclusion_name, rdr in grdr.start_rules_dict.items():
+            render_tree(rdr.start_rule, use_dot_exporter=True,
+                        filename=self.test_results_dir + f"/grdr_{conclusion_name}")
