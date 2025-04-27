@@ -37,6 +37,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     """
     The conclusions that the expert has accepted, such that they are not asked again.
     """
+    _generated_python_file_name: Optional[str] = None
+    """
+    The name of the generated python file.
+    """
 
     def __init__(self, start_rule: Optional[Rule] = None):
         """
@@ -182,6 +186,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         return hasattr(case, conclusion_name) and getattr(case, conclusion_name) is not None
 
+    @property
+    def type_(self):
+        return self.__class__
+
 
 class RDRWithCodeWriter(RippleDownRules, ABC):
 
@@ -205,17 +213,20 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :param file_path: The path to the file to write the source code to.
         :param postfix: The postfix to add to the file name.
         """
+        self.generated_python_file_name = self._default_generated_python_file_name + postfix
         func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
-        file_name = file_path + f"/{self.generated_python_file_name}{postfix}.py"
-        defs_file_name = file_path + f"/{self.generated_python_defs_file_name}{postfix}.py"
+        file_name = file_path + f"/{self.generated_python_file_name}.py"
+        defs_file_name = file_path + f"/{self.generated_python_defs_file_name}.py"
         imports = self._get_imports()
         # clear the files first
         with open(defs_file_name, "w") as f:
             f.write(imports + "\n\n")
         with open(file_name, "w") as f:
-            imports += f"from .{self.generated_python_defs_file_name}{postfix} import *\n"
+            imports += f"from .{self.generated_python_defs_file_name} import *\n"
+            imports += f"from ripple_down_rules.rdr import {self.__class__.__name__}\n"
             f.write(imports + "\n\n")
-            f.write(f"conclusion_type = ({','.join([ct.__name__ for ct in self.conclusion_type])},)\n\n")
+            f.write(f"conclusion_type = ({', '.join([ct.__name__ for ct in self.conclusion_type])},)\n\n")
+            f.write(f"type_ = {self.__class__.__name__}\n\n")
             f.write(func_def)
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
@@ -241,20 +252,24 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                 imports += f"from {conclusion_type.__module__} import {conclusion_type.__name__}\n"
         imports += "from ripple_down_rules.datastructures.case import Case, create_case\n"
         for rule in [self.start_rule] + list(self.start_rule.descendants):
-            if rule.conditions:
-                if rule.conditions.scope is not None and len(rule.conditions.scope) > 0:
-                    for k, v in rule.conditions.scope.items():
-                        imports += f"from {v.__module__} import {v.__name__}\n"
+            if not rule.conditions:
+                continue
+            if rule.conditions.scope is None or len(rule.conditions.scope) == 0:
+                continue
+            for k, v in rule.conditions.scope.items():
+                new_imports = f"from {v.__module__} import {v.__name__}\n"
+                if new_imports in imports:
+                    continue
+                imports += new_imports
         return imports
 
-    def get_rdr_classifier_from_python_file(self, package_name: str, postfix: str = "") -> Callable[[Any], Any]:
+    def get_rdr_classifier_from_python_file(self, package_name: str) -> Callable[[Any], Any]:
         """
         :param package_name: The name of the package that contains the RDR classifier function.
-        :param postfix: The postfix to add to the file name.
         :return: The module that contains the rdr classifier function.
         """
         # remove from imports if exists first
-        name = f"{package_name.strip('./')}.{self.generated_python_file_name}{postfix}"
+        name = f"{package_name.strip('./')}.{self.generated_python_file_name}"
         try:
             module = importlib.import_module(name)
             del sys.modules[name]
@@ -264,11 +279,28 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
 
     @property
     def generated_python_file_name(self) -> str:
+        if self._generated_python_file_name is None:
+            self._generated_python_file_name = self._default_generated_python_file_name
+        return self._generated_python_file_name
+
+    @generated_python_file_name.setter
+    def generated_python_file_name(self, value: str):
+        """
+        Set the generated python file name.
+        :param value: The new value for the generated python file name.
+        """
+        self._generated_python_file_name = value
+
+    @property
+    def _default_generated_python_file_name(self) -> str:
+        """
+        :return: The default generated python file name.
+        """
         return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_{self.acronym.lower()}"
 
     @property
     def generated_python_defs_file_name(self) -> str:
-        return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_{self.acronym.lower()}_defs"
+        return f"{self.generated_python_file_name}_defs"
 
     @property
     def acronym(self) -> str:
@@ -299,12 +331,12 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :return: The type of the conclusion of the RDR classifier.
         """
         if isinstance(self.start_rule.conclusion, CallableExpression):
-            conclusion = self.start_rule.conclusion(self.start_rule.corner_case)
+            return self.start_rule.conclusion.conclusion_type
         else:
             conclusion = self.start_rule.conclusion
-        if isinstance(conclusion, set):
-            return type(list(conclusion)[0]), set
-        return (type(conclusion),)
+            if isinstance(conclusion, set):
+                return type(list(conclusion)[0]), set
+            return (type(conclusion),)
 
     @property
     def attribute_name(self) -> str:
@@ -777,7 +809,7 @@ class GeneralRDR(RippleDownRules):
                 pred_atts = rdr.classify(case_cp)
                 if pred_atts is None:
                     continue
-                if isinstance(rdr, SingleClassRDR):
+                if rdr.type_ is SingleClassRDR:
                     if attribute_name not in conclusions or \
                             (attribute_name in conclusions and conclusions[attribute_name] != pred_atts):
                         conclusions[attribute_name] = pred_atts
@@ -792,7 +824,7 @@ class GeneralRDR(RippleDownRules):
                             conclusions[attribute_name] = set()
                         conclusions[attribute_name].update(pred_atts)
                 if attribute_name in new_conclusions:
-                    mutually_exclusive = True if isinstance(rdr, SingleClassRDR) else False
+                    mutually_exclusive = True if rdr.type_ is SingleClassRDR else False
                     GeneralRDR.update_case(CaseQuery(case_cp, attribute_name, rdr.conclusion_type, mutually_exclusive),
                                            new_conclusions)
             if len(new_conclusions) == 0:
@@ -926,14 +958,16 @@ class GeneralRDR(RippleDownRules):
             start_rules_dict[k] = get_type_from_string(v['_type']).from_json(v)
         return cls(start_rules_dict)
 
-    def write_to_python_file(self, file_path: str):
+    def write_to_python_file(self, file_path: str, postfix: str = "") -> None:
         """
         Write the tree of rules as source code to a file.
 
         :param file_path: The path to the file to write the source code to.
+        :param postfix: The postfix to add to the file name.
         """
+        self.generated_python_file_name = self._default_generated_python_file_name + postfix
         for rdr in self.start_rules_dict.values():
-            rdr.write_to_python_file(file_path)
+            rdr.write_to_python_file(file_path, postfix=f"_of_grdr{postfix}")
         func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
         with open(file_path + f"/{self.generated_python_file_name}.py", "w") as f:
             f.write(self._get_imports(file_path) + "\n\n")
@@ -956,15 +990,29 @@ class GeneralRDR(RippleDownRules):
         else:
             return type(self.start_rule.corner_case)
 
-    def get_rdr_classifier_from_python_file(self, file_path: str):
+    def get_rdr_classifier_from_python_file(self, file_path: str) -> Callable[[Any], Any]:
         """
         :param file_path: The path to the file that contains the RDR classifier function.
+        :param postfix: The postfix to add to the file name.
         :return: The module that contains the rdr classifier function.
         """
         return importlib.import_module(f"{file_path.strip('./')}.{self.generated_python_file_name}").classify
 
     @property
     def generated_python_file_name(self) -> str:
+        if self._generated_python_file_name is None:
+            self._generated_python_file_name = self._default_generated_python_file_name
+        return self._generated_python_file_name
+
+    @generated_python_file_name.setter
+    def generated_python_file_name(self, value: str):
+        self._generated_python_file_name = value
+
+    @property
+    def _default_generated_python_file_name(self) -> str:
+        """
+        :return: The default generated python file name.
+        """
         return f"{self.start_rule.corner_case._name.lower()}_rdr"
 
     @property
@@ -972,6 +1020,12 @@ class GeneralRDR(RippleDownRules):
         return f"List[Union[{', '.join([rdr.conclusion_type_hint for rdr in self.start_rules_dict.values()])}]]"
 
     def _get_imports(self, file_path: str) -> str:
+        """
+        Get the imports needed for the generated python file.
+
+        :param file_path: The path to the file that contains the RDR classifier function.
+        :return: The imports needed for the generated python file.
+        """
         imports = ""
         # add type hints
         imports += f"from typing_extensions import List, Union, Set\n"

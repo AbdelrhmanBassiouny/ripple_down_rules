@@ -77,8 +77,7 @@ class TestRDR(TestCase):
                                             expert_answers_file="scrdr_expert_answers_fit_no_targets",
                                             load_answers=True, save_answers=False)
         scrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_no_targets")
-        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir,
-                                                                           postfix="_no_targets")
+        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case_query, target in zip(case_queries, self.targets):
             cat = classify_species_scrdr(case_query.case)
             self.assertEqual(cat, target)
@@ -103,8 +102,7 @@ class TestRDR(TestCase):
                               expert_answers_file="mcrdr_expert_answers_fit_no_targets",
                               load_answers=True, save_answers=False)
         mcrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_no_targets")
-        classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir,
-                                                                           postfix="_no_targets")
+        classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, target in zip(self.all_cases[:20], self.targets[:20]):
             cat = classify_species_mcrdr(case)
             self.assertEqual(make_set(cat), make_set(target))
@@ -127,6 +125,20 @@ class TestRDR(TestCase):
                 if cat_name in case_targets:
                     self.assertEqual(make_set(cat_val), make_set(case_targets[cat_name]))
 
+    def test_write_grdr_no_targets_to_python_file(self):
+        # Test with no targets
+        grdr, all_targets = get_fit_grdr(self.all_cases, self.targets, draw_tree=False,
+                                         expert_answers_dir=self.expert_answers_dir,
+                                         expert_answers_file="grdr_expert_answers_fit_no_targets",
+                                         load_answers=True, save_answers=False, append=False, no_targets=True)
+        grdr.write_to_python_file(self.generated_rdrs_dir, postfix="_no_targets")
+        classify_species_grdr = grdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
+        for case, case_targets in zip(self.all_cases[:20], all_targets):
+            cat = classify_species_grdr(case)
+            for cat_name, cat_val in cat.items():
+                if cat_name in case_targets:
+                    self.assertEqual(make_set(cat_val), make_set(case_targets[cat_name]))
+
     def test_fit_multi_line_scrdr(self):
         n = 20
         scrdr, _ = get_fit_scrdr(self.all_cases[:n], self.targets[:n], draw_tree=False,
@@ -144,8 +156,7 @@ class TestRDR(TestCase):
                                  expert_answers_file="scrdr_multi_line_expert_answers_fit",
                                  load_answers=True)
         scrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_multi_line")
-        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir,
-                                                                           postfix="_multi_line")
+        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, target in zip(self.all_cases[:n], self.targets[:n]):
             cat = classify_species_scrdr(case)
             self.assertEqual(cat, target)
@@ -174,8 +185,7 @@ class TestRDR(TestCase):
                               load_answers=True,
                               save_answers=False)
         mcrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_multi_line")
-        classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir,
-                                                                           postfix="_multi_line")
+        classify_species_mcrdr = mcrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
         for case, target in zip(self.all_cases[:n], self.targets[:n]):
             cat = classify_species_mcrdr(case)
             self.assertEqual(make_set(cat), make_set(target))
