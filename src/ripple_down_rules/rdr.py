@@ -22,7 +22,7 @@ from .experts import Expert, Human
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .utils import draw_tree, make_set, copy_case, \
     get_hint_for_attribute, SubclassJSONSerializer, is_iterable, make_list, get_type_from_string, \
-    get_case_attribute_type, ask_llm
+    get_case_attribute_type, ask_llm, is_matching
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -103,14 +103,14 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                 target = {case_query.attribute_name: case_query.target(case_query.case)}
                 if len(targets) < len(case_queries):
                     targets.append(target)
-                match = self.is_matching(case_query, pred_cat)
+                match = is_matching(self.classify, case_query, pred_cat)
                 if not match:
                     print(f"Predicted: {pred_cat} but expected: {target}")
                 if animate_tree and self.start_rule.size > num_rules:
                     num_rules = self.start_rule.size
                     self.update_figures()
             i += 1
-            all_predictions = [1 if self.is_matching(case_query) else 0 for case_query in case_queries
+            all_predictions = [1 if is_matching(self.classify, case_query) else 0 for case_query in case_queries
                                if case_query.target is not None]
             all_pred = sum(all_predictions)
             print(f"Accuracy: {all_pred}/{len(targets)}")
@@ -123,43 +123,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if animate_tree:
             plt.ioff()
             plt.show()
-
-    def is_matching(self, case_query: CaseQuery, pred_cat: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        :param case_query: The case query to check.
-        :param pred_cat: The predicted category.
-        :return: Whether the classifier prediction is matching case_query target or not.
-        """
-        if case_query.target is None:
-            return False
-        if pred_cat is None:
-            pred_cat = self.classify(case_query.case)
-        if not isinstance(pred_cat, dict):
-            pred_cat = {case_query.attribute_name: pred_cat}
-        target = {case_query.attribute_name: case_query.target_value}
-        precision, recall = self.calculate_precision_and_recall(pred_cat, target)
-        return all(recall) and all(precision)
-
-    @staticmethod
-    def calculate_precision_and_recall(pred_cat: Dict[str, Any], target: Dict[str, Any]) -> Tuple[
-        List[bool], List[bool]]:
-        """
-        :param pred_cat: The predicted category.
-        :param target: The target category.
-        :return: The precision and recall of the classifier.
-        """
-        recall = []
-        precision = []
-        for pred_key, pred_value in pred_cat.items():
-            if pred_key not in target:
-                continue
-            precision.extend([v in make_set(target[pred_key]) for v in make_set(pred_value)])
-        for target_key, target_value in target.items():
-            if target_key not in pred_cat:
-                recall.append(False)
-                continue
-            recall.extend([v in make_set(pred_cat[target_key]) for v in make_set(target_value)])
-        return precision, recall
 
     def update_figures(self):
         """
@@ -398,6 +361,12 @@ class SingleClassRDR(RDRWithCodeWriter):
         """
         matched_rule = self.start_rule(case)
         return matched_rule if matched_rule else self.start_rule
+
+    def write_to_python_file(self, file_path: str, postfix: str = ""):
+        super().write_to_python_file(file_path, postfix)
+        if self.default_conclusion is not None:
+            with open(file_path + f"/{self.generated_python_file_name}.py", "a") as f:
+                f.write(f"{' '*4}else:\n{' '*8}return {self.default_conclusion}\n")
 
     def write_rules_as_source_code_to_file(self, rule: SingleClassRule, file: TextIOWrapper, parent_indent: str = "",
                                            defs_file: Optional[str] = None):

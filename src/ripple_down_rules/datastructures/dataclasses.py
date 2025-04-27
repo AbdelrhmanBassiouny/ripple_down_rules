@@ -8,7 +8,7 @@ from typing_extensions import Any, Optional, Dict, Type, Tuple, Union
 
 from .callable_expression import CallableExpression
 from .case import create_case, Case
-from ..utils import copy_case
+from ..utils import copy_case, make_list
 
 
 @dataclass
@@ -88,6 +88,7 @@ class CaseQuery:
         """
         :return: The type of the attribute.
         """
+        self._attribute_types = tuple(make_list(self._attribute_types))
         if not self.mutually_exclusive and (set not in self._attribute_types):
             self._attribute_types = tuple(list(self._attribute_types) + [set])
         return self._attribute_types
@@ -97,9 +98,7 @@ class CaseQuery:
         """
         Set the type of the attribute.
         """
-        if not isinstance(value, tuple):
-            value = (value,)
-        self._attribute_types = value
+        self._attribute_types = tuple(make_list(value))
 
     @property
     def name(self):

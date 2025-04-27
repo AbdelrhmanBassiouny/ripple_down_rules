@@ -8,6 +8,7 @@ from unittest import TestCase
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, GeneralRDR
+from ripple_down_rules.utils import is_matching
 
 
 @dataclass
@@ -93,17 +94,26 @@ class TestRDRWorld(TestCase):
         print(all_views)
         cls.drawer_case_queries = [CaseQuery(view, "correct", bool, True, default_value=False) for view in all_views]
 
-    def test_drawer_scrdr(self):
-        use_loaded_answers = True
-        save_answers = False
+    def test_drawer_rdr(self):
+        self.get_drawer_rdr(use_loaded_answers=True, save_answers=False)
+
+    def test_write_drawer_rdr_to_python_file(self):
+        rdrs_dir = "./test_generated_rdrs"
+        drawer_rdr = self.get_drawer_rdr()
+        drawer_rdr.write_to_python_file(rdrs_dir)
+        loaded_rdr_classifier = drawer_rdr.get_rdr_classifier_from_python_file(rdrs_dir)
+        for case_query in self.drawer_case_queries:
+            self.assertTrue(is_matching(loaded_rdr_classifier, case_query))
+
+    def get_drawer_rdr(self, use_loaded_answers: bool = True, save_answers: bool = False):
         expert = Human(use_loaded_answers=use_loaded_answers)
-        filename = os.path.join(os.getcwd(), "test_expert_answers/scrdr_world_expert_answers_fit")
+        filename = os.path.join(os.getcwd(), "test_expert_answers/correct_drawer_rdr_expert_answers_fit")
         if use_loaded_answers:
             expert.load_answers(filename)
-        rdr = SingleClassRDR()
+        rdr = GeneralRDR()
         rdr.fit(self.drawer_case_queries, expert=expert, animate_tree=False)
         if save_answers:
             expert.save_answers(filename)
         for case_query in self.drawer_case_queries:
-            self.assertEqual(rdr.classify(case_query.case), case_query.target_value)
-            # print(f"Case: {case_query}, Classification: {rdr.classify(case_query.case)}")
+            self.assertTrue(is_matching(rdr.classify, case_query))
+        return rdr
