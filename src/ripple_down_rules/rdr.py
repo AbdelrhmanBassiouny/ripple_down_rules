@@ -220,6 +220,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         with open(file_name, "w") as f:
             imports += f"from .{self.generated_python_defs_file_name}{postfix} import *\n"
             f.write(imports + "\n\n")
+            f.write(f"conclusion_type = ({','.join([ct.__name__ for ct in self.conclusion_type])},)\n\n")
             f.write(func_def)
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
@@ -240,8 +241,9 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         imports = ""
         if self.case_type.__module__ != "builtins":
             imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
-        if self.conclusion_type.__module__ != "builtins":
-            imports += f"from {self.conclusion_type.__module__} import {self.conclusion_type.__name__}\n"
+        for conclusion_type in self.conclusion_type:
+            if conclusion_type.__module__ != "builtins":
+                imports += f"from {conclusion_type.__module__} import {conclusion_type.__name__}\n"
         imports += "from ripple_down_rules.datastructures.case import Case, create_case\n"
         for rule in [self.start_rule] + list(self.start_rule.descendants):
             if rule.conditions:
@@ -297,7 +299,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             return type(self.start_rule.corner_case)
 
     @property
-    def conclusion_type(self) -> Type:
+    def conclusion_type(self) -> Tuple[Type]:
         """
         :return: The type of the conclusion of the RDR classifier.
         """
@@ -306,8 +308,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         else:
             conclusion = self.start_rule.conclusion
         if isinstance(conclusion, set):
-            return type(list(conclusion)[0])
-        return type(conclusion)
+            return type(list(conclusion)[0]), set
+        return (type(conclusion),)
 
     @property
     def attribute_name(self) -> str:
@@ -388,7 +390,7 @@ class SingleClassRDR(RDRWithCodeWriter):
 
     @property
     def conclusion_type_hint(self) -> str:
-        return self.conclusion_type.__name__
+        return self.conclusion_type[0].__name__
 
     def _to_json(self) -> Dict[str, Any]:
         return {"start_rule": self.start_rule.to_json()}
@@ -431,7 +433,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         super(MultiClassRDR, self).__init__(start_rule)
         self.mode: MCRDRMode = mode
 
-    def classify(self, case: Union[Case, SQLTable]) -> List[Any]:
+    def classify(self, case: Union[Case, SQLTable]) -> Set[Any]:
         evaluated_rule = self.start_rule
         self.conclusions = []
         while evaluated_rule:
@@ -439,7 +441,7 @@ class MultiClassRDR(RDRWithCodeWriter):
             if evaluated_rule.fired:
                 self.add_conclusion(evaluated_rule, case)
             evaluated_rule = next_rule
-        return self.conclusions
+        return make_set(self.conclusions)
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None,
                  add_extra_conclusions: bool = False) -> List[Union[CaseAttribute, CallableExpression]]:
@@ -511,7 +513,7 @@ class MultiClassRDR(RDRWithCodeWriter):
 
     @property
     def conclusion_type_hint(self) -> str:
-        return f"Set[{self.conclusion_type.__name__}]"
+        return f"Set[{self.conclusion_type[0].__name__}]"
 
     def _get_imports(self) -> str:
         imports = super()._get_imports()
@@ -791,7 +793,9 @@ class GeneralRDR(RippleDownRules):
                             conclusions[attribute_name] = []
                         conclusions[attribute_name].extend(pred_atts)
                 if attribute_name in new_conclusions:
-                    GeneralRDR.update_case(CaseQuery(case_cp, attribute_name), new_conclusions)
+                    mutually_exclusive = True if isinstance(rdr, SingleClassRDR) else False
+                    GeneralRDR.update_case(CaseQuery(case_cp, attribute_name, rdr.conclusion_type, mutually_exclusive),
+                                           new_conclusions)
             if len(new_conclusions) == 0:
                 break
         return conclusions
@@ -845,6 +849,7 @@ class GeneralRDR(RippleDownRules):
                                                                                          **kwargs)
                     if conclusions is not None or (is_iterable(conclusions) and len(conclusions) > 0):
                         conclusions = {rdr_attribute_name: conclusions}
+                        case_query_cp.mutually_exclusive = True if isinstance(rdr, SingleClassRDR) else False
                         self.update_case(case_query_cp, conclusions)
             case_query.conditions = case_query_cp.conditions
 
@@ -858,9 +863,8 @@ class GeneralRDR(RippleDownRules):
         if case_query.mutually_exclusive is not None:
             return SingleClassRDR(default_conclusion=case_query.default_value) if case_query.mutually_exclusive\
                 else MultiClassRDR()
-        if case_query.attribute_type is not None:
-            return MultiClassRDR() if case_query.attribute_type in [list, set]\
-                else SingleClassRDR(default_conclusion=case_query.default_value)
+        if case_query.attribute_type in [list, set]:
+            return MultiClassRDR()
         attribute = getattr(case_query.case, case_query.attribute_name)\
             if hasattr(case_query.case, case_query.attribute_name) else case_query.target(case_query.case)
         if isinstance(attribute, CaseAttribute):
@@ -888,18 +892,18 @@ class GeneralRDR(RippleDownRules):
                 if conclusion_name == case_query.attribute_name:
                     attribute_type = case_query.attribute_type
                 else:
-                    attribute_type = get_case_attribute_type(case_query.original_case, conclusion_name, attribute)
-                if isinstance(attribute, set) or attribute_type in {Set, set}:
+                    attribute_type = (get_case_attribute_type(case_query.original_case, conclusion_name, attribute),)
+                if isinstance(attribute, set) or any(at in {Set, set} for at in attribute_type):
                     attribute = set() if attribute is None else attribute
                     for c in conclusion:
                         attribute.update(make_set(c))
-                elif isinstance(attribute, list) or attribute_type in {list, List}:
+                elif isinstance(attribute, list) or any(at in {List, list} for at in attribute_type):
                     attribute = [] if attribute is None else attribute
                     attribute.extend(conclusion)
                 elif is_iterable(conclusion) and len(conclusion) == 1 \
-                        and attribute_type is type(list(conclusion)[0]):
+                        and any(at is type(list(conclusion)[0]) for at in attribute_type):
                     setattr(case_query.case, conclusion_name, list(conclusion)[0])
-                elif not is_iterable(conclusion) and attribute_type == type(conclusion):
+                elif not is_iterable(conclusion) and any(at is type(conclusion) for at in attribute_type):
                     setattr(case_query.case, conclusion_name, conclusion)
                 else:
                     raise ValueError(f"Unknown type or type mismatch for attribute {conclusion_name} with type "
@@ -977,7 +981,9 @@ class GeneralRDR(RippleDownRules):
         imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
         # add conclusion type imports
         for rdr in self.start_rules_dict.values():
-            imports += f"from {rdr.conclusion_type.__module__} import {rdr.conclusion_type.__name__}\n"
+            for conclusion_type in rdr.conclusion_type:
+                if conclusion_type.__module__ != "builtins":
+                    imports += f"from {conclusion_type.__module__} import {conclusion_type.__name__}\n"
         # add rdr python generated functions.
         for rdr_key, rdr in self.start_rules_dict.items():
             imports += (f"from {file_path.strip('./')}"

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Dict, Type
+from typing_extensions import Any, Optional, Dict, Type, Tuple, Union
 
 from .callable_expression import CallableExpression
 from .case import create_case, Case
-from ..utils import copy_case, get_case_attribute_type
+from ..utils import copy_case
 
 
 @dataclass
@@ -18,7 +18,7 @@ class CaseQuery:
     not provided, it will be inferred from the attribute itself or from the attribute type or from the target value,
     depending on what is provided.
     """
-    case: Any
+    original_case: Any
     """
     The case that the attribute belongs to.
     """
@@ -26,62 +26,80 @@ class CaseQuery:
     """
     The name of the attribute.
     """
-    target: Optional[Any] = None
+    _attribute_types: Tuple[Type]
     """
-    The target value of the attribute.
+    The type(s) of the attribute.
     """
-    mutually_exclusive: bool = False
+    mutually_exclusive: bool
     """
     Whether the attribute can only take one value (i.e. True) or multiple values (i.e. False).
     """
-    conditions: Optional[CallableExpression] = None
+    _target: Optional[CallableExpression] = None
     """
-    The conditions that must be satisfied for the target value to be valid.
+    The target expression of the attribute.
     """
-    prediction: Optional[CallableExpression] = None
+    default_value: Optional[Any] = None
     """
-    The predicted value of the attribute.
+    The default value of the attribute. This is used when the target value is not provided.
     """
-    scope: Optional[Dict[str, Any]] = None
+    scope: Optional[Dict[str, Any]] = field(default_factory=lambda: inspect.currentframe().f_back.f_back.f_globals)
     """
     The global scope of the case query. This is used to evaluate the conditions and prediction, and is what is available
     to the user when they are prompted for input. If it is not provided, it will be set to the global scope of the
     caller.
     """
+    _case: Optional[Union[Case, SQLTable]] = None
+    """
+    The created case from the original case that the attribute belongs to.
+    """
+    _target_value: Optional[Any] = None
+    """
+    The target value of the case query. (This is the result of the target expression evaluation on the case.)
+    """
+    conditions: Optional[CallableExpression] = None
+    """
+    The conditions that must be satisfied for the target value to be valid.
+    """
 
-    def __init__(self, case: Any, attribute_name: str,
-                 target: Optional[Any] = None,
-                 attribute_type: Optional[Type] = None,
-                 mutually_exclusive: Optional[bool] = None,
-                 conditions: Optional[CallableExpression] = None,
-                 prediction: Optional[CallableExpression] = None,
-                 scope: Optional[Dict[str, Any]] = None,
-                 default_value: Optional[Any] = None):
-        self.original_case = case
-        self.case = self._get_case()
-
-        self.attribute_name = attribute_name
-        self.target = target
-        self.default_value = default_value
-        if attribute_type is None:
-            target_value = self.target_value
-            known_value = target_value if target_value is not None else default_value
-            self.attribute_type = get_case_attribute_type(self.original_case, self.attribute_name, known_value)
+    @property
+    def case(self) -> Any:
+        """
+        :return: The case that the attribute belongs to.
+        """
+        if self._case is not None:
+            return self._case
+        elif not isinstance(self.original_case, (Case, SQLTable)):
+            self._case = create_case(self.original_case, max_recursion_idx=3)
         else:
-            self.attribute_type = attribute_type
-        self.mutually_exclusive = mutually_exclusive
-        self.conditions = conditions
-        self.prediction = prediction
-        self.scope = scope if scope is not None else inspect.currentframe().f_back.f_globals
-        if self.target is not None and not isinstance(self.target, CallableExpression):
-            self.target = CallableExpression(conclusion=self.target, conclusion_type=self.attribute_type,
-                                             scope=self.scope)
+            self._case = self.original_case
+        return self._case
 
-    def _get_case(self) -> Any:
-        if not isinstance(self.original_case, (Case, SQLTable)):
-            return create_case(self.original_case, max_recursion_idx=3)
-        else:
-            return self.original_case
+    @case.setter
+    def case(self, value: Any):
+        """
+        Set the case that the attribute belongs to.
+        """
+        if not isinstance(value, (Case, SQLTable)):
+            raise ValueError("The case must be a Case or SQLTable object.")
+        self._case = value
+
+    @property
+    def attribute_type(self) -> Tuple[Type]:
+        """
+        :return: The type of the attribute.
+        """
+        if not self.mutually_exclusive and (set not in self._attribute_types):
+            self._attribute_types = tuple(list(self._attribute_types) + [set])
+        return self._attribute_types
+
+    @attribute_type.setter
+    def attribute_type(self, value: Type):
+        """
+        Set the type of the attribute.
+        """
+        if not isinstance(value, tuple):
+            value = (value,)
+        self._attribute_types = value
 
     @property
     def name(self):
@@ -98,29 +116,54 @@ class CaseQuery:
         return self.case._name if isinstance(self.case, Case) else self.case.__class__.__name__
 
     @property
+    def target(self) -> Optional[CallableExpression]:
+        """
+        :return: The target expression of the attribute.
+        """
+        if self._target is not None and not isinstance(self._target, CallableExpression):
+            self._target = CallableExpression(conclusion=self._target, conclusion_type=self.attribute_type,
+                                              scope=self.scope)
+        return self._target
+
+    @target.setter
+    def target(self, value: Optional[CallableExpression]):
+        """
+        Set the target expression of the attribute.
+        """
+        if value is not None and not isinstance(value, (CallableExpression, str)):
+            raise ValueError("The target must be a CallableExpression or a string.")
+        self._target = value
+        self._update_target_value()
+
+    @property
     def target_value(self) -> Any:
         """
         :return: The target value of the case query.
         """
+        if self._target_value is None:
+            self._update_target_value()
+        return self._target_value
+
+    def _update_target_value(self):
+        """
+        Update the target value of the case query.
+        """
         if isinstance(self.target, CallableExpression):
-            return self.target(self.case)
-        return self.target
+            self._target_value = self.target(self.case)
+        else:
+            self._target_value = self.target
 
     def __str__(self):
         header = f"CaseQuery: {self.name}"
         target = f"Target: {self.name} |= {self.target if self.target is not None else '?'}"
-        prediction = f"Prediction: {self.name} |= {self.prediction if self.prediction is not None else '?'}"
         conditions = f"Conditions: {self.conditions if self.conditions is not None else '?'}"
-        return "\n".join([header, target, prediction, conditions])
+        return "\n".join([header, target, conditions])
 
     def __repr__(self):
         return self.__str__()
 
     def __copy__(self):
-        case_query_cp = CaseQuery(copy_case(self.case), self.attribute_name, target=self.target,
-                                  attribute_type=self.attribute_type,
-                                  mutually_exclusive=self.mutually_exclusive,
-                                  conditions=self.conditions, prediction=self.prediction, scope=self.scope,
-                                  default_value=self.default_value)
-        case_query_cp.original_case = self.original_case
-        return case_query_cp
+        return CaseQuery(self.original_case, self.attribute_name, self.attribute_type,
+                         self.mutually_exclusive, _target=self.target, default_value=self.default_value,
+                         scope=self.scope, _case=copy_case(self.case), _target_value=self.target_value,
+                         conditions=self.conditions)

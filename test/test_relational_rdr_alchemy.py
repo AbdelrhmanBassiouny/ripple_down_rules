@@ -129,8 +129,8 @@ class RelationalRDRTestCase(TestCase):
         cls.containments.append(ContainsObject(left=cls.part_d, right=cls.part_e))
         cls.containments.append(ContainsObject(left=cls.part_e, right=cls.part_f))
         cls.robot: PhysicalObject = robot
-        cls.case_query = CaseQuery(robot, attribute_name=robot.contained_objects,
-                                   target=[cls.part_b, cls.part_c, cls.part_d, cls.part_e])
+        cls.case_query = CaseQuery(robot, robot.contained_objects, (PhysicalObject,), False,
+                                   _target=[cls.part_b, cls.part_c, cls.part_d, cls.part_e])
 
     def test_setup(self):
         assert self.robot.parts == [self.part_a, self.part_b, self.part_c, self.part_d]
@@ -150,7 +150,7 @@ class RelationalRDRTestCase(TestCase):
             expert.load_answers(filename)
 
         scrdr = SingleClassRDR()
-        cat = scrdr.fit_case(CaseQuery(self.robot, attribute_name="contained_objects"), expert=expert)
+        cat = scrdr.fit_case(CaseQuery(self.robot, "contained_objects", (PhysicalObject,), False), expert=expert)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + "/relational_scrdr_classify")
         assert cat == self.case_query.target(self.case_query.case)

@@ -741,7 +741,7 @@ def get_all_subclasses(cls: Type) -> Dict[str, Type]:
     return all_subclasses
 
 
-def make_set(value: Any) -> Set:
+def make_set(value: Any) -> Set[Any]:
     """
     Make a set from a value.
 

@@ -91,8 +91,7 @@ class TestRDRWorld(TestCase):
                 i += 1
 
         print(all_views)
-        cls.drawer_case_queries = [CaseQuery(view, "correct", mutually_exclusive=True,
-                                  default_value=False) for view in all_views]
+        cls.drawer_case_queries = [CaseQuery(view, "correct", bool, True, default_value=False) for view in all_views]
 
     def test_drawer_scrdr(self):
         use_loaded_answers = True

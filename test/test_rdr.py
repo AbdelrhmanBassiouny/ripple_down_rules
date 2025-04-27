@@ -29,7 +29,7 @@ class TestRDR(TestCase):
     def setUpClass(cls):
         # fetch dataset
         cls.all_cases, cls.targets = load_zoo_dataset(cache_file=cls.cache_file)
-        cls.case_queries = [CaseQuery(case, "species", target=target, mutually_exclusive=True)
+        cls.case_queries = [CaseQuery(case, "species", Species, True, _target=target)
                             for case, target in zip(cls.all_cases, cls.targets)]
         for test_dir in [cls.test_results_dir, cls.expert_answers_dir, cls.generated_rdrs_dir]:
             if not os.path.exists(test_dir):
@@ -121,10 +121,7 @@ class TestRDR(TestCase):
         for case, case_targets in zip(self.all_cases[:20], all_targets):
             cat = grdr.classify(case)
             for cat_name, cat_val in cat.items():
-                if cat_name == "habitats":
-                    self.assertEqual(cat_val, case_targets['habitats'])
-                elif cat_name == "species":
-                    self.assertEqual(cat_val[0], case_targets['species'])
+                self.assertEqual(make_set(cat_val), make_set(case_targets[cat_name]))
 
     def test_fit_multi_line_scrdr(self):
         n = 20
@@ -200,7 +197,7 @@ class TestRDR(TestCase):
             expert.load_answers(filename)
 
         mcrdr = MultiClassRDR()
-        cats = mcrdr.fit_case(CaseQuery(self.all_cases[0], "species", target=self.targets[0]),
+        cats = mcrdr.fit_case(self.case_queries[0],
                               expert=expert)
 
         self.assertEqual(cats[0], self.targets[0])
@@ -219,13 +216,13 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR()
-        case_queries = [CaseQuery(case, "species", target=target) for case, target in zip(self.all_cases, self.targets)]
+        case_queries = self.case_queries
         mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_only")
-        cats = mcrdr.classify(self.all_cases[50])
-        self.assertEqual(cats[0], self.targets[50])
-        self.assertTrue(len(cats) == 1)
+        for case_query in case_queries:
+            cat = mcrdr.classify(case_query.case)
+            self.assertEqual(make_set(cat), make_set(case_query.target_value))
         if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
@@ -241,7 +238,7 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
-        case_queries = [CaseQuery(case, "species", target=target) for case, target in zip(self.all_cases, self.targets)]
+        case_queries = self.case_queries
         try:
             mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         # catch pop from empty list error
@@ -253,9 +250,9 @@ class TestRDR(TestCase):
                 raise e
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_plus_rule")
-        cats = mcrdr.classify(self.all_cases[50])
-        self.assertEqual(cats[0], self.targets[50])
-        self.assertTrue(len(cats) == 1)
+        for case_query in case_queries:
+            cat = mcrdr.classify(case_query.case)
+            self.assertEqual(make_set(cat), make_set(case_query.target_value))
         if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
@@ -271,7 +268,7 @@ class TestRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRuleCombined)
-        case_queries = [CaseQuery(case, "species", target=target) for case, target in zip(self.all_cases, self.targets)]
+        case_queries = self.case_queries
         try:
             mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         # catch pop from empty list error
@@ -283,9 +280,9 @@ class TestRDR(TestCase):
                 raise e
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_plus_rule_combined")
-        cats = mcrdr.classify(self.all_cases[50])
-        self.assertEqual(cats[0], self.targets[50])
-        self.assertTrue(len(cats) == 1)
+        for case_query in case_queries:
+            cat = mcrdr.classify(case_query.case)
+            self.assertEqual(make_set(cat), make_set(case_query.target_value))
         if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
@@ -302,11 +299,13 @@ class TestRDR(TestCase):
         grdr = GeneralRDR()
 
         targets = [self.targets[0], Habitat.land]
-        attribute_names = [t.__class__.__name__ for t in targets]
+        attribute_names = [t.__class__.__name__.lower() for t in targets]
         targets = dict(zip(attribute_names, targets))
-        case_queries = [CaseQuery(self.all_cases[0], attribute_name=a, target=t) for a, t in targets.items()]
+        case_queries = [CaseQuery(self.all_cases[0], a, (type(t),), True if a == 'species' else False,
+                                  _target=t) for a, t in targets.items()]
         cats = grdr.fit_case(case_queries, expert=expert)
-        self.assertEqual(cats, targets)
+        for cat_name, value in cats.items():
+            self.assertEqual(make_set(value), make_set(targets[cat_name]))
 
         if save_answers:
             cwd = os.getcwd()
@@ -317,11 +316,8 @@ class TestRDR(TestCase):
         use_loaded_answers = True
         save_answers = False
         draw_tree = False
-        filename = "/grdr_expert_answers_fit"
 
         grdr, all_targets = get_fit_grdr(self.all_cases, self.targets, draw_tree=draw_tree,
-                                         expert_answers_dir=self.expert_answers_dir,
-                                         expert_answers_file=filename,
                                          load_answers=use_loaded_answers)
         for rule in grdr.start_rules:
             render_tree(rule, use_dot_exporter=True,

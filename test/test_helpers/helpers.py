@@ -25,8 +25,7 @@ def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
 
     targets = [None for _ in cases] if targets is None or len(targets) == 0 else targets
     scrdr = SingleClassRDR()
-    case_queries = [CaseQuery(case, attribute_name, target=target, attribute_type=attribute_type,
-                              mutually_exclusive=True)
+    case_queries = [CaseQuery(case, attribute_name, (attribute_type,), True, _target=target)
                     for case, target in zip(cases, targets)]
     scrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
     if save_answers:
@@ -39,6 +38,7 @@ def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
 
 def get_fit_mcrdr(cases: List[Any], targets: List[Any], attribute_name: str = "species",
                   attribute_type: Type = Species,
+                  mutually_exclusive: bool = True,
                   expert_answers_dir: str = "test_expert_answers",
                   expert_answers_file: str = "mcrdr_expert_answers_stop_only_fit",
                   draw_tree: bool = False,
@@ -50,7 +50,7 @@ def get_fit_mcrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
         expert.load_answers(filename)
     targets = [None for _ in cases] if targets is None or len(targets) == 0 else targets
     mcrdr = MultiClassRDR()
-    case_queries = [CaseQuery(case, attribute_name, target=target, attribute_type=attribute_type)
+    case_queries = [CaseQuery(case, attribute_name, (attribute_type,), mutually_exclusive, _target=target)
                     for case, target in zip(cases, targets)]
     mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
     if save_answers:
@@ -82,7 +82,8 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
         all_targets = [{'habitats': None} for i in range(n)]
     else:
         all_targets = true_targets
-    case_queries = [CaseQuery(case, name, target=target, attribute_type=Species if name == "species" else Habitat)
+    case_queries = [CaseQuery(case, name, (Species,) if name == "species" else (Habitat,),
+                              True if name == "species" else False, _target=target)
                     for case, targets in zip(cases[:n], all_targets)
                     for name, target in targets.items()]
     grdr.fit(case_queries, expert=expert,
@@ -92,12 +93,7 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
     for case, case_targets in zip(cases[:n], true_targets):
         cat = grdr.classify(case)
         for cat_name, cat_val in cat.items():
-            if cat_name == "habitats":
-                if "habitats" not in case_targets:
-                    print(f"Case: {case}")
-                assert make_set(cat_val) == make_set(case_targets[cat_name])
-            else:
-                assert cat_val == case_targets[cat_name]
+            assert make_set(cat_val) == make_set(case_targets[cat_name])
     return grdr, true_targets
 
 

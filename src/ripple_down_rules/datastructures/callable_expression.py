@@ -89,7 +89,7 @@ class CallableExpression(SubclassJSONSerializer):
     A callable that is constructed from a string statement written by an expert.
     """
 
-    def __init__(self, user_input: Optional[str] = None, conclusion_type: Optional[Type] = None,
+    def __init__(self, user_input: Optional[str] = None, conclusion_type: Optional[Tuple[Type]] = None,
                  expression_tree: Optional[AST] = None,
                  scope: Optional[Dict[str, Any]] = None, conclusion: Optional[Any] = None):
         """
@@ -105,6 +105,11 @@ class CallableExpression(SubclassJSONSerializer):
             raise ValueError("Either user_input or conclusion must be provided.")
         self.conclusion: Optional[Any] = conclusion
         self.user_input: str = user_input
+        if conclusion_type is not None:
+            if is_iterable(conclusion_type):
+                conclusion_type = tuple(conclusion_type)
+            else:
+                conclusion_type = (conclusion_type,)
         self.conclusion_type = conclusion_type
         self.scope: Optional[Dict[str, Any]] = scope if scope is not None else {}
         if conclusion is None:
@@ -124,7 +129,7 @@ class CallableExpression(SubclassJSONSerializer):
                 if output is None:
                     output = scope['_get_value'](case)
                 if self.conclusion_type is not None:
-                    if is_iterable(output) and isinstance(output, self.conclusion_type):
+                    if is_iterable(output) and not isinstance(output, self.conclusion_type):
                         assert isinstance(list(output)[0], self.conclusion_type), (f"Expected output type {self.conclusion_type},"
                                                                                  f" got {type(output)}")
                     else:
@@ -177,7 +182,9 @@ class CallableExpression(SubclassJSONSerializer):
         return "\n".join(all_binary_ops) if len(all_binary_ops) > 0 else self.user_input
 
     def _to_json(self) -> Dict[str, Any]:
-        return {"user_input": self.user_input, "conclusion_type": get_full_class_name(self.conclusion_type),
+        return {"user_input": self.user_input,
+                "conclusion_type": [get_full_class_name(t) for t in self.conclusion_type]
+                if self.conclusion_type is not None else None,
                 "scope": {k: get_full_class_name(v) for k, v in self.scope.items()
                           if hasattr(v, '__module__') and hasattr(v, '__name__')},
                 "conclusion": conclusion_to_json(self.conclusion),
@@ -185,7 +192,9 @@ class CallableExpression(SubclassJSONSerializer):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> CallableExpression:
-        return cls(user_input=data["user_input"], conclusion_type=get_type_from_string(data["conclusion_type"]),
+        return cls(user_input=data["user_input"],
+                   conclusion_type=tuple(get_type_from_string(t) for t in data["conclusion_type"])
+                   if data["conclusion_type"] else None,
                    scope={k: get_type_from_string(v) for k, v in data["scope"].items()},
                    conclusion=SubclassJSONSerializer.from_json(data["conclusion"]))
 
