@@ -33,6 +33,27 @@ import ast
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
+def is_conflicting(conclusion: Any, target: Any) -> bool:
+    """
+    :param conclusion: The conclusion to check.
+    :param target: The target to compare the conclusion with.
+    :return: Whether the conclusion is conflicting with the target by have different values for same type categories.
+    """
+    return have_common_types(conclusion, target) and not make_set(conclusion).issubset(make_set(target))
+
+
+def have_common_types(conclusion: Any, target: Any) -> bool:
+    """
+    :param conclusion: The conclusion to check.
+    :param target: The target to compare the conclusion with.
+    :return: Whether the conclusion shares some types with the target.
+    """
+    target_types = {type(t) for t in make_set(target)}
+    conclusion_types = {type(c) for c in make_set(conclusion)}
+    common_types = conclusion_types.intersection(target_types)
+    return len(common_types) > 0
+
+
 def is_matching(rdr_classifier: Callable[[Any], Any], case_query: CaseQuery, pred_cat: Optional[Dict[str, Any]] = None) -> bool:
     """
     :param rdr_classifier: The RDR classifier to check the prediction of.
@@ -177,7 +198,8 @@ def extract_dependencies(code_lines):
 
     if not isinstance(final_stmt, ast.Return):
         raise ValueError("Last line is not a return statement")
-
+    if final_stmt.value is None:
+        raise ValueError("Return statement has no value")
     needed = get_names_used(final_stmt.value)
     required_lines = []
     line_map = {id(node): i for i, node in enumerate(tree.body)}

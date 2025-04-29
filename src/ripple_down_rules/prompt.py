@@ -9,7 +9,7 @@ from typing_extensions import List, Optional, Tuple, Dict
 from .datastructures.enums import PromptFor
 from .datastructures.callable_expression import CallableExpression, parse_string_to_expression
 from .datastructures.dataclasses import CaseQuery
-from .utils import extract_dependencies, contains_return_statement
+from .utils import extract_dependencies, contains_return_statement, make_set
 
 
 class CustomInteractiveShell(InteractiveShellEmbed):
@@ -28,12 +28,12 @@ class CustomInteractiveShell(InteractiveShellEmbed):
             self.ask_exit()
             return None
         result = super().run_cell(raw_cell, **kwargs)
-        if not result.error_in_exec:
+        if result.error_in_exec is None and result.error_before_exec is None:
             self.all_lines.append(raw_cell)
         return result
 
 
-class IpythonShell:
+class IPythonShell:
     """
     Create an embedded Ipython shell that can be used to prompt the user for input.
     """
@@ -63,8 +63,14 @@ class IpythonShell:
         """
         Run the embedded shell.
         """
-        self.shell()
-        self.update_user_input_from_code_lines()
+        while True:
+            try:
+                self.shell()
+                self.update_user_input_from_code_lines()
+                break
+            except Exception as e:
+                logging.error(e)
+                print(e)
 
     def update_user_input_from_code_lines(self):
         """
@@ -81,20 +87,23 @@ class IpythonShell:
                     self.user_input = self.all_code_lines[0].replace('return', '').strip()
             else:
                 self.user_input = f"def _get_value(case):\n    "
-                self.user_input += '\n    '.join(self.all_code_lines)
+                for cl in self.all_code_lines:
+                    sub_code_lines = cl.split('\n')
+                    self.user_input += '\n    '.join(sub_code_lines) + '\n    '
 
 
-def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor)\
+def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, prompt_str: Optional[str] = None)\
         -> Tuple[Optional[str], Optional[CallableExpression]]:
     """
     Prompt the user for an executable python expression to the given case query.
 
     :param case_query: The case query to prompt the user for.
     :param prompt_for: The type of information ask user about.
+    :param prompt_str: The prompt string to display to the user.
     :return: A callable expression that takes a case and executes user expression on it.
     """
     while True:
-        user_input, expression_tree = prompt_user_about_case(case_query, prompt_for)
+        user_input, expression_tree = prompt_user_about_case(case_query, prompt_for, prompt_str)
         if user_input is None:
             if prompt_for == PromptFor.Conclusion:
                 print("No conclusion provided. Exiting.")
@@ -114,21 +123,24 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor)\
     return user_input, callable_expression
 
 
-def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor) -> Tuple[Optional[str], Optional[AST]]:
+def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor,
+                           prompt_str: Optional[str] = None) -> Tuple[Optional[str], Optional[AST]]:
     """
     Prompt the user for input.
 
     :param case_query: The case query to prompt the user for.
     :param prompt_for: The type of information the user should provide for the given case.
+    :param prompt_str: The prompt string to display to the user.
     :return: The user input, and the executable expression that was parsed from the user input.
     """
-    prompt_str = f"Give {prompt_for} for {case_query.name}"
+    if prompt_str is None:
+        prompt_str = f"Give {prompt_for} for {case_query.name}"
     scope = {'case': case_query.case, **case_query.scope}
-    shell = IpythonShell(scope=scope, header=prompt_str)
+    shell = IPythonShell(scope=scope, header=prompt_str)
     return prompt_user_input_and_parse_to_expression(shell=shell)
 
 
-def prompt_user_input_and_parse_to_expression(shell: Optional[IpythonShell] = None,
+def prompt_user_input_and_parse_to_expression(shell: Optional[IPythonShell] = None,
                                               user_input: Optional[str] = None)\
         -> Tuple[Optional[str], Optional[ast.AST]]:
     """
@@ -140,7 +152,7 @@ def prompt_user_input_and_parse_to_expression(shell: Optional[IpythonShell] = No
     """
     while True:
         if user_input is None:
-            shell = IpythonShell() if shell is None else shell
+            shell = IPythonShell() if shell is None else shell
             shell.run()
             user_input = shell.user_input
             if user_input is None:
@@ -151,4 +163,5 @@ def prompt_user_input_and_parse_to_expression(shell: Optional[IpythonShell] = No
         except Exception as e:
             msg = f"Error parsing expression: {e}"
             logging.error(msg)
+            print(msg)
             user_input = None

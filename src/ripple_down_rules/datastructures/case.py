@@ -24,7 +24,8 @@ class Case(UserDict, SubclassJSONSerializer):
     the names of the attributes and the values are the attributes. All are stored in lower case.
     """
 
-    def __init__(self, _obj_type: Type, _id: Optional[Hashable] = None, _name: Optional[str] = None, **kwargs):
+    def __init__(self, _obj_type: Type, _id: Optional[Hashable] = None,
+                 _name: Optional[str] = None, original_object: Optional[Any] = None, **kwargs):
         """
         Create a new row.
 
@@ -34,6 +35,7 @@ class Case(UserDict, SubclassJSONSerializer):
         :param kwargs: The attributes of the row.
         """
         super().__init__(kwargs)
+        self._original_object = original_object
         self._obj_type: Type = _obj_type
         self._id: Hashable = _id if _id is not None else id(self)
         self._name: str = _name if _name is not None else self._obj_type.__name__
@@ -221,9 +223,9 @@ def create_case(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
         return obj
     if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
             or (obj.__class__ in [MetaData, registry])):
-        return Case(type(obj), _id=id(obj), _name=obj_name,
+        return Case(type(obj), _id=id(obj), _name=obj_name, original_object=obj,
                     **{obj_name or obj.__class__.__name__: make_list(obj) if parent_is_iterable else obj})
-    case = Case(type(obj), _id=id(obj), _name=obj_name)
+    case = Case(type(obj), _id=id(obj), _name=obj_name, original_object=obj)
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
             continue
@@ -251,7 +253,7 @@ def create_or_update_case_from_attribute(attr_value: Any, name: str, obj: Any, o
     :return: The updated/created case.
     """
     if case is None:
-        case = Case(type(obj), _id=id(obj), _name=obj_name)
+        case = Case(type(obj), _id=id(obj), _name=obj_name, original_object=obj)
     if isinstance(attr_value, (dict, UserDict)):
         case.update({f"{obj_name}.{k}": v for k, v in attr_value.items()})
     if hasattr(attr_value, "__iter__") and not isinstance(attr_value, str):
@@ -280,7 +282,7 @@ def create_case_attribute_from_iterable_attribute(attr_value: Any, name: str, ob
     """
     values = list(attr_value.values()) if isinstance(attr_value, (dict, UserDict)) else attr_value
     _type = type(list(values)[0]) if len(values) > 0 else get_value_type_from_type_hint(name, obj)
-    attr_case = Case(_type, _id=id(attr_value), _name=name)
+    attr_case = Case(_type, _id=id(attr_value), _name=name, original_object=attr_value)
     case_attr = CaseAttribute(values)
     for idx, val in enumerate(values):
         sub_attr_case = create_case(val, recursion_idx=recursion_idx,

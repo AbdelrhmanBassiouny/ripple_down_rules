@@ -10,7 +10,7 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.enums import PromptFor
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.case import show_current_and_corner_cases
-from .prompt import prompt_user_for_expression
+from .prompt import prompt_user_for_expression, IPythonShell
 from .utils import get_all_subclasses, make_list
 
 if TYPE_CHECKING:
@@ -51,28 +51,24 @@ class Expert(ABC):
         pass
 
     @abstractmethod
-    def ask_for_extra_conclusions(self, x: Case, current_conclusions: List[CaseAttribute]) \
-            -> Dict[CaseAttribute, CallableExpression]:
+    def ask_for_extra_rules(self, case_query: CaseQuery) -> List[Dict[PromptFor, CallableExpression]]:
         """
-        Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
-        that category.
+        Ask the expert to provide extra rules for a case by providing a pair of conclusion and conditions.
 
-        :param x: The case to classify.
-        :param current_conclusions: The current conclusions for the case.
-        :return: The extra conclusions for the case.
+        :param case_query: The case query containing the case to classify.
+        :return: The extra rules for the case as a list of dictionaries, where each dictionary contains the
+                    conclusion and conditions for the rule.
         """
         pass
 
     @abstractmethod
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: CaseAttribute,
-                                     targets: Optional[List[CaseAttribute]] = None,
-                                     current_conclusions: Optional[List[CaseAttribute]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, case_query: CaseQuery, conclusion: Any,
+                                     current_conclusions: Any) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
-        :param x: The case to classify.
+        :param case_query: The case query about which the expert should answer.
         :param conclusion: The conclusion to check.
-        :param targets: The target categories to compare the case with.
         :param current_conclusions: The current conclusions for the case.
         """
         pass
@@ -130,6 +126,24 @@ class Human(Expert):
                                           last_evaluated_rule=last_evaluated_rule)
         return self._get_conditions(case_query)
 
+    def ask_for_extra_rules(self, case_query: CaseQuery) -> List[Dict[PromptFor, CallableExpression]]:
+        """
+        Ask the expert to provide extra rules for a case by providing a pair of conclusion and conditions.
+
+        :param case_query: The case query containing the case to classify.
+        :return: The extra rules for the case as a list of dictionaries, where each dictionary contains the
+                    conclusion and conditions for the rule.
+        """
+        rules = []
+        while True:
+            conclusion = self.ask_for_conclusion(case_query)
+            if conclusion is None:
+                break
+            conditions = self._get_conditions(case_query)
+            rules.append({PromptFor.Conclusion: conclusion,
+                         PromptFor.Conditions: conditions})
+        return rules
+
     def _get_conditions(self, case_query: CaseQuery) \
             -> CallableExpression:
         """
@@ -150,24 +164,6 @@ class Human(Expert):
             self.all_expert_answers.append(user_input)
         case_query.conditions = condition
         return condition
-
-    def ask_for_extra_conclusions(self, case: Case, current_conclusions: List[CaseAttribute]) \
-            -> Dict[CaseAttribute, CallableExpression]:
-        """
-        Ask the expert to provide extra conclusions for a case by providing a pair of category and conditions for
-        that category.
-
-        :param case: The case to classify.
-        :param current_conclusions: The current conclusions for the case.
-        :return: The extra conclusions for the case.
-        """
-        extra_conclusions = {}
-        while True:
-            category = self.ask_for_conclusion(CaseQuery(case), current_conclusions)
-            if not category:
-                break
-            extra_conclusions[category] = self._get_conditions(case, {category.__class__.__name__: category})
-        return extra_conclusions
 
     def ask_for_conclusion(self, case_query: CaseQuery) -> Optional[CallableExpression]:
         """
@@ -212,44 +208,39 @@ class Human(Expert):
         :param category_name: The name of the category to ask about.
         """
         question = f"Can a case have multiple values of the new category {category_name}? (y/n):"
-        return not self.ask_yes_no_question(question)
+        return not self.ask_for_affirmation(question)
 
-    def ask_if_conclusion_is_correct(self, x: Case, conclusion: Any,
-                                     targets: Optional[List[Any]] = None,
-                                     current_conclusions: Optional[List[Any]] = None) -> bool:
+    def ask_if_conclusion_is_correct(self, case_query: CaseQuery, conclusion: Any,
+                                     current_conclusions: Any) -> bool:
         """
         Ask the expert if the conclusion is correct.
 
-        :param x: The case to classify.
+        :param case_query: The case query about which the expert should answer.
         :param conclusion: The conclusion to check.
-        :param targets: The target categories to compare the case with.
         :param current_conclusions: The current conclusions for the case.
         """
-        question = ""
         if not self.use_loaded_answers:
-            targets = targets or []
-            x.conclusions = make_list(current_conclusions)
-            x.targets = make_list(targets)
-            question = f"Is the conclusion {conclusion} correct for the case (y/n):" \
-                       f"\n{str(x)}"
-        return self.ask_yes_no_question(question)
+            print(f"Current conclusions: {current_conclusions}")
+        return self.ask_for_affirmation(case_query,
+                                        f"Is the conclusion {conclusion} correct for the case (True/False):")
 
-    def ask_yes_no_question(self, question: str) -> bool:
+    def ask_for_affirmation(self, case_query: CaseQuery, question: str) -> bool:
         """
         Ask the expert a yes or no question.
 
-        :param question: The question to ask.
+        :param case_query: The case query about which the expert should answer.
+        :param question: The question to ask the expert.
         :return: The answer to the question.
         """
-        if not self.use_loaded_answers:
-            print(question)
         while True:
             if self.use_loaded_answers:
                 answer = self.all_expert_answers.pop(0)
             else:
-                answer = input()
-                self.all_expert_answers.append(answer)
-            if answer.lower() == "y":
+                _, expression = prompt_user_for_expression(case_query, PromptFor.Affirmation, question)
+                answer = expression(case_query.case)
+            if answer:
+                self.all_expert_answers.append(True)
                 return True
-            elif answer.lower() == "n":
+            else:
+                self.all_expert_answers.append(False)
                 return False

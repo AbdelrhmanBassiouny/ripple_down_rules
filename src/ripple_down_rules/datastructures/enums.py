@@ -53,7 +53,7 @@ class ExpressionParser(Enum):
 
 class PromptFor(Enum):
     """
-    The reason of the prompt. (e.g. get conditions, or conclusions).
+    The reason of the prompt. (e.g. get conditions, conclusions, or affirmation).
     """
     Conditions: str = "conditions"
     """
@@ -62,6 +62,10 @@ class PromptFor(Enum):
     Conclusion: str = "conclusion"
     """
     Prompt for rule conclusion about a case.
+    """
+    Affirmation: str = "affirmation"
+    """
+    Prompt for rule conclusion affirmation about a case.
     """
 
     def __str__(self):
