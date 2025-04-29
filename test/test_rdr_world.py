@@ -8,7 +8,7 @@ from unittest import TestCase
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, GeneralRDR
-from ripple_down_rules.utils import is_matching
+from ripple_down_rules.helpers import is_matching
 
 
 @dataclass

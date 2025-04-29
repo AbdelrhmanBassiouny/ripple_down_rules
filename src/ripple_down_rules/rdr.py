@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import re
 import sys
 from abc import ABC, abstractmethod
 from copy import copy
@@ -14,15 +13,16 @@ from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple, Callable, Set
 
-from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.callable_expression import CallableExpression
+from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode, PromptFor
 from .experts import Expert, Human
+from .helpers import is_matching
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .utils import draw_tree, make_set, copy_case, \
-    get_hint_for_attribute, SubclassJSONSerializer, is_iterable, make_list, get_type_from_string, \
-    get_case_attribute_type, ask_llm, is_matching, have_common_types, is_conflicting
+    SubclassJSONSerializer, is_iterable, make_list, get_type_from_string, \
+    get_case_attribute_type, is_conflicting
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -277,7 +277,6 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         else:
             return "SCRDR"
 
-
     @property
     def case_type(self) -> Type:
         """
@@ -366,7 +365,7 @@ class SingleClassRDR(RDRWithCodeWriter):
         super().write_to_python_file(file_path, postfix)
         if self.default_conclusion is not None:
             with open(file_path + f"/{self.generated_python_file_name}.py", "a") as f:
-                f.write(f"{' '*4}else:\n{' '*8}return {self.default_conclusion}\n")
+                f.write(f"{' ' * 4}else:\n{' ' * 8}return {self.default_conclusion}\n")
 
     def write_rules_as_source_code_to_file(self, rule: SingleClassRule, file: TextIOWrapper, parent_indent: str = "",
                                            defs_file: Optional[str] = None):
@@ -377,7 +376,6 @@ class SingleClassRDR(RDRWithCodeWriter):
             if_clause = rule.write_condition_as_source_code(parent_indent, defs_file)
             file.write(if_clause)
             if rule.refinement:
-
                 self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ",
                                                         defs_file=defs_file)
 
@@ -839,17 +837,17 @@ class GeneralRDR(RippleDownRules):
         Initialize the appropriate RDR type for the target.
         """
         if case_query.mutually_exclusive is not None:
-            return SingleClassRDR(default_conclusion=case_query.default_value) if case_query.mutually_exclusive\
+            return SingleClassRDR(default_conclusion=case_query.default_value) if case_query.mutually_exclusive \
                 else MultiClassRDR()
         if case_query.attribute_type in [list, set]:
             return MultiClassRDR()
-        attribute = getattr(case_query.case, case_query.attribute_name)\
+        attribute = getattr(case_query.case, case_query.attribute_name) \
             if hasattr(case_query.case, case_query.attribute_name) else case_query.target(case_query.case)
         if isinstance(attribute, CaseAttribute):
             return SingleClassRDR(default_conclusion=case_query.default_value) if attribute.mutually_exclusive \
                 else MultiClassRDR()
         else:
-            return MultiClassRDR() if is_iterable(attribute) or (attribute is None)\
+            return MultiClassRDR() if is_iterable(attribute) or (attribute is None) \
                 else SingleClassRDR(default_conclusion=case_query.default_value)
 
     @staticmethod
