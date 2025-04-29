@@ -722,7 +722,7 @@ class GeneralRDR(RippleDownRules):
     def start_rules(self) -> List[Union[SingleClassRule, MultiClassTopRule]]:
         return [rdr.start_rule for rdr in self.start_rules_dict.values()]
 
-    def classify(self, case: Union[Case, SQLTable]) -> Optional[List[Any]]:
+    def classify(self, case: Any) -> Optional[Dict[str, Any]]:
         """
         Classify a case by going through all RDRs and adding the categories that are classified, and then restarting
         the classification until no more categories can be added.
@@ -734,7 +734,7 @@ class GeneralRDR(RippleDownRules):
 
     @staticmethod
     def _classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDownRules]],
-                  case: Union[Case, SQLTable]) -> Optional[Dict[str, Any]]:
+                  case: Any) -> Dict[str, Any]:
         """
         Classify a case by going through all classifiers and adding the categories that are classified,
          and then restarting the classification until no more categories can be added.
@@ -775,7 +775,7 @@ class GeneralRDR(RippleDownRules):
         return conclusions
 
     def fit_case(self, case_queries: List[CaseQuery], expert: Optional[Expert] = None, **kwargs) \
-            -> List[Union[CaseAttribute, CallableExpression]]:
+            -> Dict[str, Any]:
         """
         Fit the GRDR on a case, if the target is a new type of category, a new RDR is created for it,
         else the existing RDR of that type will be fitted on the case, and then classification is done and all
@@ -790,7 +790,7 @@ class GeneralRDR(RippleDownRules):
         :return: The categories that the case belongs to.
         """
         expert = expert if expert else Human()
-        case_queries = [case_queries] if not isinstance(case_queries, list) else case_queries
+        case_queries = make_list(case_queries)
         assert len(case_queries) > 0, "No case queries provided"
         case = case_queries[0].case
         assert all([case is case_query.case for case_query in case_queries]), ("fit_case requires only one case,"
@@ -823,10 +823,11 @@ class GeneralRDR(RippleDownRules):
                     else:
                         conclusions = self.start_rules_dict[rdr_attribute_name].fit_case(case_query_cp, expert,
                                                                                          **kwargs)
-                    if conclusions is not None or (is_iterable(conclusions) and len(conclusions) > 0):
-                        conclusions = {rdr_attribute_name: conclusions}
-                        case_query_cp.mutually_exclusive = True if isinstance(rdr, SingleClassRDR) else False
-                        self.update_case(case_query_cp, conclusions)
+                    if conclusions is not None:
+                        if (not is_iterable(conclusions)) or len(conclusions) > 0:
+                            conclusions = {rdr_attribute_name: conclusions}
+                            case_query_cp.mutually_exclusive = True if isinstance(rdr, SingleClassRDR) else False
+                            self.update_case(case_query_cp, conclusions)
             case_query.conditions = case_query_cp.conditions
 
         return self.classify(case)

@@ -7,8 +7,8 @@ from unittest import TestCase
 
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
-from ripple_down_rules.rdr import SingleClassRDR, GeneralRDR
 from ripple_down_rules.helpers import is_matching
+from ripple_down_rules.rdr import GeneralRDR
 
 
 @dataclass
@@ -94,7 +94,7 @@ class TestRDRWorld(TestCase):
 
         handle = Handle('h1', world=world)
         handle_2 = Handle('h2', world=world)
-        container_1 = Container('c1',world=world)
+        container_1 = Container('c1', world=world)
         container_2 = Container('c2', world=world)
         connection_1 = FixedConnection(container_1, handle, world=world)
         connection_2 = PrismaticConnection(container_2, container_1, world=world)
@@ -109,7 +109,7 @@ class TestRDRWorld(TestCase):
                 all_possible_drawers.append(view)
 
         print(all_possible_drawers)
-        cls.drawer_case_queries = [CaseQuery(possible_drawer, "correct", bool, True, default_value=False)
+        cls.drawer_case_queries = [CaseQuery(possible_drawer, "correct", (bool,), True, default_value=False)
                                    for possible_drawer in all_possible_drawers]
 
     def test_view_rdr(self):
@@ -123,12 +123,12 @@ class TestRDRWorld(TestCase):
             expert.load_answers(filename)
         rdr = GeneralRDR()
         try:
-            rdr.fit_case(CaseQuery(self.world, "views", View, False), expert=expert,
-                    add_extra_conclusions=True)
+            rdr.fit_case([CaseQuery(self.world, "views", (View,), False)], expert=expert,
+                         add_extra_conclusions=True)
         except Exception as e:
             if append:
                 expert.use_loaded_answers = False
-                rdr.fit_case(CaseQuery(self.world, "views", View, False), expert=expert,
+                rdr.fit_case([CaseQuery(self.world, "views", (View,), False)], expert=expert,
                              add_extra_conclusions=True)
             else:
                 raise e

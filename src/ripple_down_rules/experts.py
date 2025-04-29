@@ -122,7 +122,7 @@ class Human(Expert):
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         if not self.use_loaded_answers:
-            show_current_and_corner_cases(case_query.case, {case_query.attribute_name: case_query.target},
+            show_current_and_corner_cases(case_query.case, {case_query.attribute_name: case_query.target_value},
                                           last_evaluated_rule=last_evaluated_rule)
         return self._get_conditions(case_query)
 

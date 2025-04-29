@@ -307,7 +307,7 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Dict[str, Any]] =
     """
     corner_case = None
     targets = {f"target_{name}": value for name, value in targets.items()} if targets else {}
-    current_conclusions = {name: value for name, value in current_conclusions.items} if current_conclusions else {}
+    current_conclusions = {name: value for name, value in current_conclusions.items()} if current_conclusions else {}
     if last_evaluated_rule:
         action = "Refinement" if last_evaluated_rule.fired else "Alternative"
         print(f"{action} needed for rule: {last_evaluated_rule}\n")
@@ -324,7 +324,7 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Dict[str, Any]] =
             corner_row_dict = corner_case
 
     if corner_row_dict:
-        corner_conclusion = last_evaluated_rule.conclusion
+        corner_conclusion = last_evaluated_rule.conclusion(case)
         corner_row_dict.update({corner_conclusion.__class__.__name__: corner_conclusion})
         print(table_rows_as_str(corner_row_dict))
     print("=" * 50)
