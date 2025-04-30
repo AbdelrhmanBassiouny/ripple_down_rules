@@ -288,7 +288,7 @@ class MultiClassStopRule(Rule, HasAlternativeRule):
 
     def __init__(self, *args, **kwargs):
         super(MultiClassStopRule, self).__init__(*args, **kwargs)
-        self.conclusion = Stop.stop
+        self.conclusion = CallableExpression(conclusion_type=(Stop,), conclusion=Stop.stop)
 
     def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, MultiClassTopRule]]:
         if self.fired:

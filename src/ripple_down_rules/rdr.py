@@ -217,13 +217,16 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         for rule in [self.start_rule] + list(self.start_rule.descendants):
             if not rule.conditions:
                 continue
-            if rule.conditions.scope is None or len(rule.conditions.scope) == 0:
-                continue
-            for k, v in rule.conditions.scope.items():
-                new_imports = f"from {v.__module__} import {v.__name__}\n"
-                if new_imports in imports:
+            for scope in [rule.conditions.scope, rule.conclusion.scope]:
+                if scope is None:
                     continue
-                imports += new_imports
+                for k, v in scope.items():
+                    if not hasattr(v, "__module__") or not hasattr(v, "__name__"):
+                        continue
+                    new_imports = f"from {v.__module__} import {v.__name__}\n"
+                    if new_imports in imports:
+                        continue
+                    imports += new_imports
         return imports
 
     def get_rdr_classifier_from_python_file(self, package_name: str) -> Callable[[Any], Any]:
