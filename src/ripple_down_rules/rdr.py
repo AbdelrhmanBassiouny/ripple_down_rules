@@ -79,6 +79,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             expert: Optional[Expert] = None,
             n_iter: int = None,
             animate_tree: bool = False,
+            prompt_for_extra_targets: bool = False,
             **kwargs_for_fit_case):
         """
         Fit the classifier to a batch of cases and categories.
@@ -87,8 +88,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param n_iter: The number of iterations to fit the classifier for.
         :param animate_tree: Whether to draw the tree while fitting the classifier.
+        :param prompt_for_extra_targets: Whether to ask the expert for extra targets for a case.
         :param kwargs_for_fit_case: The keyword arguments to pass to the fit_case method.
         """
+        kwargs_for_fit_case.update({"prompt_for_extra_targets": prompt_for_extra_targets})
         targets = []
         if animate_tree:
             plt.ion()
@@ -777,7 +780,8 @@ class GeneralRDR(RippleDownRules):
                 break
         return conclusions
 
-    def fit_case(self, case_queries: List[CaseQuery], expert: Optional[Expert] = None, **kwargs) \
+    def fit_case(self, case_queries: List[CaseQuery], expert: Optional[Expert] = None,
+                 prompt_for_extra_targets: bool = False, **kwargs) \
             -> Dict[str, Any]:
         """
         Fit the GRDR on a case, if the target is a new type of category, a new RDR is created for it,
