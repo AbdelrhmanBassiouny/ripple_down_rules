@@ -314,7 +314,8 @@ class TestRDR(TestCase):
         targets = dict(zip(attribute_names, targets))
         case_queries = [CaseQuery(self.all_cases[0], a, (type(t),), True if a == 'species' else False,
                                   _target=t) for a, t in targets.items()]
-        cats = grdr.fit_case(case_queries, expert=expert)
+        grdr.fit(case_queries, expert=expert)
+        cats = grdr.classify(self.all_cases[0])
         for cat_name, value in cats.items():
             self.assertEqual(make_set(value), make_set(targets[cat_name]))
 

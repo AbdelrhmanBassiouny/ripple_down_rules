@@ -26,11 +26,55 @@ from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
+    from .datastructures.dataclasses import CaseQuery
     from .rules import Rule
 
 import ast
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def update_case(case_query: CaseQuery, conclusions: Dict[str, Any]):
+    """
+    Update the case with the conclusions.
+
+    :param case_query: The case query that contains the case to update.
+    :param conclusions: The conclusions to update the case with.
+    """
+    if not conclusions:
+        return
+    if len(conclusions) == 0:
+        return
+    if isinstance(case_query.original_case, SQLTable) or is_dataclass(case_query.original_case):
+        for conclusion_name, conclusion in conclusions.items():
+            attribute = getattr(case_query.case, conclusion_name)
+            if conclusion_name == case_query.attribute_name:
+                attribute_type = case_query.attribute_type
+            else:
+                attribute_type = (get_case_attribute_type(case_query.original_case, conclusion_name, attribute),)
+            if isinstance(attribute, set):
+                for c in conclusion:
+                    attribute.update(make_set(c))
+            elif isinstance(attribute, list):
+                attribute.extend(conclusion)
+            elif any(at in {List, list} for at in attribute_type):
+                attribute = [] if attribute is None else attribute
+                attribute.extend(conclusion)
+            elif any(at in {Set, set} for at in attribute_type):
+                attribute = set() if attribute is None else attribute
+                for c in conclusion:
+                    attribute.update(make_set(c))
+            elif is_iterable(conclusion) and len(conclusion) == 1 \
+                    and any(at is type(list(conclusion)[0]) for at in attribute_type):
+                setattr(case_query.case, conclusion_name, list(conclusion)[0])
+            elif not is_iterable(conclusion) and any(at is type(conclusion) for at in attribute_type):
+                setattr(case_query.case, conclusion_name, conclusion)
+            else:
+                raise ValueError(f"Unknown type or type mismatch for attribute {conclusion_name} with type "
+                                 f"{case_query.attribute_type} with conclusion "
+                                 f"{conclusion} of type {type(conclusion)}")
+    else:
+        case_query.case.update(conclusions)
 
 
 def is_conflicting(conclusion: Any, target: Any) -> bool:

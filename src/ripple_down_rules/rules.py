@@ -130,6 +130,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
                               "conclusion": conclusion_to_json(self.conclusion),
                               "parent": self.parent.json_serialization if self.parent else None,
                               "corner_case": self.corner_case.to_json() if self.corner_case else None,
+                              "conclusion_name": self.conclusion_name,
                               "weight": self.weight}
         return json_serialization
 
@@ -139,6 +140,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
                           conclusion=CallableExpression.from_json(data["conclusion"]),
                           parent=cls.from_json(data["parent"]),
                           corner_case=Case.from_json(data["corner_case"]),
+                          conclusion_name=data["conclusion_name"],
                           weight=data["weight"])
         return loaded_rule
 
