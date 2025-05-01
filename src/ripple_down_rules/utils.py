@@ -119,14 +119,14 @@ def calculate_precision_and_recall(pred_cat: Dict[str, Any], target: Dict[str, A
     return precision, recall
 
 
-def get_rule_conclusion_as_source_code(rule: Rule, conclusion: str, parent_indent: str = "") -> str:
+def get_rule_conclusion_as_source_code(rule: Rule, conclusion: str, parent_indent: str = "") -> Tuple[str, str]:
     """
     Convert the conclusion of a rule to source code.
 
     :param rule: The rule to get the conclusion from.
     :param conclusion: The conclusion to convert to source code.
     :param parent_indent: The indentation to use for the source code.
-    :return: The source code of the conclusion.
+    :return: The source code of the conclusion as a tuple of strings, one for the function and one for the call.
     """
     indent = f"{parent_indent}{' ' * 4}"
     if "def " in conclusion:
@@ -135,9 +135,8 @@ def get_rule_conclusion_as_source_code(rule: Rule, conclusion: str, parent_inden
         # use regex to replace the function name
         new_function_name = f"def conclusion_{id(rule)}"
         conclusion_lines[0] = re.sub(r"def (\w+)", new_function_name, conclusion_lines[0])
-        conclusion_lines = [f"{indent}{line}" for line in conclusion_lines]
-        conclusion_lines.append(f"{indent}return {new_function_name.replace('def ', '')}(case)\n")
-        return "\n".join(conclusion_lines)
+        func_call = f"{indent}return {new_function_name.replace('def ', '')}(case)\n"
+        return "\n".join(conclusion_lines).strip(' '), func_call
     else:
         raise ValueError(f"Conclusion is format is not valid, it should be a one line string or "
                          f"contain a function definition. Instead got:\n{conclusion}\n")

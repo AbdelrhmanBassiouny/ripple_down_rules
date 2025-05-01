@@ -326,13 +326,10 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         """
         :return: The type of the conclusion of the RDR classifier.
         """
-        if isinstance(self.start_rule.conclusion, CallableExpression):
-            return self.start_rule.conclusion.conclusion_type
-        else:
-            conclusion = self.start_rule.conclusion
-            if isinstance(conclusion, set):
-                return type(list(conclusion)[0]), set
-            return (type(conclusion),)
+        all_types = []
+        for rule in [self.start_rule] + list(self.start_rule.descendants):
+            all_types.extend(list(rule.conclusion.conclusion_type))
+        return tuple(set(all_types))
 
     @property
     def attribute_name(self) -> str:
@@ -419,7 +416,8 @@ class SingleClassRDR(RDRWithCodeWriter):
                 self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ",
                                                         defs_file=defs_file)
 
-            file.write(rule.write_conclusion_as_source_code(parent_indent))
+            conclusion_call = rule.write_conclusion_as_source_code(parent_indent, defs_file)
+            file.write(conclusion_call)
 
             if rule.alternative:
                 self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file)
@@ -532,18 +530,20 @@ class MultiClassRDR(RDRWithCodeWriter):
                                                         defs_file=defs_file)
                 conclusion_indent = parent_indent + " " * 4
                 file.write(f"{conclusion_indent}else:\n")
-            file.write(rule.write_conclusion_as_source_code(conclusion_indent))
+
+            conclusion_call = rule.write_conclusion_as_source_code(conclusion_indent, defs_file)
+            file.write(conclusion_call)
 
             if rule.alternative:
                 self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file)
 
     @property
     def conclusion_type_hint(self) -> str:
-        return f"Set[{self.conclusion_type[0].__name__}]"
+        return f"Set[Union[{', '.join([ct.__name__ for ct in self.conclusion_type if ct not in [list, set]])}]]"
 
     def _get_imports(self) -> str:
         imports = super()._get_imports()
-        imports += "from typing_extensions import Set\n"
+        imports += "from typing_extensions import Set, Union\n"
         imports += "from ripple_down_rules.utils import make_set\n"
         return imports
 
@@ -871,7 +871,7 @@ class GeneralRDR(RippleDownRules):
 
     @property
     def conclusion_type_hint(self) -> str:
-        return f"List[Union[{', '.join([rdr.conclusion_type_hint for rdr in self.start_rules_dict.values()])}]]"
+        return f"Dict[str, Any]"
 
     def _get_imports(self, file_path: str) -> str:
         """
@@ -882,7 +882,7 @@ class GeneralRDR(RippleDownRules):
         """
         imports = ""
         # add type hints
-        imports += f"from typing_extensions import List, Union, Set\n"
+        imports += f"from typing_extensions import Dict, Any, Union, Set\n"
         # import rdr type
         imports += f"from ripple_down_rules.rdr import GeneralRDR\n"
         # add case type

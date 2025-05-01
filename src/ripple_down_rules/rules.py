@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 
 from anytree import NodeMixin
-from typing_extensions import List, Optional, Self, Union, Dict, Any
+from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple
 
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
@@ -78,24 +78,26 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         """
         pass
 
-    def write_conclusion_as_source_code(self, parent_indent: str = "") -> str:
+    def write_conclusion_as_source_code(self, parent_indent: str = "", defs_file: Optional[str] = None) -> str:
         """
         Get the source code representation of the conclusion of the rule.
 
         :param parent_indent: The indentation of the parent rule.
+        :param defs_file: The file to write the conclusion to if it is a definition.
+        :return: The source code representation of the conclusion of the rule.
         """
-        conclusion = self.conclusion
-        if isinstance(conclusion, CallableExpression):
-            if self.conclusion.user_input is not None:
-                conclusion = self.conclusion.user_input
-            else:
-                conclusion = self.conclusion.conclusion
-        if isinstance(conclusion, Enum):
-            conclusion = str(conclusion)
-        return self._conclusion_source_code(conclusion, parent_indent=parent_indent)
+        if self.conclusion.user_input is not None:
+            conclusion = self.conclusion.user_input
+        else:
+            conclusion = self.conclusion.conclusion
+        conclusion_func, conclusion_func_call = self._conclusion_source_code(conclusion, parent_indent=parent_indent)
+        if conclusion_func is not None:
+            with open(defs_file, 'a') as f:
+                f.write(conclusion_func + "\n\n")
+        return conclusion_func_call
 
     @abstractmethod
-    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
+    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
         pass
 
     def write_condition_as_source_code(self, parent_indent: str = "", defs_file: Optional[str] = None) -> str:
@@ -118,7 +120,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             conditions_lines[0] = re.sub(r"def (\w+)", new_function_name, conditions_lines[0])
             def_code = "\n".join(conditions_lines)
             with open(defs_file, 'a') as f:
-                f.write(def_code + "\n")
+                f.write(def_code + "\n\n")
             return f"\n{parent_indent}{if_clause} {new_function_name.replace('def ', '')}(case):\n"
 
     @abstractmethod
@@ -266,11 +268,11 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         loaded_rule.alternative = SingleClassRule.from_json(data["alternative"])
         return loaded_rule
 
-    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
+    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
         conclusion = str(conclusion)
         indent = parent_indent + " " * 4
         if '\n' not in conclusion:
-            return f"{indent}return {conclusion}\n"
+            return None, f"{indent}return {conclusion}\n"
         else:
             return get_rule_conclusion_as_source_code(self, conclusion, parent_indent=parent_indent)
 
@@ -317,8 +319,8 @@ class MultiClassStopRule(Rule, HasAlternativeRule):
         loaded_rule.alternative = MultiClassStopRule.from_json(data["alternative"])
         return loaded_rule
 
-    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
-        return f"{parent_indent}{' ' * 4}pass\n"
+    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[None, str]:
+        return None, f"{parent_indent}{' ' * 4}pass\n"
 
     def _if_statement_source_code_clause(self) -> str:
         return "elif" if self.weight == RDREdge.Alternative.value else "if"
@@ -362,25 +364,23 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         loaded_rule.alternative = MultiClassTopRule.from_json(data["alternative"])
         return loaded_rule
 
-    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> str:
+    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[str, str]:
         conclusion_str = str(conclusion)
         indent = parent_indent + " " * 4
-        statement = ""
         if '\n' not in conclusion_str:
+            func = None
             if is_iterable(conclusion):
                 conclusion_str = "{" + ", ".join([str(c) for c in conclusion]) + "}"
             else:
                 conclusion_str = "{" + str(conclusion) + "}"
         else:
-            conclusion_str = get_rule_conclusion_as_source_code(self, conclusion_str, parent_indent=parent_indent)
-            lines = conclusion_str.split("\n")
-            conclusion_str = lines[-2].replace("return ", "").strip()
-            statement += "\n".join(lines[:-2]) + "\n"
+            func, func_call = get_rule_conclusion_as_source_code(self, conclusion_str, parent_indent=parent_indent)
+            conclusion_str = func_call.replace("return ", "").strip()
 
-        statement += f"{indent}conclusions.update(make_set({conclusion_str}))\n"
+        statement = f"{indent}conclusions.update(make_set({conclusion_str}))\n"
         if self.alternative is None:
             statement += f"{parent_indent}return conclusions\n"
-        return statement
+        return func, statement
 
     def _if_statement_source_code_clause(self) -> str:
         return "if"
