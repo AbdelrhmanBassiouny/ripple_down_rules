@@ -428,6 +428,12 @@ class SingleClassRDR(RDRWithCodeWriter):
     def conclusion_type_hint(self) -> str:
         return self.conclusion_type[0].__name__
 
+    @property
+    def conclusion_type(self) -> Tuple[Type]:
+        if self.default_conclusion is not None:
+            return (type(self.default_conclusion),)
+        return super().conclusion_type
+
     def _to_json(self) -> Dict[str, Any]:
         return {"start_rule": self.start_rule.to_json()}
 
@@ -768,6 +774,7 @@ class GeneralRDR(RippleDownRules):
 
         case_query_cp = copy(case_query)
         self.classify(case_query_cp.case, modify_case=True)
+        case_query_cp.update_target_value()
 
         self.start_rules_dict[case_query_cp.attribute_name].fit_case(case_query_cp, expert, **kwargs)
 

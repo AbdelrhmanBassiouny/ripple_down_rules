@@ -245,20 +245,12 @@ class TestRDR(TestCase):
         save_answers = False
         append = False
         filename = self.expert_answers_dir + "/mcrdr_stop_plus_rule_expert_answers_fit"
-        expert = Human(use_loaded_answers=use_loaded_answers)
+        expert = Human(use_loaded_answers=use_loaded_answers, append=append)
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
         case_queries = self.case_queries
-        try:
-            mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-        # catch pop from empty list error
-        except IndexError as e:
-            if append:
-                expert.use_loaded_answers = False
-                mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-            else:
-                raise e
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_plus_rule")
         for case_query in case_queries:
@@ -267,7 +259,7 @@ class TestRDR(TestCase):
         if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
-            expert.save_answers(file, append=append)
+            expert.save_answers(file)
 
     def test_fit_mcrdr_stop_plus_rule_combined(self):
         use_loaded_answers = True
@@ -275,20 +267,12 @@ class TestRDR(TestCase):
         draw_tree = False
         append = False
         filename = self.expert_answers_dir + "/mcrdr_stop_plus_rule_combined_expert_answers_fit"
-        expert = Human(use_loaded_answers=use_loaded_answers)
+        expert = Human(use_loaded_answers=use_loaded_answers, append=append)
         if use_loaded_answers:
             expert.load_answers(filename)
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRuleCombined)
         case_queries = self.case_queries
-        try:
-            mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-        # catch pop from empty list error
-        except IndexError as e:
-            if append:
-                expert.use_loaded_answers = False
-                mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-            else:
-                raise e
+        mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         render_tree(mcrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + f"/mcrdr_stop_plus_rule_combined")
         for case_query in case_queries:
@@ -297,7 +281,7 @@ class TestRDR(TestCase):
         if save_answers:
             cwd = os.getcwd()
             file = os.path.join(cwd, filename)
-            expert.save_answers(file, append=append)
+            expert.save_answers(file)
 
     def test_classify_grdr(self):
         use_loaded_answers = True

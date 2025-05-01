@@ -133,7 +133,7 @@ class CaseQuery:
         if value is not None and not isinstance(value, (CallableExpression, str)):
             raise ValueError("The target must be a CallableExpression or a string.")
         self._target = value
-        self._update_target_value()
+        self.update_target_value()
 
     @property
     def target_value(self) -> Any:
@@ -141,10 +141,10 @@ class CaseQuery:
         :return: The target value of the case query.
         """
         if self._target_value is None:
-            self._update_target_value()
+            self.update_target_value()
         return self._target_value
 
-    def _update_target_value(self):
+    def update_target_value(self):
         """
         Update the target value of the case query.
         """

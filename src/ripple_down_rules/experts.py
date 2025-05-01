@@ -32,10 +32,11 @@ class Expert(ABC):
     """
     A flag to indicate if the expert should use loaded answers or not.
     """
-    known_categories: Optional[Dict[str, Type[CaseAttribute]]] = None
-    """
-    The known categories (i.e. Column types) to use.
-    """
+
+    def __init__(self, use_loaded_answers: bool = False, append: bool = False):
+        self.all_expert_answers = []
+        self.use_loaded_answers = use_loaded_answers
+        self.append = append
 
     @abstractmethod
     def ask_for_conditions(self, case_query: CaseQuery, last_evaluated_rule: Optional[Rule] = None) \
@@ -51,28 +52,6 @@ class Expert(ABC):
         pass
 
     @abstractmethod
-    def ask_for_extra_rules(self, case_query: CaseQuery) -> List[Dict[PromptFor, CallableExpression]]:
-        """
-        Ask the expert to provide extra rules for a case by providing a pair of conclusion and conditions.
-
-        :param case_query: The case query containing the case to classify.
-        :return: The extra rules for the case as a list of dictionaries, where each dictionary contains the
-                    conclusion and conditions for the rule.
-        """
-        pass
-
-    @abstractmethod
-    def ask_if_conclusion_is_correct(self, case_query: CaseQuery, conclusion: Any,
-                                     current_conclusions: Any) -> bool:
-        """
-        Ask the expert if the conclusion is correct.
-
-        :param case_query: The case query about which the expert should answer.
-        :param conclusion: The conclusion to check.
-        :param current_conclusions: The current conclusions for the case.
-        """
-        pass
-
     def ask_for_conclusion(self, case_query: CaseQuery) -> Optional[CallableExpression]:
         """
         Ask the expert to provide a relational conclusion for the case.
@@ -87,18 +66,14 @@ class Human(Expert):
     The Human Expert class, an expert that asks the human to provide differentiating features and conclusions.
     """
 
-    def __init__(self, use_loaded_answers: bool = False):
-        self.all_expert_answers = []
-        self.use_loaded_answers = use_loaded_answers
-
-    def save_answers(self, path: str, append: bool = False):
+    def save_answers(self, path: str):
         """
         Save the expert answers to a file.
 
         :param path: The path to save the answers to.
         :param append: A flag to indicate if the answers should be appended to the file or not.
         """
-        if append:
+        if self.append:
             # read the file and append the new answers
             with open(path + '.json', "r") as f:
                 all_answers = json.load(f)
@@ -126,24 +101,6 @@ class Human(Expert):
                                           last_evaluated_rule=last_evaluated_rule)
         return self._get_conditions(case_query)
 
-    def ask_for_extra_rules(self, case_query: CaseQuery) -> List[Dict[PromptFor, CallableExpression]]:
-        """
-        Ask the expert to provide extra rules for a case by providing a pair of conclusion and conditions.
-
-        :param case_query: The case query containing the case to classify.
-        :return: The extra rules for the case as a list of dictionaries, where each dictionary contains the
-                    conclusion and conditions for the rule.
-        """
-        rules = []
-        while True:
-            conclusion = self.ask_for_conclusion(case_query)
-            if conclusion is None:
-                break
-            conditions = self._get_conditions(case_query)
-            rules.append({PromptFor.Conclusion: conclusion,
-                         PromptFor.Conditions: conditions})
-        return rules
-
     def _get_conditions(self, case_query: CaseQuery) \
             -> CallableExpression:
         """
@@ -154,6 +111,8 @@ class Human(Expert):
         :return: The differentiating features as new rule conditions.
         """
         user_input = None
+        if self.use_loaded_answers and len(self.all_expert_answers) == 0 and self.append:
+            self.use_loaded_answers = False
         if self.use_loaded_answers:
             user_input = self.all_expert_answers.pop(0)
         if user_input:
@@ -173,6 +132,8 @@ class Human(Expert):
         :return: The conclusion for the case as a callable expression.
         """
         expression: Optional[CallableExpression] = None
+        if self.use_loaded_answers and len(self.all_expert_answers) == 0 and self.append:
+            self.use_loaded_answers = False
         if self.use_loaded_answers:
             expert_input = self.all_expert_answers.pop(0)
             if expert_input is not None:
@@ -184,63 +145,3 @@ class Human(Expert):
             self.all_expert_answers.append(expert_input)
         case_query.target = expression
         return expression
-
-    def get_category_type(self, cat_name: str) -> Optional[Type[CaseAttribute]]:
-        """
-        Get the category type from the known categories.
-
-        :param cat_name: The name of the category.
-        :return: The category type.
-        """
-        cat_name = cat_name.lower()
-        self.known_categories = get_all_subclasses(
-            CaseAttribute) if not self.known_categories else self.known_categories
-        self.known_categories.update(CaseAttribute.registry)
-        category_type = None
-        if cat_name in self.known_categories:
-            category_type = self.known_categories[cat_name]
-        return category_type
-
-    def ask_if_category_is_mutually_exclusive(self, category_name: str) -> bool:
-        """
-        Ask the expert if the new category can have multiple values.
-
-        :param category_name: The name of the category to ask about.
-        """
-        question = f"Can a case have multiple values of the new category {category_name}? (y/n):"
-        return not self.ask_for_affirmation(question)
-
-    def ask_if_conclusion_is_correct(self, case_query: CaseQuery, conclusion: Any,
-                                     current_conclusions: Any) -> bool:
-        """
-        Ask the expert if the conclusion is correct.
-
-        :param case_query: The case query about which the expert should answer.
-        :param conclusion: The conclusion to check.
-        :param current_conclusions: The current conclusions for the case.
-        """
-        if not self.use_loaded_answers:
-            print(f"Current conclusions: {current_conclusions}")
-        return self.ask_for_affirmation(case_query,
-                                        f"Is the conclusion {conclusion} correct for the case (True/False):")
-
-    def ask_for_affirmation(self, case_query: CaseQuery, question: str) -> bool:
-        """
-        Ask the expert a yes or no question.
-
-        :param case_query: The case query about which the expert should answer.
-        :param question: The question to ask the expert.
-        :return: The answer to the question.
-        """
-        while True:
-            if self.use_loaded_answers:
-                answer = self.all_expert_answers.pop(0)
-            else:
-                _, expression = prompt_user_for_expression(case_query, PromptFor.Affirmation, question)
-                answer = expression(case_query.case)
-            if answer:
-                self.all_expert_answers.append(True)
-                return True
-            else:
-                self.all_expert_answers.append(False)
-                return False

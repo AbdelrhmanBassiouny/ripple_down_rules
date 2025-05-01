@@ -13,65 +13,63 @@ from ripple_down_rules.rdr import GeneralRDR
 
 @dataclass
 class WorldEntity:
-    world: World = field(kw_only=True, repr=False)
+    world: Optional[World] = field(default=None, kw_only=True, repr=False, hash=False)
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Body(WorldEntity):
     name: str
 
-    def __hash__(self):
-        return hash(self.name)
 
-
-@dataclass
+@dataclass(unsafe_hash=True)
 class Handle(Body):
     ...
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Container(Body):
     ...
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Connection(WorldEntity):
     parent: Body
     child: Body
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class FixedConnection(Connection):
     ...
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class PrismaticConnection(Connection):
     ...
 
 
 @dataclass
 class World:
+    id: int = 0
     bodies: List[Body] = field(default_factory=list)
     connections: List[Connection] = field(default_factory=list)
     views: List[View] = field(default_factory=list, repr=False)
 
+    def __eq__(self, other):
+        if not isinstance(other, World):
+            return False
+        return self.id == other.id
 
-@dataclass
+
+@dataclass(unsafe_hash=True)
 class View(WorldEntity):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.world.views.append(self)
+    ...
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Drawer(View):
     handle: Handle
     container: Container
     correct: Optional[bool] = None
-
-    def __hash__(self):
-        return hash((self.handle.name, self.container.name))
 
 
 @dataclass
@@ -80,7 +78,7 @@ class Cabinet(View):
     drawers: List[Drawer] = field(default_factory=list)
 
     def __hash__(self):
-        return hash(tuple([self.container.name] + [hash(drawer) for drawer in self.drawers]))
+        return hash((self.__class__.__name__, self.container))
 
 
 class TestRDRWorld(TestCase):
@@ -115,26 +113,34 @@ class TestRDRWorld(TestCase):
     def test_view_rdr(self):
         self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)
 
-    def get_view_rdr(self, use_loaded_answers: bool = True, save_answers: bool = False,
+    def test_write_view_rdr_to_python_file(self):
+        rdrs_dir = "./test_generated_rdrs"
+        view_rdr = self.get_view_rdr()
+        view_rdr.write_to_python_file(rdrs_dir)
+        loaded_rdr_classifier = view_rdr.get_rdr_classifier_from_python_file(rdrs_dir)
+        found_views = loaded_rdr_classifier(self.world)
+        self.assertTrue(len([v for v in found_views["views"] if isinstance(v, Drawer)]) == 1)
+        self.assertTrue(len([v for v in found_views["views"] if isinstance(v, Cabinet)]) == 1)
+        self.assertTrue(len(found_views["views"]) == 2)
+
+    def get_view_rdr(self, views=(Drawer, Cabinet), use_loaded_answers: bool = True, save_answers: bool = False,
                      append: bool = False):
-        expert = Human(use_loaded_answers=use_loaded_answers)
+        expert = Human(use_loaded_answers=use_loaded_answers, append=append)
         filename = os.path.join(os.getcwd(), "test_expert_answers/view_rdr_expert_answers_fit")
         if use_loaded_answers:
             expert.load_answers(filename)
         rdr = GeneralRDR()
-        try:
-            rdr.fit_case([CaseQuery(self.world, "views", (View,), False)], expert=expert,
-                         add_extra_conclusions=True)
-        except Exception as e:
-            if append:
-                expert.use_loaded_answers = False
-                rdr.fit_case([CaseQuery(self.world, "views", (View,), False)], expert=expert,
-                             add_extra_conclusions=True)
-            else:
-                raise e
+        for view in views:
+            rdr.fit_case(CaseQuery(self.world, "views", (view,), False), expert=expert)
         if save_answers:
-            expert.save_answers(filename, append=append)
-        print(rdr.classify(self.world))
+            expert.save_answers(filename)
+
+        found_views = rdr.classify(self.world)
+        print(found_views)
+        for view in views:
+            self.assertTrue(len([v for v in found_views["views"] if isinstance(v, view)]) > 0)
+
+        return rdr
 
     def test_drawer_rdr(self):
         self.get_drawer_rdr(use_loaded_answers=True, save_answers=False)

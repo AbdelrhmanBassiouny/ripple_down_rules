@@ -68,7 +68,7 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
                  append: bool = False,
                  no_targets: bool = False) -> Tuple[GeneralRDR, List[dict]]:
     filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
-    expert = Human(use_loaded_answers=load_answers)
+    expert = Human(use_loaded_answers=load_answers, append=append)
     if load_answers:
         expert.load_answers(filename)
 
@@ -87,19 +87,10 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
                               True if name == "species" else False, _target=target)
                     for case, targets in zip(cases[:n], all_targets)
                     for name, target in targets.items()]
-    try:
-        grdr.fit(case_queries, expert=expert,
-                 animate_tree=draw_tree)
-    # catch pop from empty list error
-    except IndexError as e:
-        if append:
-            expert.use_loaded_answers = False
-            grdr.fit(case_queries, expert=expert,
-                     animate_tree=draw_tree)
-        else:
-            raise e
+    grdr.fit(case_queries, expert=expert,
+             animate_tree=draw_tree)
     if save_answers:
-        expert.save_answers(filename, append=append)
+        expert.save_answers(filename)
     for case, case_targets in zip(cases[:n], true_targets):
         cat = grdr.classify(case)
         for cat_name, cat_val in cat.items():
