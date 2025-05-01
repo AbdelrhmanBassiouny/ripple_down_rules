@@ -604,11 +604,17 @@ class SubclassJSONSerializer:
         """
         if data is None:
             return None
-        if not isinstance(data, dict) or ('_type' not in data):
+        if isinstance(data, list):
+            # if the data is a list, deserialize it
+            return [cls.from_json(d) for d in data]
+        elif isinstance(data, dict):
+            if '__dataclass__' in data:
+                # if the data is a dataclass, deserialize it
+                return deserialize_dataclass(data)
+            elif '_type' not in data:
+                return {k: cls.from_json(v) for k, v in data.items()}
+        elif not isinstance(data, dict):
             return data
-        if '__dataclass__' in data:
-            # if the data is a dataclass, deserialize it
-            return deserialize_dataclass(data)
 
         # check if type module is builtins
         data_type = get_type_from_string(data["_type"])

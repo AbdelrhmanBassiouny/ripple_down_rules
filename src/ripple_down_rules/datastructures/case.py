@@ -99,8 +99,7 @@ class Case(UserDict, SubclassJSONSerializer):
         obj_type = get_type_from_string(data.pop("_obj_type"))
         name = data.pop("_name")
         for k, v in data.items():
-            if isinstance(v, dict) and "_type" in v:
-                data[k] = SubclassJSONSerializer.from_json(v)
+            data[k] = SubclassJSONSerializer.from_json(v)
         return cls(_obj_type=obj_type, _id=id_, _name=name, **data)
 
 
