@@ -120,7 +120,7 @@ class CaseQuery:
         """
         :return: The target expression of the attribute.
         """
-        if self._target is not None and not isinstance(self._target, CallableExpression):
+        if (self._target is not None) and (not isinstance(self._target, CallableExpression)):
             self._target = CallableExpression(conclusion=self._target, conclusion_type=self.attribute_type,
                                               scope=self.scope)
         return self._target

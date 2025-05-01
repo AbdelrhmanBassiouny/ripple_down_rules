@@ -3,11 +3,13 @@ from __future__ import annotations
 import ast
 import logging
 from _ast import AST
+from enum import Enum
 
 from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .case import create_case, Case
-from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json, is_iterable
+from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json, is_iterable, \
+    build_user_input_from_conclusion, encapsulate_user_input
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -88,6 +90,7 @@ class CallableExpression(SubclassJSONSerializer):
     """
     A callable that is constructed from a string statement written by an expert.
     """
+    encapsulating_function: str = "def _get_value(case):"
 
     def __init__(self, user_input: Optional[str] = None, conclusion_type: Optional[Tuple[Type]] = None,
                  expression_tree: Optional[AST] = None,
@@ -103,8 +106,10 @@ class CallableExpression(SubclassJSONSerializer):
         """
         if user_input is None and conclusion is None:
             raise ValueError("Either user_input or conclusion must be provided.")
+        if user_input is None:
+            user_input = build_user_input_from_conclusion(conclusion)
         self.conclusion: Optional[Any] = conclusion
-        self.user_input: str = user_input
+        self.user_input: str = encapsulate_user_input(user_input, self.encapsulating_function)
         if conclusion_type is not None:
             if is_iterable(conclusion_type):
                 conclusion_type = tuple(conclusion_type)
@@ -112,12 +117,11 @@ class CallableExpression(SubclassJSONSerializer):
                 conclusion_type = (conclusion_type,)
         self.conclusion_type = conclusion_type
         self.scope: Optional[Dict[str, Any]] = scope if scope is not None else {}
-        if conclusion is None:
-            self.scope = get_used_scope(self.user_input, self.scope)
-            self.expression_tree: AST = expression_tree if expression_tree else parse_string_to_expression(self.user_input)
-            self.code = compile_expression_to_code(self.expression_tree)
-            self.visitor = VariableVisitor()
-            self.visitor.visit(self.expression_tree)
+        self.scope = get_used_scope(self.user_input, self.scope)
+        self.expression_tree: AST = expression_tree if expression_tree else parse_string_to_expression(self.user_input)
+        self.code = compile_expression_to_code(self.expression_tree)
+        self.visitor = VariableVisitor()
+        self.visitor.visit(self.expression_tree)
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
@@ -145,7 +149,11 @@ class CallableExpression(SubclassJSONSerializer):
         """
         Combine this callable expression with another callable expression using the 'and' operator.
         """
-        new_user_input = f"({self.user_input}) and ({other.user_input})"
+        cond1_user_input = self.user_input.replace(self.encapsulating_function, "def _cond1(case):")
+        cond2_user_input = other.user_input.replace(self.encapsulating_function, "def _cond2(case):")
+        new_user_input = (f"{cond1_user_input}\n"
+                          f"{cond2_user_input}\n"
+                          f"return _cond1(case) and _cond2(case)")
         return CallableExpression(new_user_input, conclusion_type=self.conclusion_type)
 
     def __eq__(self, other):

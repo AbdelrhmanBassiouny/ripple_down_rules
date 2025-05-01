@@ -715,7 +715,7 @@ class GeneralRDR(RippleDownRules):
 
     @staticmethod
     def _classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDownRules]],
-                  case: Any, modify_original_case: bool = True) -> Dict[str, Any]:
+                  case: Any, modify_original_case: bool = False) -> Dict[str, Any]:
         """
         Classify a case by going through all classifiers and adding the categories that are classified,
          and then restarting the classification until no more categories can be added.

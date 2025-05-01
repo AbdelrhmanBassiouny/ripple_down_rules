@@ -80,16 +80,10 @@ class IPythonShell:
             self.user_input = None
         else:
             self.all_code_lines = extract_dependencies(self.shell.all_lines)
-            if len(self.all_code_lines) == 1:
-                if self.all_code_lines[0].strip() == '':
-                    self.user_input = None
-                else:
-                    self.user_input = self.all_code_lines[0].replace('return', '').strip()
+            if len(self.all_code_lines) == 1 and self.all_code_lines[0].strip() == '':
+                self.user_input = None
             else:
-                self.user_input = f"def _get_value(case):\n    "
-                for cl in self.all_code_lines:
-                    sub_code_lines = cl.split('\n')
-                    self.user_input += '\n    '.join(sub_code_lines) + '\n    '
+                self.user_input = '\n'.join(self.all_code_lines)
 
 
 def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, prompt_str: Optional[str] = None)\

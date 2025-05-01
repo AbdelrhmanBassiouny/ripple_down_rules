@@ -125,7 +125,7 @@ class HabitatTable(MappedAsDataclass, Base):
         return hash(self.habitat)
 
     def __str__(self):
-        return self.habitat.value
+        return f"{HabitatTable.__name__}({Habitat.__name__}.{self.habitat.name})"
 
     def __repr__(self):
         return self.__str__()

@@ -10,6 +10,7 @@ import re
 from collections import UserDict
 from copy import deepcopy
 from dataclasses import is_dataclass, fields
+from enum import Enum
 from types import NoneType
 
 import matplotlib
@@ -32,6 +33,58 @@ if TYPE_CHECKING:
 import ast
 
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
+
+def encapsulate_user_input(user_input: str, func_signature: str) -> str:
+    """
+    Encapsulate the user input string with a function definition.
+
+    :param user_input: The user input string.
+    :param func_signature: The function signature to use for encapsulation.
+    :return: The encapsulated user input string.
+    """
+    if func_signature not in user_input:
+        new_user_input = func_signature + "\n    "
+        if "return " not in user_input:
+            if '\n' not in user_input:
+                new_user_input += f"return {user_input}"
+            else:
+                raise ValueError("User input must contain a return statement or be a single line.")
+        else:
+            for cl in user_input.split('\n'):
+                sub_code_lines = cl.split('\n')
+                new_user_input += '\n    '.join(sub_code_lines) + '\n    '
+    else:
+        new_user_input = user_input
+    return new_user_input
+
+
+def build_user_input_from_conclusion(conclusion: Any) -> str:
+    """
+    Build a user input string from the conclusion.
+
+    :param conclusion: The conclusion to use for the callable expression.
+    :return: The user input string.
+    """
+
+    # set user_input to the string representation of the conclusion
+    if isinstance(conclusion, set):
+        user_input = '{' + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + '}'
+    elif isinstance(conclusion, list):
+        user_input = '[' + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + ']'
+    elif isinstance(conclusion, tuple):
+        user_input = '(' + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + ')'
+    else:
+        user_input = conclusion_to_str(conclusion)
+
+    return user_input
+
+
+def conclusion_to_str(conclusion_: Any) -> str:
+    if isinstance(conclusion_, Enum):
+        return type(conclusion_).__name__ + '.' + conclusion_.name
+    else:
+        return str(conclusion_)
 
 
 def update_case(case_query: CaseQuery, conclusions: Dict[str, Any]):

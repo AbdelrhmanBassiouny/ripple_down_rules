@@ -1,1 +1,4 @@
-["case.parts.contained_objects", "len(case.parts) > 0"]
+[
+  "def _get_value(case):\n    return case.parts.contained_objects",
+  "def _get_value(case):\n    return len(case.parts) > 0"
+]

@@ -270,11 +270,11 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
 
     def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
         conclusion = str(conclusion)
-        indent = parent_indent + " " * 4
-        if '\n' not in conclusion:
-            return None, f"{indent}return {conclusion}\n"
-        else:
-            return get_rule_conclusion_as_source_code(self, conclusion, parent_indent=parent_indent)
+        # indent = parent_indent + " " * 4
+        # if '\n' not in conclusion:
+        #     return None, f"{indent}return {conclusion}\n"
+        # else:
+        return get_rule_conclusion_as_source_code(self, conclusion, parent_indent=parent_indent)
 
     def _if_statement_source_code_clause(self) -> str:
         return "elif" if self.weight == RDREdge.Alternative.value else "if"
@@ -367,15 +367,15 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
     def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[str, str]:
         conclusion_str = str(conclusion)
         indent = parent_indent + " " * 4
-        if '\n' not in conclusion_str:
-            func = None
-            if is_iterable(conclusion):
-                conclusion_str = "{" + ", ".join([str(c) for c in conclusion]) + "}"
-            else:
-                conclusion_str = "{" + str(conclusion) + "}"
-        else:
-            func, func_call = get_rule_conclusion_as_source_code(self, conclusion_str, parent_indent=parent_indent)
-            conclusion_str = func_call.replace("return ", "").strip()
+        # if '\n' not in conclusion_str:
+        #     func = None
+        #     if is_iterable(conclusion):
+        #         conclusion_str = "{" + ", ".join([str(c) for c in conclusion]) + "}"
+        #     else:
+        #         conclusion_str = "{" + str(conclusion) + "}"
+        # else:
+        func, func_call = get_rule_conclusion_as_source_code(self, conclusion_str, parent_indent=parent_indent)
+        conclusion_str = func_call.replace("return ", "").strip()
 
         statement = f"{indent}conclusions.update(make_set({conclusion_str}))\n"
         if self.alternative is None:
