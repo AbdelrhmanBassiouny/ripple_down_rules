@@ -93,7 +93,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         conclusion_func, conclusion_func_call = self._conclusion_source_code(conclusion, parent_indent=parent_indent)
         if conclusion_func is not None:
             with open(defs_file, 'a') as f:
-                f.write(conclusion_func + "\n\n")
+                f.write(conclusion_func.strip() + "\n\n\n")
         return conclusion_func_call
 
     @abstractmethod
@@ -120,7 +120,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             conditions_lines[0] = re.sub(r"def (\w+)", new_function_name, conditions_lines[0])
             def_code = "\n".join(conditions_lines)
             with open(defs_file, 'a') as f:
-                f.write(def_code + "\n\n")
+                f.write(def_code.strip() + "\n\n\n")
             return f"\n{parent_indent}{if_clause} {new_function_name.replace('def ', '')}(case):\n"
 
     @abstractmethod

@@ -211,17 +211,17 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
         file_name = file_path + f"/{self.generated_python_file_name}.py"
         defs_file_name = file_path + f"/{self.generated_python_defs_file_name}.py"
-        imports = self._get_imports()
+        imports, defs_imports = self._get_imports()
         # clear the files first
         with open(defs_file_name, "w") as f:
-            f.write(imports + "\n\n")
+            f.write(defs_imports + "\n\n")
         with open(file_name, "w") as f:
             imports += f"from .{self.generated_python_defs_file_name} import *\n"
             imports += f"from ripple_down_rules.rdr import {self.__class__.__name__}\n"
             f.write(imports + "\n\n")
-            f.write(f"conclusion_type = ({', '.join([ct.__name__ for ct in self.conclusion_type])},)\n\n")
-            f.write(f"type_ = {self.__class__.__name__}\n\n")
-            f.write(func_def)
+            f.write(f"conclusion_type = ({', '.join([ct.__name__ for ct in self.conclusion_type])},)\n")
+            f.write(f"type_ = {self.__class__.__name__}\n")
+            f.write(f"\n\n{func_def}")
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
             self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4, defs_file=defs_file_name)
@@ -234,17 +234,11 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         """
         pass
 
-    def _get_imports(self) -> str:
+    def _get_imports(self) -> Tuple[str, str]:
         """
         :return: The imports for the generated python file of the RDR as a string.
         """
-        imports = ""
-        if self.case_type.__module__ != "builtins":
-            imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
-        for conclusion_type in self.conclusion_type:
-            if conclusion_type.__module__ != "builtins":
-                imports += f"from {conclusion_type.__module__} import {conclusion_type.__name__}\n"
-        imports += "from ripple_down_rules.datastructures.case import Case, create_case\n"
+        defs_imports = ""
         for rule in [self.start_rule] + list(self.start_rule.descendants):
             if not rule.conditions:
                 continue
@@ -255,10 +249,21 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                     if not hasattr(v, "__module__") or not hasattr(v, "__name__"):
                         continue
                     new_imports = f"from {v.__module__} import {v.__name__}\n"
-                    if new_imports in imports:
+                    if new_imports in defs_imports:
                         continue
-                    imports += new_imports
-        return imports
+                    defs_imports += new_imports
+        imports = ""
+        if self.case_type.__module__ != "builtins":
+            new_import = f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
+            if new_import not in defs_imports:
+                imports += new_import
+        for conclusion_type in self.conclusion_type:
+            if conclusion_type.__module__ != "builtins":
+                new_import = f"from {conclusion_type.__module__} import {conclusion_type.__name__}\n"
+                if new_import not in defs_imports:
+                    imports += new_import
+        imports += "from ripple_down_rules.datastructures.case import Case, create_case\n"
+        return imports, defs_imports
 
     def get_rdr_classifier_from_python_file(self, package_name: str) -> Callable[[Any], Any]:
         """
@@ -539,13 +544,21 @@ class MultiClassRDR(RDRWithCodeWriter):
 
     @property
     def conclusion_type_hint(self) -> str:
-        return f"Set[Union[{', '.join([ct.__name__ for ct in self.conclusion_type if ct not in [list, set]])}]]"
+        conclusion_types = [ct.__name__ for ct in self.conclusion_type if ct not in [list, set]]
+        if len(conclusion_types) == 1:
+            return f"Set[{conclusion_types[0]}]"
+        else:
+            return f"Set[Union[{', '.join(conclusion_types)}]]"
 
-    def _get_imports(self) -> str:
-        imports = super()._get_imports()
-        imports += "from typing_extensions import Set, Union\n"
+    def _get_imports(self) -> Tuple[str, str]:
+        imports, defs_imports = super()._get_imports()
+        conclusion_types = [ct for ct in self.conclusion_type if ct not in [list, set]]
+        if len(conclusion_types) == 1:
+            imports += f"from typing_extensions import Set\n"
+        else:
+            imports += "from typing_extensions import Set, Union\n"
         imports += "from ripple_down_rules.utils import make_set\n"
-        return imports
+        return imports, defs_imports
 
     def update_start_rule(self, case_query: CaseQuery, expert: Expert):
         """
@@ -882,17 +895,12 @@ class GeneralRDR(RippleDownRules):
         """
         imports = ""
         # add type hints
-        imports += f"from typing_extensions import Dict, Any, Union, Set\n"
+        imports += f"from typing_extensions import Dict, Any\n"
         # import rdr type
         imports += f"from ripple_down_rules.rdr import GeneralRDR\n"
         # add case type
         imports += f"from ripple_down_rules.datastructures.case import Case, create_case\n"
         imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
-        # add conclusion type imports
-        for rdr in self.start_rules_dict.values():
-            for conclusion_type in rdr.conclusion_type:
-                if conclusion_type.__module__ != "builtins":
-                    imports += f"from {conclusion_type.__module__} import {conclusion_type.__name__}\n"
         # add rdr python generated functions.
         for rdr_key, rdr in self.start_rules_dict.items():
             imports += (f"from {file_path.strip('./')}"
