@@ -113,6 +113,14 @@ class TestRDRWorld(TestCase):
     def test_view_rdr(self):
         self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)
 
+    def test_save_and_load_view_rdr(self):
+        view_rdr = self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)
+        filename = os.path.join(os.getcwd(), "test_results/world_views_rdr")
+        view_rdr.save(filename)
+        loaded_rdr = GeneralRDR.load(filename)
+        self.assertEqual(view_rdr.classify(self.world), loaded_rdr.classify(self.world))
+        self.assertEqual(self.world.bodies, loaded_rdr.start_rules[0].corner_case.bodies)
+
     def test_write_view_rdr_to_python_file(self):
         rdrs_dir = "./test_generated_rdrs"
         view_rdr = self.get_view_rdr()

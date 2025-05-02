@@ -131,7 +131,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         json_serialization = {"conditions": self.conditions.to_json(),
                               "conclusion": conclusion_to_json(self.conclusion),
                               "parent": self.parent.json_serialization if self.parent else None,
-                              "corner_case": self.corner_case.to_json() if self.corner_case else None,
+                              "corner_case": SubclassJSONSerializer.to_json_static(self.corner_case),
                               "conclusion_name": self.conclusion_name,
                               "weight": self.weight}
         return json_serialization

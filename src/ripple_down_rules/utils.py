@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import uuid
 from collections import UserDict
 from copy import deepcopy
 from dataclasses import is_dataclass, fields
@@ -322,7 +323,7 @@ def extract_dependencies(code_lines):
     return required_lines
 
 
-def serialize_dataclass(obj: Any) -> Union[Dict, Any]:
+def serialize_dataclass(obj: Any, seen=None) -> Any:
     """
     Recursively serialize a dataclass to a dictionary. If the dataclass contains any nested dataclasses, they will be
     serialized as well. If the object is not a dataclass, it will be returned as is.
@@ -330,24 +331,44 @@ def serialize_dataclass(obj: Any) -> Union[Dict, Any]:
     :param obj: The dataclass to serialize.
     :return: The serialized dataclass as a dictionary or the object itself if it is not a dataclass.
     """
+    if seen is None:
+        seen = {}
 
-    def recursive_convert(obj):
-        if is_dataclass(obj):
-            return {
-                "__dataclass__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}",
-                "fields": {f.name: recursive_convert(getattr(obj, f.name)) for f in fields(obj)}
-            }
-        elif isinstance(obj, list):
-            return [recursive_convert(item) for item in obj]
-        elif isinstance(obj, dict):
-            return {k: recursive_convert(v) for k, v in obj.items()}
-        else:
+    obj_id = id(obj)
+    if obj_id in seen:
+        return {'$ref': seen[obj_id]}
+
+    if is_dataclass(obj):
+        uid = str(uuid.uuid4())
+        seen[obj_id] = uid
+        result = {
+            '$id': uid,
+            "__dataclass__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}",
+            'fields': {}
+        }
+        for f in fields(obj):
+            value = getattr(obj, f.name)
+            result['fields'][f.name] = serialize_dataclass(value, seen)
+        return result
+    elif isinstance(obj, list):
+        return [serialize_dataclass(v, seen) for v in obj]
+    elif isinstance(obj, dict):
+        return {k: serialize_dataclass(v, seen) for k, v in obj.items()}
+    else:
+        try:
+            json.dumps(obj)  # Check if the object is JSON serializable
             return obj
+        except TypeError:
+            return None
 
-    return recursive_convert(obj)
+
+def deserialize_dataclass(data: Any, refs: Optional[Dict[str, Any]] = None) -> Any:
+    refs = {} if refs is None else refs
+    preloaded = preload_serialized_objects(data, refs)
+    return resolve_refs(preloaded, refs)
 
 
-def deserialize_dataclass(data: dict) -> Any:
+def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None) -> Any:
     """
     Recursively deserialize a dataclass from a dictionary, if the dictionary contains a key "__dataclass__" (Most likely
     created by the serialize_dataclass function), it will be treated as a dataclass and deserialized accordingly,
@@ -356,25 +377,81 @@ def deserialize_dataclass(data: dict) -> Any:
     :param data: The dictionary to deserialize.
     :return: The deserialized dataclass.
     """
+    if refs is None:
+        refs = {}
 
-    def recursive_load(obj):
-        if isinstance(obj, dict) and "__dataclass__" in obj:
-            module_name, class_name = obj["__dataclass__"].rsplit(".", 1)
-            module = importlib.import_module(module_name)
-            cls: Type = getattr(module, class_name)
-            field_values = {
-                k: recursive_load(v)
-                for k, v in obj["fields"].items()
-            }
-            return cls(**field_values)
-        elif isinstance(obj, list):
-            return [recursive_load(item) for item in obj]
-        elif isinstance(obj, dict):
-            return {k: recursive_load(v) for k, v in obj.items()}
+    if isinstance(data, dict):
+
+        if '$ref' in data:
+            ref_id = data['$ref']
+            if ref_id not in refs:
+                return {'$ref': data['$ref']}
+            return refs[ref_id]
+
+        elif '$id' in data and '__dataclass__' in data and 'fields' in data:
+            cls_path = data['__dataclass__']
+            module_name, class_name = cls_path.rsplit('.', 1)
+            cls = getattr(importlib.import_module(module_name), class_name)
+
+            dummy_instance = cls.__new__(cls)  # Don't call __init__ yet
+            refs[data['$id']] = dummy_instance
+
+            for f in fields(cls):
+                raw_value = data['fields'].get(f.name)
+                value = preload_serialized_objects(raw_value, refs)
+                setattr(dummy_instance, f.name, value)
+
+            return dummy_instance
+
         else:
-            return obj
+            return {k: preload_serialized_objects(v, refs) for k, v in data.items()}
 
-    return recursive_load(data)
+    elif isinstance(data, list):
+        return [preload_serialized_objects(item, refs) for item in data]
+    elif isinstance(data, dict):
+        return {k: preload_serialized_objects(v, refs) for k, v in data.items()}
+
+    return data  # Primitive
+
+
+def resolve_refs(obj, refs, seen=None):
+    if seen is None:
+        seen = {}
+
+    obj_id = id(obj)
+    if obj_id in seen:
+        return seen[obj_id]
+
+    # Resolve if dict with $ref
+    if isinstance(obj, dict) and '$ref' in obj:
+        ref_id = obj['$ref']
+        if ref_id not in refs:
+            raise KeyError(f"$ref to unknown ID: {ref_id}")
+        return refs[ref_id]
+
+    elif is_dataclass(obj):
+        seen[obj_id] = obj  # Mark before diving deeper
+        for f in fields(obj):
+            val = getattr(obj, f.name)
+            resolved = resolve_refs(val, refs, seen)
+            setattr(obj, f.name, resolved)
+        return obj
+
+    elif isinstance(obj, list):
+        resolved_list = []
+        seen[obj_id] = resolved_list
+        for item in obj:
+            resolved_list.append(resolve_refs(item, refs, seen))
+        return resolved_list
+
+    elif isinstance(obj, dict):
+        resolved_dict = {}
+        seen[obj_id] = resolved_dict
+        for k, v in obj.items():
+            resolved_dict[k] = resolve_refs(v, refs, seen)
+        return resolved_dict
+
+    return obj  # Primitive
 
 
 def typing_to_python_type(typing_hint: Type) -> Type:
@@ -547,6 +624,7 @@ class SubclassJSONSerializer:
     Classes that inherit from this class can be serialized and deserialized automatically by calling this classes
     'from_json' method.
     """
+    data_class_refs = {}
 
     def to_json_file(self, filename: str):
         """
@@ -560,8 +638,14 @@ class SubclassJSONSerializer:
             json.dump(data, f, indent=4)
         return data
 
+    @staticmethod
+    def to_json_static(obj) -> Dict[str, Any]:
+        if is_dataclass(obj):
+            return serialize_dataclass(obj)
+        return {"_type": get_full_class_name(obj.__class__), **obj._to_json()}
+
     def to_json(self) -> Dict[str, Any]:
-        return {"_type": get_full_class_name(self.__class__), **self._to_json()}
+        return self.to_json_static(self)
 
     def _to_json(self) -> Dict[str, Any]:
         """
@@ -582,7 +666,7 @@ class SubclassJSONSerializer:
         raise NotImplementedError()
 
     @classmethod
-    def from_json_file(cls, filename: str):
+    def from_json_file(cls, filename: str) -> Any:
         """
         Create an instance of the subclass from the data in the given json file.
 
@@ -592,7 +676,9 @@ class SubclassJSONSerializer:
             filename += ".json"
         with open(filename, "r") as f:
             scrdr_json = json.load(f)
-        return cls.from_json(scrdr_json)
+        deserialized_obj = cls.from_json(scrdr_json)
+        cls.data_class_refs.clear()
+        return deserialized_obj
 
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> Self:
@@ -610,7 +696,7 @@ class SubclassJSONSerializer:
         elif isinstance(data, dict):
             if '__dataclass__' in data:
                 # if the data is a dataclass, deserialize it
-                return deserialize_dataclass(data)
+                return deserialize_dataclass(data, cls.data_class_refs)
             elif '_type' not in data:
                 return {k: cls.from_json(v) for k, v in data.items()}
         elif not isinstance(data, dict):
@@ -761,6 +847,19 @@ def row_to_dict(obj):
         for col in obj.__table__.columns
         if not col.primary_key and not col.foreign_keys
     }
+
+
+def dataclass_to_dict(obj):
+    """
+    Convert a dataclass to a dictionary.
+
+    :param obj: The dataclass to convert.
+    :return: The dictionary representation of the dataclass.
+    """
+    if is_dataclass(obj):
+        return {f.name: getattr(obj, f.name) for f in fields(obj) if not f.name.startswith("_")}
+    else:
+        raise ValueError(f"Object {obj} is not a dataclass.")
 
 
 def get_attribute_name(obj: Any, attribute: Optional[Any] = None, attribute_type: Optional[Type] = None,

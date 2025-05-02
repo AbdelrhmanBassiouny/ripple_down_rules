@@ -298,7 +298,11 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         """
         :return: The default generated python file name.
         """
-        return f"{self.start_rule.corner_case._name.lower()}_{self.attribute_name}_{self.acronym.lower()}"
+        if isinstance(self.start_rule.corner_case, Case):
+            name = self.start_rule.corner_case._name
+        else:
+            name = self.start_rule.corner_case.__class__.__name__
+        return f"{name.lower()}_{self.attribute_name}_{self.acronym.lower()}"
 
     @property
     def generated_python_defs_file_name(self) -> str:
@@ -880,7 +884,11 @@ class GeneralRDR(RippleDownRules):
         """
         :return: The default generated python file name.
         """
-        return f"{self.start_rule.corner_case._name.lower()}_rdr"
+        if isinstance(self.start_rule.corner_case, Case):
+            name = self.start_rule.corner_case._name
+        else:
+            name = f"{self.start_rule.corner_case.__class__.__name__}_{list(self.start_rules_dict.keys())[0]}"
+        return f"{name}_rdr".lower()
 
     @property
     def conclusion_type_hint(self) -> str:

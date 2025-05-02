@@ -11,7 +11,7 @@ from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColum
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING
 
 from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, SubclassJSONSerializer, \
-    get_full_class_name, get_type_from_string, make_list, is_iterable, serialize_dataclass
+    get_full_class_name, get_type_from_string, make_list, is_iterable, serialize_dataclass, dataclass_to_dict
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
@@ -218,7 +218,7 @@ def create_case(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
     obj_name = obj_name or obj.__class__.__name__
     if isinstance(obj, DataFrame):
         return create_cases_from_dataframe(obj, obj_name)
-    if isinstance(obj, Case):
+    if isinstance(obj, Case) or (is_dataclass(obj) and not isinstance(obj, SQLTable)):
         return obj
     if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
             or (obj.__class__ in [MetaData, registry])):
@@ -317,6 +317,10 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Dict[str, Any]] =
         case_dict = row_to_dict(case)
         if last_evaluated_rule and last_evaluated_rule.fired:
             corner_row_dict = row_to_dict(last_evaluated_rule.corner_case)
+    elif is_dataclass(case):
+        case_dict = dataclass_to_dict(case)
+        if last_evaluated_rule and last_evaluated_rule.fired:
+            corner_row_dict = dataclass_to_dict(last_evaluated_rule.corner_case)
     else:
         case_dict = case
         if last_evaluated_rule and last_evaluated_rule.fired:
