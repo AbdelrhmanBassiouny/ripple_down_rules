@@ -225,6 +225,8 @@ def parse_string_to_expression(expression_str: str) -> AST:
     :param expression_str: The string which will be parsed.
     :return: The parsed expression.
     """
+    if not expression_str.startswith('def'):
+        expression_str = encapsulate_user_input(expression_str, CallableExpression.encapsulating_function)
     mode = 'exec' if expression_str.startswith('def') else 'eval'
     tree = ast.parse(expression_str, mode=mode)
     logging.debug(f"AST parsed successfully: {ast.dump(tree)}")
