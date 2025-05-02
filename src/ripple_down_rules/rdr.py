@@ -887,7 +887,7 @@ class GeneralRDR(RippleDownRules):
         if isinstance(self.start_rule.corner_case, Case):
             name = self.start_rule.corner_case._name
         else:
-            name = f"{self.start_rule.corner_case.__class__.__name__}_{list(self.start_rules_dict.keys())[0]}"
+            name = self.start_rule.corner_case.__class__.__name__
         return f"{name}_rdr".lower()
 
     @property
