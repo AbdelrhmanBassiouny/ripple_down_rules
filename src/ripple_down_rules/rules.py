@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from enum import Enum
+from uuid import uuid4
 
 from anytree import NodeMixin
+from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple
 
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
-from sqlalchemy.orm import DeclarativeBase as SQLTable
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer, is_iterable, get_full_class_name, conclusion_to_json, \
-    get_rule_conclusion_as_source_code
+from .utils import SubclassJSONSerializer, conclusion_to_json
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
@@ -26,7 +25,8 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
                  parent: Optional[Rule] = None,
                  corner_case: Optional[Union[Case, SQLTable]] = None,
                  weight: Optional[str] = None,
-                 conclusion_name: Optional[str] = None):
+                 conclusion_name: Optional[str] = None,
+                 uid: Optional[str] = None):
         """
         A rule in the ripple down rules classifier.
 
@@ -36,6 +36,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         :param corner_case: The corner case that this rule is based on/created from.
         :param weight: The weight of the rule, which is the type of edge connecting the rule to its parent.
         :param conclusion_name: The name of the conclusion of the rule.
+        :param uid: The unique id of the rule.
         """
         super(Rule, self).__init__()
         self.conclusion = conclusion
@@ -46,6 +47,8 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self.conclusion_name: Optional[str] = conclusion_name
         self.json_serialization: Optional[Dict[str, Any]] = None
         self._name: Optional[str] = None
+        # generate a unique id for the rule using uuid4
+        self.uid: str = uid if uid else str(uuid4().int)
 
     def _post_detach(self, parent):
         """
@@ -90,15 +93,32 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             conclusion = self.conclusion.user_input
         else:
             conclusion = self.conclusion.conclusion
-        conclusion_func, conclusion_func_call = self._conclusion_source_code(conclusion, parent_indent=parent_indent)
+        conclusion_func, conclusion_func_call = self.get_conclusion_as_source_code(conclusion,
+                                                                                   parent_indent=parent_indent)
         if conclusion_func is not None:
             with open(defs_file, 'a') as f:
                 f.write(conclusion_func.strip() + "\n\n\n")
         return conclusion_func_call
 
-    @abstractmethod
-    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
-        pass
+    def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
+        """
+        Convert the conclusion of a rule to source code.
+
+        :param conclusion: The conclusion to convert to source code.
+        :param parent_indent: The indentation of the parent rule.
+        :return: The source code of the conclusion as a tuple of strings, one for the function and one for the call.
+        """
+        if "def " in conclusion:
+            # This means the conclusion is a definition that should be written and then called
+            conclusion_lines = conclusion.split('\n')
+            # use regex to replace the function name
+            new_function_name = f"def conclusion_{self.uid}"
+            conclusion_lines[0] = re.sub(r"def (\w+)", new_function_name, conclusion_lines[0])
+            func_call = f"{parent_indent}    return {new_function_name.replace('def ', '')}(case)\n"
+            return "\n".join(conclusion_lines).strip(' '), func_call
+        else:
+            raise ValueError(f"Conclusion is format is not valid, it should be contain a function definition."
+                             f" Instead got:\n{conclusion}\n")
 
     def write_condition_as_source_code(self, parent_indent: str = "", defs_file: Optional[str] = None) -> str:
         """
@@ -116,7 +136,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             # This means the conditions are a definition that should be written and then called
             conditions_lines = self.conditions.user_input.split('\n')
             # use regex to replace the function name
-            new_function_name = f"def conditions_{id(self)}"
+            new_function_name = f"def conditions_{self.uid}"
             conditions_lines[0] = re.sub(r"def (\w+)", new_function_name, conditions_lines[0])
             def_code = "\n".join(conditions_lines)
             with open(defs_file, 'a') as f:
@@ -268,14 +288,6 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         loaded_rule.alternative = SingleClassRule.from_json(data["alternative"])
         return loaded_rule
 
-    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
-        conclusion = str(conclusion)
-        # indent = parent_indent + " " * 4
-        # if '\n' not in conclusion:
-        #     return None, f"{indent}return {conclusion}\n"
-        # else:
-        return get_rule_conclusion_as_source_code(self, conclusion, parent_indent=parent_indent)
-
     def _if_statement_source_code_clause(self) -> str:
         return "elif" if self.weight == RDREdge.Alternative.value else "if"
 
@@ -319,7 +331,7 @@ class MultiClassStopRule(Rule, HasAlternativeRule):
         loaded_rule.alternative = MultiClassStopRule.from_json(data["alternative"])
         return loaded_rule
 
-    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[None, str]:
+    def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[None, str]:
         return None, f"{parent_indent}{' ' * 4}pass\n"
 
     def _if_statement_source_code_clause(self) -> str:
@@ -364,20 +376,11 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         loaded_rule.alternative = MultiClassTopRule.from_json(data["alternative"])
         return loaded_rule
 
-    def _conclusion_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[str, str]:
-        conclusion_str = str(conclusion)
-        indent = parent_indent + " " * 4
-        # if '\n' not in conclusion_str:
-        #     func = None
-        #     if is_iterable(conclusion):
-        #         conclusion_str = "{" + ", ".join([str(c) for c in conclusion]) + "}"
-        #     else:
-        #         conclusion_str = "{" + str(conclusion) + "}"
-        # else:
-        func, func_call = get_rule_conclusion_as_source_code(self, conclusion_str, parent_indent=parent_indent)
+    def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[str, str]:
+        func, func_call = super().get_conclusion_as_source_code(str(conclusion), parent_indent=parent_indent)
         conclusion_str = func_call.replace("return ", "").strip()
 
-        statement = f"{indent}conclusions.update(make_set({conclusion_str}))\n"
+        statement = f"{parent_indent}    conclusions.update(make_set({conclusion_str}))\n"
         if self.alternative is None:
             statement += f"{parent_indent}return conclusions\n"
         return func, statement
