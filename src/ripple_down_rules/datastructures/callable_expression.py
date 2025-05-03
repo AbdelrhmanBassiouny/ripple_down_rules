@@ -9,7 +9,7 @@ from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .case import create_case, Case
 from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json, is_iterable, \
-    build_user_input_from_conclusion, encapsulate_user_input
+    build_user_input_from_conclusion, encapsulate_user_input, extract_function_source
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -109,7 +109,7 @@ class CallableExpression(SubclassJSONSerializer):
         if user_input is None:
             user_input = build_user_input_from_conclusion(conclusion)
         self.conclusion: Optional[Any] = conclusion
-        self.user_input: str = encapsulate_user_input(user_input, self.encapsulating_function)
+        self._user_input: str = encapsulate_user_input(user_input, self.encapsulating_function)
         if conclusion_type is not None:
             if is_iterable(conclusion_type):
                 conclusion_type = tuple(conclusion_type)
@@ -155,6 +155,35 @@ class CallableExpression(SubclassJSONSerializer):
                           f"{cond2_user_input}\n"
                           f"return _cond1(case) and _cond2(case)")
         return CallableExpression(new_user_input, conclusion_type=self.conclusion_type)
+
+    def update_user_input_from_file(self, file_path: str, function_name: str):
+        """
+        Update the user input from a file.
+        """
+        new_function_body = extract_function_source(file_path, function_name)
+        if new_function_body is None:
+            return
+        self.user_input = self.encapsulating_function + '\n' + new_function_body
+
+    @property
+    def user_input(self):
+        """
+        Get the user input.
+        """
+        return self._user_input
+
+    @user_input.setter
+    def user_input(self, value: str):
+        """
+        Set the user input.
+        """
+        self._user_input = value
+        if self.user_input is not None:
+            self.scope = get_used_scope(self.user_input, self.scope)
+            self.expression_tree = parse_string_to_expression(self.user_input)
+            self.code = compile_expression_to_code(self.expression_tree)
+            self.visitor = VariableVisitor()
+            self.visitor.visit(self.expression_tree)
 
     def __eq__(self, other):
         """

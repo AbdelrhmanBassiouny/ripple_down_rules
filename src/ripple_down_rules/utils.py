@@ -36,6 +36,45 @@ import ast
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
+def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
+    """
+    Get the imports from the given scope.
+
+    :param scope: The scope to get the imports from.
+    :return: The imports as a string.
+    """
+    imports = []
+    for k, v in scope.items():
+        if not hasattr(v, "__module__") or not hasattr(v, "__name__"):
+            continue
+        imports.append(f"from {v.__module__} import {v.__name__}")
+    return imports
+
+
+def extract_function_source(file_path: str, function_name: str) -> str:
+    """
+    Extract the source code of a function from a file.
+
+    :param file_path: The path to the file.
+    :param function_name: The name of the function to extract.
+    :return: The source code of the function.
+    """
+    with open(file_path, "r") as f:
+        source = f.read()
+
+    # Parse the source code into an AST
+    tree = ast.parse(source)
+
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == function_name:
+            # Get the line numbers of the function
+            start_line = node.lineno
+            end_line = max(getattr(child, 'lineno', start_line) for child in ast.walk(node))
+            lines = source.splitlines()
+            func_lines = lines[start_line - 1:end_line]
+            return "\n".join(func_lines)
+
+
 def encapsulate_user_input(user_input: str, func_signature: str) -> str:
     """
     Encapsulate the user input string with a function definition.

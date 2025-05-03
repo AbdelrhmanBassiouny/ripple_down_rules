@@ -4,25 +4,23 @@ import importlib
 import sys
 from abc import ABC, abstractmethod
 from copy import copy
-from dataclasses import is_dataclass
 from io import TextIOWrapper
 from types import ModuleType
 
 from matplotlib import pyplot as plt
-from ordered_set import OrderedSet
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple, Callable, Set
 
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
-from .datastructures.enums import MCRDRMode, PromptFor
-from .experts import Expert, Human
+from .datastructures.enums import MCRDRMode
+from .experts import Expert
 from .helpers import is_matching
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .utils import draw_tree, make_set, copy_case, \
-    SubclassJSONSerializer, is_iterable, make_list, get_type_from_string, \
-    get_case_attribute_type, is_conflicting, update_case
+    SubclassJSONSerializer, make_list, get_type_from_string, \
+    is_conflicting, update_case, get_imports_from_scope
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -238,31 +236,24 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         """
         :return: The imports for the generated python file of the RDR as a string.
         """
-        defs_imports = ""
+        defs_imports_list = []
         for rule in [self.start_rule] + list(self.start_rule.descendants):
             if not rule.conditions:
                 continue
             for scope in [rule.conditions.scope, rule.conclusion.scope]:
                 if scope is None:
                     continue
-                for k, v in scope.items():
-                    if not hasattr(v, "__module__") or not hasattr(v, "__name__"):
-                        continue
-                    new_imports = f"from {v.__module__} import {v.__name__}\n"
-                    if new_imports in defs_imports:
-                        continue
-                    defs_imports += new_imports
-        imports = ""
+                defs_imports_list.extend(get_imports_from_scope(scope))
+        defs_imports = "\n".join(set(defs_imports_list)) + "\n"
+        imports = []
         if self.case_type.__module__ != "builtins":
-            new_import = f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
-            if new_import not in defs_imports:
-                imports += new_import
+            imports.append(f"from {self.case_type.__module__} import {self.case_type.__name__}")
         for conclusion_type in self.conclusion_type:
             if conclusion_type.__module__ != "builtins":
-                new_import = f"from {conclusion_type.__module__} import {conclusion_type.__name__}\n"
-                if new_import not in defs_imports:
-                    imports += new_import
-        imports += "from ripple_down_rules.datastructures.case import Case, create_case\n"
+                imports.append(f"from {conclusion_type.__module__} import {conclusion_type.__name__}")
+        imports.append("from ripple_down_rules.datastructures.case import Case, create_case")
+        imports = set(imports).difference(defs_imports_list)
+        imports = "\n".join(imports) + "\n"
         return imports, defs_imports
 
     def get_rdr_classifier_from_python_file(self, package_name: str) -> Callable[[Any], Any]:
@@ -492,7 +483,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         return make_set(self.conclusions)
 
     def _fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None
-                 , **kwargs) -> Set[Union[CaseAttribute, CallableExpression, None]]:
+                  , **kwargs) -> Set[Union[CaseAttribute, CallableExpression, None]]:
         """
         Classify a case, and ask the user for stopping rules or classifying rules if the classification is incorrect
          or missing by comparing the case with the target category if provided.
