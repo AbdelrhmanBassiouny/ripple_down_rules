@@ -11,8 +11,8 @@ from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import MCRDRMode
 from ripple_down_rules.experts import Human
-from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set, flatten_list
+from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR, RDRWithCodeWriter
+from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set, flatten_list, extract_function_source
 from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr, get_habitat
 
 
@@ -168,6 +168,37 @@ class TestRDR(TestCase):
         for case, target in zip(self.all_cases, self.targets):
             cat = classify_species_scrdr(case)
             self.assertEqual(cat, target)
+
+    def test_update_rdr_from_python_file(self):
+        scrdr, _ = get_fit_scrdr(self.all_cases, self.targets)
+        scrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_modified")
+        filepath = os.path.join(self.generated_rdrs_dir, f"{scrdr.generated_python_defs_file_name}.py")
+        func_name = f"conditions_{scrdr.start_rule.uid}"
+        first_rule_conditions, line_numbers = extract_function_source(filepath,
+                                                                      func_name,
+                                                                      join_lines=False,
+                                                                      return_line_numbers=True)
+        self.assertEqual(first_rule_conditions[func_name][-1], "    return case.milk == 1")
+        # modify the condition to be case.milk==0
+        with open(filepath, "r") as f:
+            lines = f.readlines()
+        lines[line_numbers[-1][-1]-1] = "    return case.milk == 0\n"
+        with open(filepath, "w") as f:
+            f.writelines(lines)
+        first_rule_conditions, line_numbers = extract_function_source(filepath,
+                                                                      func_name,
+                                                                      join_lines=False,
+                                                                      return_line_numbers=True)
+        self.assertEqual(first_rule_conditions[func_name][-1], "    return case.milk == 0")
+        scrdr: RDRWithCodeWriter
+        scrdr.update_from_python_file(self.generated_rdrs_dir)
+        self.assertEqual(scrdr.start_rule.conditions.user_input.strip().split('\n')[-1].strip(),
+                         "return case.milk == 0")
+        classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(self.generated_rdrs_dir)
+        for case, target in zip(self.all_cases, self.targets):
+            if case.milk == 0:
+                cat = classify_species_scrdr(case)
+                self.assertEqual(cat, Species.mammal)
 
     def test_write_mcrdr_to_python_file(self):
         mcrdr = get_fit_mcrdr(self.all_cases, self.targets)

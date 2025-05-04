@@ -133,7 +133,8 @@ class CustomInteractiveShell(InteractiveShellEmbed):
         if contains_return_statement(raw_cell) and 'def ' not in raw_cell:
             if self.my_magics.func_name in raw_cell:
                 self.all_lines = extract_function_source(self.my_magics.temp_file_path,
-                                                         self.my_magics.func_name, join_lines=False)
+                                                         self.my_magics.func_name,
+                                                         join_lines=False)[self.my_magics.func_name]
             self.all_lines.append(raw_cell)
             print("Exiting shell on `return` statement.")
             self.history_manager.store_inputs(line_num=self.execution_count, source=raw_cell)

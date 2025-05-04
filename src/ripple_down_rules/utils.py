@@ -75,29 +75,77 @@ def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     return imports
 
 
-def extract_function_source(file_path: str, function_name: str, join_lines: bool = True) -> Union[str, List[str]]:
+def extract_imports(file_path):
+    with open(file_path, "r") as f:
+        tree = ast.parse(f.read(), filename=file_path)
+
+    scope = {}
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module_name = alias.name
+                asname = alias.asname or alias.name
+                try:
+                    scope[asname] = importlib.import_module(module_name)
+                except ImportError as e:
+                    print(f"Could not import {module_name}: {e}")
+        elif isinstance(node, ast.ImportFrom):
+            module_name = node.module
+            for alias in node.names:
+                name = alias.name
+                asname = alias.asname or name
+                try:
+                    module = importlib.import_module(module_name)
+                    scope[asname] = getattr(module, name)
+                except (ImportError, AttributeError) as e:
+                    print(f"Could not import {name} from {module_name}: {e}")
+
+    return scope
+
+
+def extract_function_source(file_path: str,
+                            function_names: List[str], join_lines: bool = True,
+                            return_line_numbers: bool = False,
+                            include_signature: bool = True) \
+        -> Union[Dict[str, Union[str, List[str]]],
+        Tuple[Dict[str, Union[str, List[str]]], List[Tuple[int, int]]]]:
     """
     Extract the source code of a function from a file.
 
     :param file_path: The path to the file.
-    :param function_name: The name of the function to extract.
+    :param function_names: The names of the functions to extract.
     :param join_lines: Whether to join the lines of the function.
-    :return: The source code of the function.
+    :param return_line_numbers: Whether to return the line numbers of the function.
+    :param include_signature: Whether to include the function signature in the source code.
+    :return: A dictionary mapping function names to their source code as a string if join_lines is True,
+     otherwise as a list of strings.
     """
     with open(file_path, "r") as f:
         source = f.read()
 
     # Parse the source code into an AST
     tree = ast.parse(source)
-
+    function_names = make_list(function_names)
+    functions_source: Dict[str, Union[str, List[str]]] = {}
+    line_numbers = []
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name == function_name:
+        if isinstance(node, ast.FunctionDef) and node.name in function_names:
             # Get the line numbers of the function
-            start_line = node.lineno
-            end_line = max(getattr(child, 'lineno', start_line) for child in ast.walk(node))
             lines = source.splitlines()
-            func_lines = lines[start_line - 1:end_line]
-            return "\n".join(func_lines) if join_lines else func_lines
+            func_lines = lines[node.lineno - 1:node.end_lineno]
+            if not include_signature:
+                func_lines = func_lines[1:]
+            line_numbers.append((node.lineno, node.end_lineno))
+            functions_source[node.name] = "\n".join(func_lines) if join_lines else func_lines
+            if len(functions_source) == len(function_names):
+                break
+    if len(functions_source) != len(function_names):
+        raise ValueError(f"Could not find all functions in {file_path}: {function_names} not found,"
+                         f"functions not found: {set(function_names) - set(functions_source.keys())}")
+    if return_line_numbers:
+        return functions_source, line_numbers
+    return functions_source
 
 
 def encapsulate_user_input(user_input: str, func_signature: str) -> str:

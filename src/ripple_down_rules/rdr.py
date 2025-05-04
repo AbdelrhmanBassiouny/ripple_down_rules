@@ -20,7 +20,7 @@ from .helpers import is_matching
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .utils import draw_tree, make_set, copy_case, \
     SubclassJSONSerializer, make_list, get_type_from_string, \
-    is_conflicting, update_case, get_imports_from_scope
+    is_conflicting, update_case, get_imports_from_scope, extract_function_source
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -167,23 +167,61 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                 self.fig = plt.figure(0)
             draw_tree(self.start_rule, self.fig)
 
-    @staticmethod
-    def case_has_conclusion(case: Union[Case, SQLTable], conclusion_name: str) -> bool:
-        """
-        Check if the case has a conclusion.
-
-        :param case: The case to check.
-        :param conclusion_name: The target category name to compare the case with.
-        :return: Whether the case has a conclusion or not.
-        """
-        return hasattr(case, conclusion_name) and getattr(case, conclusion_name) is not None
-
     @property
     def type_(self):
         return self.__class__
 
+    @property
+    def generated_python_file_name(self) -> str:
+        if self._generated_python_file_name is None:
+            self._generated_python_file_name = self._default_generated_python_file_name
+        return self._generated_python_file_name
+
+    @generated_python_file_name.setter
+    def generated_python_file_name(self, value: str):
+        """
+        Set the generated python file name.
+        :param value: The new value for the generated python file name.
+        """
+        self._generated_python_file_name = value
+
+    @property
+    @abstractmethod
+    def _default_generated_python_file_name(self) -> str:
+        """
+        :return: The default generated python file name.
+        """
+        pass
+
+    @abstractmethod
+    def update_from_python_file(self, package_dir: str):
+        """
+        Update the rules from the generated python file, that might have been modified by the user.
+
+        :param package_dir: The directory of the package that contains the generated python file.
+        """
+        pass
+
 
 class RDRWithCodeWriter(RippleDownRules, ABC):
+
+    def update_from_python_file(self, package_dir: str):
+        """
+        Update the rules from the generated python file, that might have been modified by the user.
+
+        :param package_dir: The directory of the package that contains the generated python file.
+        """
+        rule_ids = [r.uid for r in [self.start_rule] + list(self.start_rule.descendants) if r.conditions is not None]
+        condition_func_names = [f'conditions_{rid}' for rid in rule_ids]
+        conclusion_func_names = [f'conclusion_{rid}' for rid in rule_ids]
+        all_func_names = condition_func_names + conclusion_func_names
+        filepath = f"{package_dir}/{self.generated_python_defs_file_name}.py"
+        functions_source = extract_function_source(filepath, all_func_names, include_signature=False)
+        for rule in [self.start_rule] + list(self.start_rule.descendants):
+            if rule.conditions is not None:
+                rule.conditions.user_input = functions_source[f"conditions_{rule.uid}"]
+            if rule.conclusion is not None:
+                rule.conclusion.user_input = functions_source[f"conclusion_{rule.uid}"]
 
     @abstractmethod
     def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = "",
@@ -269,20 +307,6 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         except ModuleNotFoundError:
             pass
         return importlib.import_module(name).classify
-
-    @property
-    def generated_python_file_name(self) -> str:
-        if self._generated_python_file_name is None:
-            self._generated_python_file_name = self._default_generated_python_file_name
-        return self._generated_python_file_name
-
-    @generated_python_file_name.setter
-    def generated_python_file_name(self, value: str):
-        """
-        Set the generated python file name.
-        :param value: The new value for the generated python file name.
-        """
-        self._generated_python_file_name = value
 
     @property
     def _default_generated_python_file_name(self) -> str:
@@ -817,6 +841,15 @@ class GeneralRDR(RippleDownRules):
             start_rules_dict[k] = get_type_from_string(v['_type']).from_json(v)
         return cls(start_rules_dict)
 
+    def update_from_python_file(self, package_dir: str) -> None:
+        """
+        Update the rules from the generated python file, that might have been modified by the user.
+
+        :param package_dir: The directory of the package that contains the generated python file.
+        """
+        for rdr in self.start_rules_dict.values():
+            rdr.update_from_python_file(package_dir)
+
     def write_to_python_file(self, file_path: str, postfix: str = "") -> None:
         """
         Write the tree of rules as source code to a file.
@@ -852,20 +885,9 @@ class GeneralRDR(RippleDownRules):
     def get_rdr_classifier_from_python_file(self, file_path: str) -> Callable[[Any], Any]:
         """
         :param file_path: The path to the file that contains the RDR classifier function.
-        :param postfix: The postfix to add to the file name.
         :return: The module that contains the rdr classifier function.
         """
         return importlib.import_module(f"{file_path.strip('./')}.{self.generated_python_file_name}").classify
-
-    @property
-    def generated_python_file_name(self) -> str:
-        if self._generated_python_file_name is None:
-            self._generated_python_file_name = self._default_generated_python_file_name
-        return self._generated_python_file_name
-
-    @generated_python_file_name.setter
-    def generated_python_file_name(self, value: str):
-        self._generated_python_file_name = value
 
     @property
     def _default_generated_python_file_name(self) -> str:

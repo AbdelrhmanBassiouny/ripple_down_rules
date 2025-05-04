@@ -160,7 +160,7 @@ class CallableExpression(SubclassJSONSerializer):
         """
         Update the user input from a file.
         """
-        new_function_body = extract_function_source(file_path, function_name)
+        new_function_body = extract_function_source(file_path, [function_name])[function_name]
         if new_function_body is None:
             return
         self.user_input = self.encapsulating_function + '\n' + new_function_body
@@ -177,8 +177,8 @@ class CallableExpression(SubclassJSONSerializer):
         """
         Set the user input.
         """
-        self._user_input = value
-        if self.user_input is not None:
+        if value is not None:
+            self._user_input = encapsulate_user_input(value, self.encapsulating_function)
             self.scope = get_used_scope(self.user_input, self.scope)
             self.expression_tree = parse_string_to_expression(self.user_input)
             self.code = compile_expression_to_code(self.expression_tree)
