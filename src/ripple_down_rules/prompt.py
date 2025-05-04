@@ -178,26 +178,38 @@ class IPythonShell:
         Initialize the Ipython shell with a custom configuration.
         """
         cfg = Config()
-        func_name, func_doc = self.build_func_name(), self.build_func_doc()
+        func_name, func_doc = self.build_func_name_and_doc()
         shell = CustomInteractiveShell(config=cfg, user_ns=self.scope, banner1=self.header,
                                        output_type=self.output_type, func_name=func_name, func_doc=func_doc)
         return shell
 
-    def build_func_doc(self):
-        func_doc = self.header
-        if self.prompt_for == PromptFor.Conclusion:
-            if is_iterable(self.output_type):
-                possible_types = [t.__name__ for t in self.output_type if t not in [list, set]]
-                func_doc = (f"{self.header}. Possible types are a list/set of: "
-                            f"{' and/or '.join(possible_types)}")
-            else:
-                func_doc = f"{self.header}. Possible type is {self.output_type.__name__}"
-        return func_doc
+    def build_func_name_and_doc(self) -> Tuple[str, str]:
+        """
+        Build the function name and docstring for the user-defined function.
 
-    def build_func_name(self):
-        func_name = f"get_{self.prompt_for.value.lower()}_for"
+        :return: A tuple containing the function name and docstring.
+        """
         case = self.scope['case']
         case_type = case._obj_type if isinstance(case, Case) else type(case)
+        func_name = self.build_func_name(case_type)
+        func_doc = self.build_func_doc(case_type)
+        return func_name, func_doc
+
+    def build_func_doc(self, case_type: Type):
+        if self.prompt_for == PromptFor.Conditions:
+            func_doc = (f"Get conditions on whether it's possible to conclude a value"
+                        f" for {case_type.__name__}.{self.attribute_name}")
+        else:
+            func_doc = f"Get possible value(s) for {case_type.__name__}.{self.attribute_name}"
+        if is_iterable(self.attribute_type):
+            possible_types = [t.__name__ for t in self.attribute_type if t not in [list, set]]
+            func_doc += f" of types list/set of {' and/or '.join(possible_types)}"
+        else:
+            func_doc += f" of type {self.attribute_type.__name__}"
+        return func_doc
+
+    def build_func_name(self, case_type: Type):
+        func_name = f"get_{self.prompt_for.value.lower()}_for"
         func_name += f"_{case_type.__name__}"
         if self.attribute_name is not None:
             func_name += f"_{self.attribute_name}"
