@@ -100,11 +100,12 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         return self.classify(case)
 
     @abstractmethod
-    def classify(self, case: Union[Case, SQLTable]) -> Optional[CaseAttribute]:
+    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False) -> Optional[CaseAttribute]:
         """
         Classify a case.
 
         :param case: The case to classify.
+        :param modify_case: Whether to modify the original case attributes with the conclusion or not.
         :return: The category that the case belongs to.
         """
         pass
@@ -122,7 +123,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if case_query is None:
             raise ValueError("The case query cannot be None.")
         if case_query.target is None:
-            expert.ask_for_conclusion(case_query)
+            case_query_cp = copy(case_query)
+            self.classify(case_query_cp.case, modify_case=True)
+            expert.ask_for_conclusion(case_query_cp)
+            case_query.target = case_query_cp.target
             if case_query.target is None:
                 return self.classify(case_query.case)
 
@@ -405,12 +409,12 @@ class SingleClassRDR(RDRWithCodeWriter):
             self.start_rule = SingleClassRule(case_query.conditions, case_query.target, corner_case=case_query.case,
                                               conclusion_name=case_query.attribute_name)
 
-    def classify(self, case: Case, modify_original_case: bool = False) -> Optional[Any]:
+    def classify(self, case: Case, modify_case: bool = False) -> Optional[Any]:
         """
         Classify a case by recursively evaluating the rules until a rule fires or the last rule is reached.
 
         :param case: The case to classify.
-        :param modify_original_case: Whether to modify the original case attributes with the conclusion or not.
+        :param modify_case: Whether to modify the original case attributes with the conclusion or not.
         """
         pred = self.evaluate(case)
         return pred.conclusion(case) if pred is not None and pred.fired else self.default_conclusion
@@ -496,7 +500,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         super(MultiClassRDR, self).__init__(start_rule)
         self.mode: MCRDRMode = mode
 
-    def classify(self, case: Union[Case, SQLTable]) -> Set[Any]:
+    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False) -> Set[Any]:
         evaluated_rule = self.start_rule
         self.conclusions = []
         while evaluated_rule:
@@ -519,13 +523,13 @@ class MultiClassRDR(RDRWithCodeWriter):
         self.conclusions = []
         self.stop_rule_conditions = None
         evaluated_rule = self.start_rule
-        target = make_set(case_query.target_value)
+        target_value = make_set(case_query.target_value)
         while evaluated_rule:
             next_rule = evaluated_rule(case_query.case)
             rule_conclusion = evaluated_rule.conclusion(case_query.case)
 
             if evaluated_rule.fired:
-                if not make_set(rule_conclusion).issubset(target):
+                if not make_set(rule_conclusion).issubset(target_value):
                     # Rule fired and conclusion is different from target
                     self.stop_wrong_conclusion_else_add_it(case_query, expert, evaluated_rule)
                 else:
@@ -533,7 +537,7 @@ class MultiClassRDR(RDRWithCodeWriter):
                     self.add_conclusion(evaluated_rule, case_query.case)
 
             if not next_rule:
-                if not make_set(target).issubset(make_set(self.conclusions)):
+                if not make_set(target_value).issubset(make_set(self.conclusions)):
                     # Nothing fired and there is a target that should have been in the conclusions
                     self.add_rule_for_case(case_query, expert)
                     # Have to check all rules again to make sure only this new rule fires
@@ -606,6 +610,8 @@ class MultiClassRDR(RDRWithCodeWriter):
         rule_conclusion = evaluated_rule.conclusion(case_query.case)
         if is_conflicting(rule_conclusion, case_query.target_value):
             self.stop_conclusion(case_query, expert, evaluated_rule)
+        else:
+            self.add_conclusion(evaluated_rule, case_query.case)
 
     def stop_conclusion(self, case_query: CaseQuery,
                         expert: Expert, evaluated_rule: MultiClassTopRule):

@@ -844,9 +844,12 @@ def copy_orm_instance(instance: SQLTable) -> SQLTable:
     :return: The copied instance.
     """
     session: Session = inspect(instance).session
-    session.expunge(instance)
-    new_instance = deepcopy(instance)
-    session.add(instance)
+    if session is not None:
+        session.expunge(instance)
+        new_instance = deepcopy(instance)
+        session.add(instance)
+    else:
+        new_instance = instance
     return new_instance
 
 
