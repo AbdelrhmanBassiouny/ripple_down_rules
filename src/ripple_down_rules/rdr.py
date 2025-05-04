@@ -547,12 +547,9 @@ class MultiClassRDR(RDRWithCodeWriter):
 
     def _get_imports(self) -> Tuple[str, str]:
         imports, defs_imports = super()._get_imports()
-        conclusion_types = [ct for ct in self.conclusion_type if ct not in [list, set]]
-        if len(conclusion_types) == 1:
-            imports += f"from typing_extensions import Set\n"
-        else:
-            imports += "from typing_extensions import Set, Union\n"
+        imports += f"from typing_extensions import Set\n"
         imports += "from ripple_down_rules.utils import make_set\n"
+        defs_imports += "from typing_extensions import Union\n"
         return imports, defs_imports
 
     def update_start_rule(self, case_query: CaseQuery, expert: Expert):

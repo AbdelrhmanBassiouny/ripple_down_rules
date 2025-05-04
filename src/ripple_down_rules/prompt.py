@@ -9,13 +9,15 @@ from functools import cached_property
 from IPython.core.magic import register_line_magic, line_magic, Magics, magics_class
 from IPython.terminal.embed import InteractiveShellEmbed
 from traitlets.config import Config
-from typing_extensions import List, Optional, Tuple, Dict, Type
+from typing_extensions import List, Optional, Tuple, Dict, Type, Union
 
 from .datastructures.enums import PromptFor
 from .datastructures.case import Case
 from .datastructures.callable_expression import CallableExpression, parse_string_to_expression
 from .datastructures.dataclasses import CaseQuery
-from .utils import extract_dependencies, contains_return_statement, make_set, get_imports_from_scope
+from .utils import extract_dependencies, contains_return_statement, make_set, get_imports_from_scope, make_list, \
+    get_import_from_type, get_imports_from_types, is_iterable, extract_function_source
+
 
 @magics_class
 class MyMagics(Magics):
@@ -26,7 +28,7 @@ class MyMagics(Magics):
         self.temp_file_path = None
         self.func_name = func_name
         self.func_doc = func_doc
-        self.output_type = output_type
+        self.output_type = make_list(output_type) if output_type is not None else None
         self.user_edit_line = 0
 
     @line_magic
@@ -41,7 +43,12 @@ class MyMagics(Magics):
 
     def build_boilerplate_code(self):
         imports = self.get_imports()
-        output_type_hint = f" -> {self.output_type.__name__}" if self.output_type else ""
+        if self.output_type is None:
+            output_type_hint = ""
+        elif len(self.output_type) == 1:
+            output_type_hint = f" -> {self.output_type[0].__name__}"
+        else:
+            output_type_hint = f" -> Union[{', '.join([t.__name__ for t in self.output_type])}]"
         boilerplate = f"""{imports}\n\n
 def {self.func_name}(case: {self.case_type.__name__}){output_type_hint}:
     \"\"\"{self.func_doc}\"\"\"
@@ -52,7 +59,8 @@ def {self.func_name}(case: {self.case_type.__name__}){output_type_hint}:
         return boilerplate
 
     def write_to_file(self, code: str):
-        tmp = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".py")
+        tmp = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".py",
+                                          dir=os.path.dirname(self.scope['__file__']))
         tmp.write(code)
         tmp.flush()
         self.temp_file_path = tmp.name
@@ -61,15 +69,17 @@ def {self.func_name}(case: {self.case_type.__name__}){output_type_hint}:
     def get_imports(self):
         case_type_import = f"from {self.case_type.__module__} import {self.case_type.__name__}"
         if self.output_type is None:
-            output_type_import = f"from typing_extensions import Any"
+            output_type_imports = [f"from typing_extensions import Any"]
         else:
-            output_type_import = f"from {self.output_type.__module__} import {self.output_type.__name__}"
+            output_type_imports = get_imports_from_types(self.output_type)
+            if len(self.output_type) > 1:
+                output_type_imports.append("from typing_extensions import Union")
+        print(output_type_imports)
         imports = get_imports_from_scope(self.scope)
         imports = [i for i in imports if ("get_ipython" not in i)]
         if case_type_import not in imports:
             imports.append(case_type_import)
-        if output_type_import not in imports:
-            imports.append(output_type_import)
+        imports.extend([oti for oti in output_type_imports if oti not in imports])
         imports = set(imports)
         return '\n'.join(imports)
 
@@ -81,10 +91,7 @@ def {self.func_name}(case: {self.case_type.__name__}){output_type_hint}:
         :return: The type of the case object.
         """
         case = self.scope['case']
-        if isinstance(case, Case):
-            return case._obj_type
-        else:
-            return type(case)
+        return case._obj_type if isinstance(case, Case) else type(case)
 
     @line_magic
     def load_case(self, line):
@@ -109,19 +116,24 @@ def {self.func_name}(case: {self.case_type.__name__}){output_type_hint}:
 
 
 class CustomInteractiveShell(InteractiveShellEmbed):
-    def __init__(self, **kwargs):
+    def __init__(self, output_type: Union[Type, Tuple[Type], None] = None, func_name: Optional[str] = None,
+                 func_doc: Optional[str] = None, **kwargs):
         super().__init__(**kwargs)
         keys = ['output_type', 'func_name', 'func_doc']
-        values = [kwargs.get(key, None) for key in keys]
+        values = [output_type, func_name, func_doc]
         magics_kwargs = {key: value for key, value in zip(keys, values) if value is not None}
-        self.register_magics(MyMagics(self, self.user_ns, **magics_kwargs))
+        self.my_magics = MyMagics(self, self.user_ns, **magics_kwargs)
+        self.register_magics(self.my_magics)
         self.all_lines = []
 
     def run_cell(self, raw_cell: str, **kwargs):
         """
         Override the run_cell method to capture return statements.
         """
-        if contains_return_statement(raw_cell):
+        if contains_return_statement(raw_cell) and 'def ' not in raw_cell:
+            if self.my_magics.func_name in raw_cell:
+                self.all_lines = extract_function_source(self.my_magics.temp_file_path,
+                                                         self.my_magics.func_name, join_lines=False)
             self.all_lines.append(raw_cell)
             print("Exiting shell on `return` statement.")
             self.history_manager.store_inputs(line_num=self.execution_count, source=raw_cell)
@@ -139,7 +151,8 @@ class IPythonShell:
     """
 
     def __init__(self, scope: Optional[Dict] = None, header: Optional[str] = None,
-                 output_type: Optional[Type] = None, prompt_for: Optional[PromptFor] = None):
+                 output_type: Optional[Type] = None, prompt_for: Optional[PromptFor] = None,
+                 attribute_name: Optional[str] = None, attribute_type: Optional[Type] = None):
         """
         Initialize the Ipython shell with the given scope and header.
 
@@ -147,11 +160,15 @@ class IPythonShell:
         :param header: The header to display when the shell is started.
         :param output_type: The type of the output from user input.
         :param prompt_for: The type of information to ask the user about.
+        :param attribute_name: The name of the attribute of the case.
+        :param attribute_type: The type of the attribute of the case.
         """
         self.scope: Dict = scope or {}
         self.header: str = header or ">>> Embedded Ipython Shell"
         self.output_type: Optional[Type] = output_type
         self.prompt_for: Optional[PromptFor] = prompt_for
+        self.attribute_name: Optional[str] = attribute_name
+        self.attribute_type: Optional[Type] = attribute_type
         self.user_input: Optional[str] = None
         self.shell: CustomInteractiveShell = self._init_shell()
         self.all_code_lines: List[str] = []
@@ -161,15 +178,36 @@ class IPythonShell:
         Initialize the Ipython shell with a custom configuration.
         """
         cfg = Config()
-        func_name = None
-        func_doc = self.header
-        if self.prompt_for == PromptFor.Conditions:
-            func_name = "get_conditions_for_case"
-        elif self.prompt_for == PromptFor.Conclusion:
-            func_name = "get_conclusion_for_case"
+        func_name, func_doc = self.build_func_name(), self.build_func_doc()
         shell = CustomInteractiveShell(config=cfg, user_ns=self.scope, banner1=self.header,
                                        output_type=self.output_type, func_name=func_name, func_doc=func_doc)
         return shell
+
+    def build_func_doc(self):
+        func_doc = self.header
+        if self.prompt_for == PromptFor.Conclusion:
+            if is_iterable(self.output_type):
+                possible_types = [t.__name__ for t in self.output_type if t not in [list, set]]
+                func_doc = (f"{self.header}. Possible types are a list/set of: "
+                            f"{' and/or '.join(possible_types)}")
+            else:
+                func_doc = f"{self.header}. Possible type is {self.output_type.__name__}"
+        return func_doc
+
+    def build_func_name(self):
+        func_name = f"get_{self.prompt_for.value.lower()}_for"
+        case = self.scope['case']
+        case_type = case._obj_type if isinstance(case, Case) else type(case)
+        func_name += f"_{case_type.__name__}"
+        if self.attribute_name is not None:
+            func_name += f"_{self.attribute_name}"
+        if is_iterable(self.attribute_type):
+            output_names = [f"{t.__name__}" for t in self.attribute_type if t not in [list, set]]
+        else:
+            output_names = [self.attribute_type.__name__] if self.attribute_type is not None else None
+        if output_names is not None:
+            func_name += '_of_type_' + '_'.join(output_names)
+        return func_name.lower()
 
     def run(self):
         """
@@ -243,7 +281,8 @@ def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor,
         prompt_str = f"Give {prompt_for} for {case_query.name}"
     scope = {'case': case_query.case, **case_query.scope}
     output_type = case_query.attribute_type if prompt_for == PromptFor.Conclusion else bool
-    shell = IPythonShell(scope=scope, header=prompt_str, output_type=output_type, prompt_for=prompt_for)
+    shell = IPythonShell(scope=scope, header=prompt_str, output_type=output_type, prompt_for=prompt_for,
+                         attribute_name=case_query.attribute_name, attribute_type=case_query.attribute_type)
     return prompt_user_input_and_parse_to_expression(shell=shell)
 
 

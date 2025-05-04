@@ -59,7 +59,7 @@ class PromptFor(Enum):
     """
     Prompt for rule conditions about a case.
     """
-    Conclusion: str = "conclusion"
+    Conclusion: str = "value"
     """
     Prompt for rule conclusion about a case.
     """

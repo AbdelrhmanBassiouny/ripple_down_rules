@@ -36,6 +36,30 @@ import ast
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
+def get_imports_from_types(types: List[Type]) -> List[str]:
+    """
+    Get the import statements for a list of types.
+
+    :param types: The types to get the import statements for.
+    :return: The import statements as a string.
+    """
+    imports = map(get_import_from_type, types)
+    return list({i for i in imports if i is not None})
+
+
+def get_import_from_type(type_: Type) -> Optional[str]:
+    """
+    Get the import statement for a given type.
+
+    :param type_: The type to get the import statement for.
+    :return: The import statement as a string.
+    """
+    if hasattr(type_, "__module__") and hasattr(type_, "__name__"):
+        if type_.__module__ == "builtins":
+            return
+        return f"from {type_.__module__} import {type_.__name__}"
+
+
 def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     """
     Get the imports from the given scope.
@@ -51,12 +75,13 @@ def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     return imports
 
 
-def extract_function_source(file_path: str, function_name: str) -> str:
+def extract_function_source(file_path: str, function_name: str, join_lines: bool = True) -> Union[str, List[str]]:
     """
     Extract the source code of a function from a file.
 
     :param file_path: The path to the file.
     :param function_name: The name of the function to extract.
+    :param join_lines: Whether to join the lines of the function.
     :return: The source code of the function.
     """
     with open(file_path, "r") as f:
@@ -72,7 +97,7 @@ def extract_function_source(file_path: str, function_name: str) -> str:
             end_line = max(getattr(child, 'lineno', start_line) for child in ast.walk(node))
             lines = source.splitlines()
             func_lines = lines[start_line - 1:end_line]
-            return "\n".join(func_lines)
+            return "\n".join(func_lines) if join_lines else func_lines
 
 
 def encapsulate_user_input(user_input: str, func_signature: str) -> str:
@@ -333,7 +358,13 @@ def extract_dependencies(code_lines):
 
     for stmt in reversed(tree.body[:-1]):
         if handle_stmt(stmt, needed):
-            required_lines.insert(0, code_lines[line_map[id(stmt)]])
+            # check if the statement is a function, if so then all its lines not just the line in line_map are needed.
+            if isinstance(stmt, ast.FunctionDef):
+                start_code_line = line_map[id(stmt)]
+                end_code_line = start_code_line + stmt.end_lineno
+                required_lines.extend(code_lines[start_code_line:end_code_line])
+            else:
+                required_lines.insert(0, code_lines[line_map[id(stmt)]])
 
     required_lines.append(code_lines[-1])  # Always include return
     return required_lines
