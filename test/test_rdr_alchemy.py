@@ -128,7 +128,7 @@ class TestAlchemyRDR(TestCase):
         case_queries = []
         for case, targets in zip(self.all_cases[:n], habitat_targets):
             for attr, target in targets.items():
-                case_queries.append(CaseQuery(case, attr, (Species,) if attr == 'species' else (Habitat,),
+                case_queries.append(CaseQuery(case, attr, (Species,) if attr == 'species' else (HabitatTable,),
                                               True if attr == 'species' else False, _target=target))
         grdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
         for rule in grdr.start_rules:

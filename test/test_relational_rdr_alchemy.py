@@ -7,6 +7,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import MappedAsDataclass, DeclarativeBase, declared_attr, Mapped, mapped_column, relationship
 from typing_extensions import List, Any, Set
 
+from ripple_down_rules.datastructures.case import CaseAttribute
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.callable_expression import CallableExpression
 from ripple_down_rules.experts import Human
@@ -170,7 +171,7 @@ class RelationalRDRTestCase(TestCase):
 
     def test_parse_relational_conclusions(self):
         user_input = "case.parts.contained_objects"
-        conclusion = CallableExpression(user_input, list)
+        conclusion = CallableExpression(user_input, (CaseAttribute, PhysicalObject,))
         print(conclusion)
         print(conclusion(self.robot))
         assert conclusion(self.robot) == self.target
