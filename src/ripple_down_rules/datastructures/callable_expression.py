@@ -134,6 +134,8 @@ class CallableExpression(SubclassJSONSerializer):
                 if output is None:
                     output = scope['_get_value'](case)
                 if self.conclusion_type is not None:
+                    if not any([issubclass(ct, (list, set)) for ct in self.conclusion_type]) and is_iterable(output):
+                        raise ValueError(f"Expected output to be {self.conclusion_type}, but got {type(output)}")
                     output_types = {type(o) for o in make_list(output)}
                     output_types.add(type(output))
                     if not are_results_subclass_of_types(output_types, self.conclusion_type):

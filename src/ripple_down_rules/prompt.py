@@ -9,6 +9,9 @@ from textwrap import indent, dedent
 
 from IPython.core.magic import register_line_magic, line_magic, Magics, magics_class
 from IPython.terminal.embed import InteractiveShellEmbed
+from pygments import highlight
+from pygments.formatters.terminal import TerminalFormatter
+from pygments.lexers.python import PythonLexer
 from traitlets.config import Config
 from typing_extensions import List, Optional, Tuple, Dict, Type, Union, Any
 
@@ -19,33 +22,40 @@ from .datastructures.dataclasses import CaseQuery
 from .utils import extract_dependencies, contains_return_statement, make_set, get_imports_from_scope, make_list, \
     get_import_from_type, get_imports_from_types, is_iterable, extract_function_source, encapsulate_user_input, \
     are_results_subclass_of_types
+from colorama import Fore, Style, init
 
 
 @magics_class
 class MyMagics(Magics):
     def __init__(self, shell, scope, output_type: Optional[Type] = None, func_name: str = "user_case",
                  func_doc: str = "User defined function to be executed on the case.",
-                 code_to_modify: Optional[str] = None):
+                 code_to_modify: Optional[str] = None,
+                 attribute_type_hint: Optional[str] = None,
+                 prompt_for: Optional[PromptFor] = None):
         super().__init__(shell)
         self.scope = scope
         self.temp_file_path = None
         self.func_name = func_name
         self.func_doc = func_doc
         self.code_to_modify = code_to_modify
+        self.attribute_type_hint = attribute_type_hint
+        self.prompt_for = prompt_for
         self.output_type = make_list(output_type) if output_type is not None else None
         self.user_edit_line = 0
         self.function_signature: Optional[str] = None
         self.build_function_signature()
 
     @line_magic
-    def edit_case(self, line):
+    def edit(self, line):
 
         boilerplate_code = self.build_boilerplate_code()
 
         self.write_to_file(boilerplate_code)
 
         print(f"Opening {self.temp_file_path} in PyCharm...")
-        subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path])
+        subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
+                         stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
 
     def build_boilerplate_code(self):
         imports = self.get_imports()
@@ -59,12 +69,11 @@ class MyMagics(Magics):
         return boilerplate
 
     def build_function_signature(self):
-        if self.output_type is None:
-            output_type_hint = ""
-        elif len(self.output_type) == 1:
-            output_type_hint = f" -> {self.output_type[0].__name__}"
-        else:
-            output_type_hint = f" -> Union[{', '.join([t.__name__ for t in self.output_type])}]"
+        output_type_hint = ""
+        if self.prompt_for == PromptFor.Conditions:
+            output_type_hint = " -> bool"
+        elif self.prompt_for == PromptFor.Conclusion:
+            output_type_hint = f" -> {self.attribute_type_hint}"
         self.function_signature = f"def {self.func_name}(case: {self.case_type.__name__}){output_type_hint}:"
 
     def write_to_file(self, code: str):
@@ -83,7 +92,8 @@ class MyMagics(Magics):
             output_type_imports = get_imports_from_types(self.output_type)
             if len(self.output_type) > 1:
                 output_type_imports.append("from typing_extensions import Union")
-        print(output_type_imports)
+            if list in self.output_type:
+                output_type_imports.append("from typing_extensions import List")
         imports = get_imports_from_scope(self.scope)
         imports = [i for i in imports if ("get_ipython" not in i)]
         if case_type_import not in imports:
@@ -103,9 +113,9 @@ class MyMagics(Magics):
         return case._obj_type if isinstance(case, Case) else type(case)
 
     @line_magic
-    def load_case(self, line):
+    def load(self, line):
         if not self.temp_file_path:
-            print("No file to load. Run %edit_case first.")
+            print(f"{Fore.RED}ERROR:: No file to load. Run %edit first.{Style.RESET_ALL}")
             return
 
         with open(self.temp_file_path, 'r') as f:
@@ -118,18 +128,36 @@ class MyMagics(Magics):
                 exec(source, self.scope, exec_globals)
                 user_function = exec_globals[self.func_name]
                 self.shell.user_ns[self.func_name] = user_function
-                print(f"Loaded `{self.func_name}` function into user namespace.")
+                print(f"{Fore.BLUE}Loaded `{self.func_name}` function into user namespace.{Style.RESET_ALL}")
                 return
 
-        print(f"Function `{self.func_name}` not found.")
+        print(f"{Fore.RED}ERROR:: Function `{self.func_name}` not found.{Style.RESET_ALL}")
+
+    @line_magic
+    def help(self, line):
+        """
+        Display help information for the Ipython shell.
+        """
+        help_text = f"""
+Directly write python code in the shell, and then `{Fore.GREEN}return {Fore.RESET}output`. Or use 
+the magic commands to write the code in a temporary file and edit it in PyCharm:
+{Fore.MAGENTA}Usage: %edit{Style.RESET_ALL}
+Opens a temporary file in PyCharm for editing a function (conclusion or conditions for case)
+ that will be executed on the case object.
+{Fore.MAGENTA}Usage: %load{Style.RESET_ALL}
+Loads the function defined in the temporary file into the user namespace, that can then be used inside the
+ Ipython shell. You can then do `{Fore.GREEN}return {Fore.RESET}function_name(case)`.
+        """
+        print(help_text)
 
 
 class CustomInteractiveShell(InteractiveShellEmbed):
     def __init__(self, output_type: Union[Type, Tuple[Type], None] = None, func_name: Optional[str] = None,
-                 func_doc: Optional[str] = None, code_to_modify: Optional[str] = None, **kwargs):
+                 func_doc: Optional[str] = None, code_to_modify: Optional[str] = None,
+                 attribute_type_hint: Optional[str] = None, prompt_for: Optional[PromptFor] = None, **kwargs):
         super().__init__(**kwargs)
-        keys = ['output_type', 'func_name', 'func_doc', 'code_to_modify']
-        values = [output_type, func_name, func_doc, code_to_modify]
+        keys = ['output_type', 'func_name', 'func_doc', 'code_to_modify', 'attribute_type_hint', 'prompt_for']
+        values = [output_type, func_name, func_doc, code_to_modify, attribute_type_hint, prompt_for]
         magics_kwargs = {key: value for key, value in zip(keys, values) if value is not None}
         self.my_magics = MyMagics(self, self.user_ns, **magics_kwargs)
         self.register_magics(self.my_magics)
@@ -145,7 +173,6 @@ class CustomInteractiveShell(InteractiveShellEmbed):
                                                          self.my_magics.func_name,
                                                          join_lines=False)[self.my_magics.func_name]
             self.all_lines.append(raw_cell)
-            print("Exiting shell on `return` statement.")
             self.history_manager.store_inputs(line_num=self.execution_count, source=raw_cell)
             self.ask_exit()
             return None
@@ -161,26 +188,28 @@ class IPythonShell:
     """
 
     def __init__(self, scope: Optional[Dict] = None, header: Optional[str] = None,
-                 output_type: Optional[Type] = None, prompt_for: Optional[PromptFor] = None,
-                 attribute_name: Optional[str] = None, attribute_type: Optional[Type] = None,
+                 prompt_for: Optional[PromptFor] = None, case_query: Optional[CaseQuery] = None,
                  code_to_modify: Optional[str] = None):
         """
         Initialize the Ipython shell with the given scope and header.
 
         :param scope: The scope to use for the shell.
         :param header: The header to display when the shell is started.
-        :param output_type: The type of the output from user input.
         :param prompt_for: The type of information to ask the user about.
-        :param attribute_name: The name of the attribute of the case.
-        :param attribute_type: The type of the attribute of the case.
+        :param case_query: The case query which contains the case and the attribute to ask about.
         :param code_to_modify: The code to modify. If given, will be used as a start for user to modify.
         """
         self.scope: Dict = scope or {}
         self.header: str = header or ">>> Embedded Ipython Shell"
+        output_type = None
+        if prompt_for is not None:
+            if prompt_for == PromptFor.Conclusion and case_query is not None:
+                output_type = case_query.attribute_type
+            elif prompt_for == PromptFor.Conditions:
+                output_type = bool
+        self.case_query: Optional[CaseQuery] = case_query
         self.output_type: Optional[Type] = output_type
         self.prompt_for: Optional[PromptFor] = prompt_for
-        self.attribute_name: Optional[str] = attribute_name
-        self.attribute_type: Optional[Type] = attribute_type
         self.code_to_modify: Optional[str] = code_to_modify
         self.user_input: Optional[str] = None
         self.func_name: str = ""
@@ -196,7 +225,9 @@ class IPythonShell:
         self.build_func_name_and_doc()
         shell = CustomInteractiveShell(config=cfg, user_ns=self.scope, banner1=self.header,
                                        output_type=self.output_type, func_name=self.func_name, func_doc=self.func_doc,
-                                       code_to_modify=self.code_to_modify)
+                                       code_to_modify=self.code_to_modify,
+                                       attribute_type_hint=self.case_query.attribute_type_hint,
+                                       prompt_for=self.prompt_for)
         return shell
 
     def build_func_name_and_doc(self) -> Tuple[str, str]:
@@ -210,31 +241,38 @@ class IPythonShell:
         self.func_name = self.build_func_name(case_type)
         self.func_doc = self.build_func_doc(case_type)
 
-    def build_func_doc(self, case_type: Type):
+    def build_func_doc(self, case_type: Type) -> Optional[str]:
+        if self.case_query is None or self.prompt_for is None:
+            return
+
         if self.prompt_for == PromptFor.Conditions:
             func_doc = (f"Get conditions on whether it's possible to conclude a value"
-                        f" for {case_type.__name__}.{self.attribute_name}")
+                        f" for {case_type.__name__}.{self.case_query.attribute_name}")
+        elif self.prompt_for == PromptFor.Conclusion:
+            func_doc = f"Get possible value(s) for {case_type.__name__}.{self.case_query.attribute_name}"
         else:
-            func_doc = f"Get possible value(s) for {case_type.__name__}.{self.attribute_name}"
-        if is_iterable(self.attribute_type):
-            possible_types = [t.__name__ for t in self.attribute_type if t not in [list, set]]
-            func_doc += f" of types list/set of {' and/or '.join(possible_types)}"
+            return
+
+        possible_types = [t.__name__ for t in self.case_query.attribute_type if t not in [list, set]]
+        if list in self.case_query.attribute_type:
+            func_doc += f" of type list of {' and/or '.join(possible_types)}"
         else:
-            func_doc += f" of type {self.attribute_type.__name__}"
+            func_doc += f" of type(s) {', '.join(possible_types)}"
+
         return func_doc
 
-    def build_func_name(self, case_type: Type):
-        func_name = f"get_{self.prompt_for.value.lower()}_for"
-        func_name += f"_{case_type.__name__}"
-        if self.attribute_name is not None:
-            func_name += f"_{self.attribute_name}"
-        if is_iterable(self.attribute_type):
-            output_names = [f"{t.__name__}" for t in self.attribute_type if t not in [list, set]]
-        else:
-            output_names = [self.attribute_type.__name__] if self.attribute_type is not None else None
-        if output_names is not None:
+    def build_func_name(self, case_type: Type) -> Optional[str]:
+        func_name = None
+        if self.prompt_for is not None:
+            func_name = f"get_{self.prompt_for.value.lower()}_for"
+            func_name += f"_{case_type.__name__}"
+
+        if self.case_query is not None:
+            func_name += f"_{self.case_query.attribute_name}"
+            output_names = [f"{t.__name__}" for t in self.case_query.attribute_type if t not in [list, set]]
             func_name += '_of_type_' + '_'.join(output_names)
-        return func_name.lower()
+
+        return func_name.lower() if func_name is not None else None
 
     def run(self):
         """
@@ -247,7 +285,7 @@ class IPythonShell:
                 break
             except Exception as e:
                 logging.error(e)
-                print(e)
+                print(f"{Fore.RED}ERROR::{e}{Style.RESET_ALL}")
 
     def update_user_input_from_code_lines(self):
         """
@@ -285,10 +323,10 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, pro
         prev_user_input = '\n'.join(user_input.split('\n')[2:-1])
         if user_input is None:
             if prompt_for == PromptFor.Conclusion:
-                print("No conclusion provided. Exiting.")
+                print(f"{Fore.YELLOW}No conclusion provided. Exiting.{Style.RESET_ALL}")
                 return None, None
             else:
-                print("Conditions must be provided. Please try again.")
+                print(f"{Fore.RED}Conditions must be provided. Please try again.{Style.RESET_ALL}")
                 continue
         conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
         callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
@@ -296,12 +334,13 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, pro
         try:
             result = callable_expression(case_query.case)
             if len(make_list(result)) == 0:
-                print(f"The given expression gave an empty result for case {case_query.name}. Please modify!")
+                print(f"{Fore.YELLOW}The given expression gave an empty result for case {case_query.name}."
+                      f" Please modify!{Style.RESET_ALL}")
                 continue
             break
         except Exception as e:
             logging.error(e)
-            print(e)
+            print(f"{Fore.RED}{e}{Style.RESET_ALL}")
     return user_input, callable_expression
 
 
@@ -318,11 +357,20 @@ def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor,
     :return: The user input, and the executable expression that was parsed from the user input.
     """
     if prompt_str is None:
-        prompt_str = f"Give {prompt_for} for {case_query.name}"
+        if prompt_for == PromptFor.Conclusion:
+            prompt_str = f"Give possible value(s) for:\n"
+        else:
+            prompt_str = f"Give conditions on when can the rule be evaluated for:\n"
+        prompt_str += (f"{Fore.CYAN}{case_query.name}{Fore.MAGENTA} of type(s) "
+                       f"{Fore.CYAN}({', '.join(map(lambda x: x.__name__, case_query.core_attribute_type))}){Fore.MAGENTA}")
+        if prompt_for == PromptFor.Conditions:
+            prompt_str += (f"\ne.g. `{Fore.GREEN}return {Fore.BLUE}len{Fore.RESET}(case.attribute) > {Fore.BLUE}0` "
+                           f"{Fore.MAGENTA}\nOR `{Fore.GREEN}return {Fore.YELLOW}True`{Fore.MAGENTA} (If you want the"
+                           f" rule to be always evaluated) \n"
+                           f"You can also do {Fore.YELLOW}%edit{Fore.MAGENTA} for more complex conditions.")
+    prompt_str = f"{Fore.MAGENTA}{prompt_str}{Fore.YELLOW}\n(Write %help for guide){Fore.RESET}"
     scope = {'case': case_query.case, **case_query.scope}
-    output_type = case_query.attribute_type if prompt_for == PromptFor.Conclusion else bool
-    shell = IPythonShell(scope=scope, header=prompt_str, output_type=output_type, prompt_for=prompt_for,
-                         attribute_name=case_query.attribute_name, attribute_type=case_query.attribute_type,
+    shell = IPythonShell(scope=scope, header=prompt_str, prompt_for=prompt_for, case_query=case_query,
                          code_to_modify=code_to_modify)
     return prompt_user_input_and_parse_to_expression(shell=shell)
 
@@ -344,11 +392,13 @@ def prompt_user_input_and_parse_to_expression(shell: Optional[IPythonShell] = No
             user_input = shell.user_input
             if user_input is None:
                 return None, None
-            print(user_input)
+            print(f"{Fore.BLUE}Captured User input: {Style.RESET_ALL}")
+            highlighted_code = highlight(user_input, PythonLexer(), TerminalFormatter())
+            print(highlighted_code)
         try:
             return user_input, parse_string_to_expression(user_input)
         except Exception as e:
             msg = f"Error parsing expression: {e}"
             logging.error(msg)
-            print(msg)
+            print(f"{Fore.RED}{msg}{Style.RESET_ALL}")
             user_input = None

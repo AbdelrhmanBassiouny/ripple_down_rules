@@ -14,3 +14,5 @@ pdbpp
 pytest
 ipython
 requests
+colorama
+pygments

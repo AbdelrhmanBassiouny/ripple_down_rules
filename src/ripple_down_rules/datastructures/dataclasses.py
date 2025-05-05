@@ -3,8 +3,9 @@ from __future__ import annotations
 import inspect
 from dataclasses import dataclass, field
 
+import typing_extensions
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Dict, Type, Tuple, Union
+from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List
 
 from .callable_expression import CallableExpression
 from .case import create_case, Case
@@ -62,6 +63,13 @@ class CaseQuery:
     """
 
     @property
+    def case_type(self) -> Type:
+        """
+        :return: The type of the case that the attribute belongs to.
+        """
+        return self.original_case._obj_type if isinstance(self.original_case, Case) else type(self.original_case)
+
+    @property
     def case(self) -> Any:
         """
         :return: The case that the attribute belongs to.
@@ -84,18 +92,32 @@ class CaseQuery:
         self._case = value
 
     @property
+    def attribute_type_hint(self) -> str:
+        """
+        :return: The type hint of the attribute as a typing object.
+        """
+        if len(self.core_attribute_type) > 1:
+            attribute_types_str = f"Union[{', '.join([t.__name__ for t in self.core_attribute_type])}]"
+        else:
+            attribute_types_str = self.core_attribute_type[0].__name__
+        if list in self.attribute_type:
+            return f"List[{attribute_types_str}]"
+        else:
+            return attribute_types_str
+
+    @property
     def core_attribute_type(self) -> Tuple[Type]:
         """
         :return: The core type of the attribute.
         """
-        return (t for t in self.attribute_type if t not in (set, list))
+        return tuple(t for t in self.attribute_type if t not in (set, list))
 
     @property
     def attribute_type(self) -> Tuple[Type]:
         """
         :return: The type of the attribute.
         """
-        if not self.mutually_exclusive and (set not in make_list(self._attribute_types)):
+        if not self.mutually_exclusive and (list not in make_list(self._attribute_types)):
             self._attribute_types = tuple(set(make_list(self._attribute_types) + [set, list]))
         elif not isinstance(self._attribute_types, tuple):
             self._attribute_types = tuple(make_list(self._attribute_types))
