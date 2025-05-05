@@ -148,16 +148,19 @@ def extract_function_source(file_path: str,
     return functions_source
 
 
-def encapsulate_user_input(user_input: str, func_signature: str) -> str:
+def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optional[str] = None) -> str:
     """
     Encapsulate the user input string with a function definition.
 
     :param user_input: The user input string.
     :param func_signature: The function signature to use for encapsulation.
+    :param func_doc: The function docstring to use for encapsulation.
     :return: The encapsulated user input string.
     """
     if func_signature not in user_input:
         new_user_input = func_signature + "\n    "
+        if func_doc is not None:
+            new_user_input += f"\"\"\"{func_doc}\"\"\"" + "\n    "
         if "return " not in user_input:
             if '\n' not in user_input:
                 new_user_input += f"return {user_input}"

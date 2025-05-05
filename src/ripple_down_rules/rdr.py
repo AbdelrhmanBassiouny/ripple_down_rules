@@ -286,6 +286,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                 if scope is None:
                     continue
                 defs_imports_list.extend(get_imports_from_scope(scope))
+        if self.case_type.__module__ != "builtins":
+            defs_imports_list.append(f"from {self.case_type.__module__} import {self.case_type.__name__}")
         defs_imports = "\n".join(set(defs_imports_list)) + "\n"
         imports = []
         if self.case_type.__module__ != "builtins":
@@ -575,7 +577,7 @@ class MultiClassRDR(RDRWithCodeWriter):
 
     def _get_imports(self) -> Tuple[str, str]:
         imports, defs_imports = super()._get_imports()
-        imports += f"from typing_extensions import Set\n"
+        imports += f"from typing_extensions import Set, Union\n"
         imports += "from ripple_down_rules.utils import make_set\n"
         defs_imports += "from typing_extensions import Union\n"
         return imports, defs_imports
