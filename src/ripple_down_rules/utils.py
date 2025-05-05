@@ -36,6 +36,20 @@ import ast
 matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
+def are_results_subclass_of_types(result_types: List[Any], types_: List[Type]) -> bool:
+    """
+    Check if all results are subclasses of the given types.
+
+    :param result_types: The list of result types to check.
+    :param types_: The list of types to check against.
+    :return: True if all results are subclasses of the given types, False otherwise.
+    """
+    for rt in result_types:
+        if not any(issubclass(rt, t) for t in types_):
+            return False
+    return True
+
+
 def get_imports_from_types(types: List[Type]) -> List[str]:
     """
     Get the import statements for a list of types.

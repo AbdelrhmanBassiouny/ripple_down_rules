@@ -10,14 +10,15 @@ from textwrap import indent, dedent
 from IPython.core.magic import register_line_magic, line_magic, Magics, magics_class
 from IPython.terminal.embed import InteractiveShellEmbed
 from traitlets.config import Config
-from typing_extensions import List, Optional, Tuple, Dict, Type, Union
+from typing_extensions import List, Optional, Tuple, Dict, Type, Union, Any
 
 from .datastructures.enums import PromptFor
 from .datastructures.case import Case
 from .datastructures.callable_expression import CallableExpression, parse_string_to_expression
 from .datastructures.dataclasses import CaseQuery
 from .utils import extract_dependencies, contains_return_statement, make_set, get_imports_from_scope, make_list, \
-    get_import_from_type, get_imports_from_types, is_iterable, extract_function_source, encapsulate_user_input
+    get_import_from_type, get_imports_from_types, is_iterable, extract_function_source, encapsulate_user_input, \
+    are_results_subclass_of_types
 
 
 @magics_class
@@ -259,7 +260,6 @@ class IPythonShell:
             if len(self.all_code_lines) == 1 and self.all_code_lines[0].strip() == '':
                 self.user_input = None
             else:
-                import pdb; pdb.set_trace()
                 self.user_input = '\n'.join(self.all_code_lines)
                 self.user_input = encapsulate_user_input(self.user_input, self.shell.my_magics.function_signature,
                                                          self.func_doc)
@@ -278,6 +278,7 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, pro
     :return: A callable expression that takes a case and executes user expression on it.
     """
     prev_user_input: Optional[str] = None
+    callable_expression: Optional[CallableExpression] = None
     while True:
         user_input, expression_tree = prompt_user_about_case(case_query, prompt_for, prompt_str,
                                                              code_to_modify=prev_user_input)
@@ -294,9 +295,8 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, pro
                                                  scope=case_query.scope)
         try:
             result = callable_expression(case_query.case)
-            result = make_list(result)
-            if len(result) == 0:
-                print(f"The given expression gave an empty result for case {case_query.name}, please modify")
+            if len(make_list(result)) == 0:
+                print(f"The given expression gave an empty result for case {case_query.name}. Please modify!")
                 continue
             break
         except Exception as e:

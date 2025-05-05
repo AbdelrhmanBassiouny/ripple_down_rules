@@ -84,6 +84,13 @@ class CaseQuery:
         self._case = value
 
     @property
+    def core_attribute_type(self) -> Tuple[Type]:
+        """
+        :return: The core type of the attribute.
+        """
+        return (t for t in self.attribute_type if t not in (set, list))
+
+    @property
     def attribute_type(self) -> Tuple[Type]:
         """
         :return: The type of the attribute.

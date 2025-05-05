@@ -9,7 +9,8 @@ from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .case import create_case, Case
 from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json, is_iterable, \
-    build_user_input_from_conclusion, encapsulate_user_input, extract_function_source
+    build_user_input_from_conclusion, encapsulate_user_input, extract_function_source, are_results_subclass_of_types, \
+    make_list
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -133,15 +134,16 @@ class CallableExpression(SubclassJSONSerializer):
                 if output is None:
                     output = scope['_get_value'](case)
                 if self.conclusion_type is not None:
-                    if is_iterable(output) and not isinstance(output, self.conclusion_type):
-                        assert isinstance(list(output)[0], self.conclusion_type), (f"Expected output type {self.conclusion_type},"
-                                                                                 f" got {type(output)}")
-                    else:
-                        assert isinstance(output, self.conclusion_type), (f"Expected output type {self.conclusion_type},"
-                                                                          f" got {type(output)}")
+                    output_types = {type(o) for o in make_list(output)}
+                    output_types.add(type(output))
+                    if not are_results_subclass_of_types(output_types, self.conclusion_type):
+                        raise ValueError(f"Not all result types {output_types} are subclasses of expected types"
+                                         f" {self.conclusion_type}")
                 return output
-            else:
+            elif self.conclusion is not None:
                 return self.conclusion
+            else:
+                raise ValueError("Either user_input or conclusion must be provided.")
         except Exception as e:
             raise ValueError(f"Error during evaluation: {e}")
 
