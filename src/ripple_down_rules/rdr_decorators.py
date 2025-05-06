@@ -5,37 +5,44 @@ of the RDRs.
 """
 import os.path
 from functools import wraps
-from typing import Callable, Optional, Type
+from typing_extensions import Callable, Optional, Type, Tuple
 
-from sqlalchemy.orm import Session
-from typing_extensions import Any
-
-from ripple_down_rules.datastructures import Case, Category, create_case, CaseQuery
+from ripple_down_rules.datastructures.case import create_case
+from ripple_down_rules.datastructures.dataclasses import CaseQuery
+from ripple_down_rules.datastructures.enums import Category
 from ripple_down_rules.experts import Expert, Human
-
-from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import get_method_args_as_dict, get_method_name, get_method_class_name_if_exists, \
-    get_method_file_name, get_func_rdr_model_path
+from ripple_down_rules.rdr import GeneralRDR, RippleDownRules
+from ripple_down_rules.utils import get_method_args_as_dict, get_func_rdr_model_path
 
 
-def single_class_rdr(
-    model_dir: str,
-    fit: bool = True,
-    expert: Optional[Expert] = None,
-    session: Optional[Session] = None,
-) -> Callable:
-    """
-    Decorator to use a SingleClassRDR as a classifier.
-    """
-    expert = expert if expert else Human(session=session)
+class RDRDecorator:
+    rdr: GeneralRDR
 
-    def decorator(func: Callable) -> Callable:
-        scrdr_model_path = get_func_rdr_model_path(func, model_dir)
-        if os.path.exists(scrdr_model_path):
-            scrdr = SingleClassRDR.load(scrdr_model_path)
-            scrdr.session = session
-        else:
-            scrdr = SingleClassRDR(session=session)
+
+    def __init__(self, model_file_path: str,
+        output_type: Tuple[Type],
+        mutual_exclusive: bool,
+        output_name: str = "output",
+        fit: bool = True,
+        expert: Optional[Expert] = None) -> Callable:
+        """
+        :param model_file_path: The path to the RDR model file. This is used to load and save the RDR model.
+        :param output_type: The type of the output. This is used to create the RDR model.
+        :param mutual_exclusive: If True, the output types are mutually exclusive.
+        :param output_name: The name of the output. This is used to create the RDR model.
+        :param fit: If True, the function will be in fit mode. This means that the RDR will prompt the user for the
+            correct output if the function's output is not in the RDR model. If False, the function will be in
+            classification mode. This means that the RDR will classify the function's output based on the RDR model.
+        :return: A decorator to use a GeneralRDR as a classifier that monitors and modifies the function's output.
+        """
+        self.rdr_model_path = model_file_path
+        self.output_type = output_type
+        self.mutual_exclusive = mutual_exclusive
+        self.output_name = output_name
+        self.expert = expert if expert else Human()
+        self.load()
+
+    def decorator(self, func: Callable) -> Callable:
 
         @wraps(func)
         def wrapper(*args, **kwargs) -> Category:
@@ -45,11 +52,41 @@ def single_class_rdr(
                 case_dict.update({"_output": func_output})
             case = create_case(case_dict, recursion_idx=3)
             if fit:
-                output = scrdr.fit_case(CaseQuery(case), expert=expert)
-                scrdr.save(scrdr_model_path)
+                case_query = CaseQuery(case, self.output_name, self.output_type, self.mutual_exclusive)
+                output = self.rdr.fit_case(case_query, expert=expert)
                 return output
             else:
-                return scrdr.classify(case)
+                return self.rdr.classify(case)
+
         return wrapper
 
-    return decorator
+    def save(self):
+        """
+        Save the RDR model to the specified directory.
+        """
+        self.rdr.save(self.rdr_model_path)
+
+    def load(self):
+        """
+        Load the RDR model from the specified directory.
+        """
+        if os.path.exists(self.rdr_model_path):
+            self.rdr = GeneralRDR.load(self.rdr_model_path)
+        else:
+            self.rdr = GeneralRDR()
+
+    def write_to_python_file(self, package_dir: str, file_name_postfix: str = ""):
+        """
+        Write the RDR model to a python file.
+
+        :param package_dir: The path to the directory to write the python file.
+        """
+        self.rdr.write_to_python_file(package_dir, postfix=file_name_postfix)
+
+    def update_from_python_file(self, package_dir: str):
+        """
+        Update the RDR model from a python file.
+
+        :param package_dir: The directory of the package that contains the generated python file.
+        """
+        self.rdr.update_from_python_file(package_dir)
