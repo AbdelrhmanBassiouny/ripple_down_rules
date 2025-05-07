@@ -11,7 +11,7 @@ import re
 import threading
 import uuid
 from collections import UserDict
-from copy import deepcopy
+from copy import deepcopy, copy
 from dataclasses import is_dataclass, fields
 from enum import Enum
 from types import NoneType
@@ -618,6 +618,7 @@ def get_func_rdr_model_path(func: Callable, model_dir: str) -> str:
     """
     return os.path.join(model_dir, f"{get_func_rdr_model_name(func)}.json")
 
+
 def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> str:
     """
     :param func: The function to get the model name for.
@@ -626,7 +627,7 @@ def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> 
     func_name = get_method_name(func)
     func_class_name = get_method_class_name_if_exists(func)
     if include_file_name:
-        func_file_name = get_method_file_name(func)
+        func_file_name = get_method_file_name(func).split(os.sep)[-1].split('.')[0]
         model_name = func_file_name + '_'
     else:
         model_name = ''
@@ -881,7 +882,17 @@ def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:
     if isinstance(case, SQLTable):
         return copy_orm_instance_with_relationships(case)
     else:
-        return deepcopy(case)
+        # copy the case recursively for 1 level
+        try:
+            case_copy = deepcopy(case)
+        except Exception as e:
+            case_copy = copy(case)
+            for attr in dir(case):
+                if attr.startswith("_") or callable(getattr(case, attr)):
+                    continue
+                attr_value = getattr(case, attr)
+                setattr(case_copy, attr, copy(attr_value))
+        return case_copy
 
 
 def copy_orm_instance(instance: SQLTable) -> SQLTable:
@@ -983,6 +994,7 @@ def table_rows_as_str(row_dict: Dict[str, Any], columns_per_row: int = 9):
     all_table_rows = []
     for row_keys, row_values in zip(keys, values):
         row_values = [str(v) if v is not None else "" for v in row_values]
+        row_values = [v.lower() if v in ["True", "False"] else v for v in row_values]
         table = tabulate([row_values], headers=row_keys, tablefmt='plain', maxcolwidths=[20] * len(row_keys))
         all_table_rows.append(table)
     return "\n".join(all_table_rows)
