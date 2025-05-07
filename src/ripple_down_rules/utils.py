@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import ast
 import builtins
+import copyreg
 import importlib
 import json
 import logging
 import os
 import re
+import threading
 import uuid
 from collections import UserDict
 from copy import deepcopy
@@ -25,6 +27,7 @@ from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQ
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
     get_origin, get_args, Tuple, Optional, List, Union, Self
+
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
@@ -613,13 +616,23 @@ def get_func_rdr_model_path(func: Callable, model_dir: str) -> str:
     :param model_dir: The directory to save the model to.
     :return: The path to the model file.
     """
+    return os.path.join(model_dir, f"{get_func_rdr_model_name(func)}.json")
+
+def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> str:
+    """
+    :param func: The function to get the model name for.
+    :return: The name of the model.
+    """
     func_name = get_method_name(func)
     func_class_name = get_method_class_name_if_exists(func)
-    func_file_name = get_method_file_name(func)
-    model_name = func_file_name
-    model_name += f"_{func_class_name}" if func_class_name else ""
-    model_name += f"_{func_name}"
-    return os.path.join(model_dir, f"{model_name}.json")
+    if include_file_name:
+        func_file_name = get_method_file_name(func)
+        model_name = func_file_name + '_'
+    else:
+        model_name = ''
+    model_name += f"{func_class_name}_" if func_class_name else ""
+    model_name += f"{func_name}"
+    return model_name
 
 
 def get_method_args_as_dict(method: Callable, *args, **kwargs) -> Dict[str, Any]:
@@ -653,9 +666,10 @@ def get_method_class_name_if_exists(method: Callable) -> Optional[str]:
     :param method: The method to get the class name of.
     :return: The class name of the method.
     """
-    if hasattr(method, "__self__") and hasattr(method.__self__, "__class__"):
-        return method.__self__.__class__.__name__
-    return None
+    if hasattr(method, "__self__"):
+        if hasattr(method.__self__, "__class__"):
+            return method.__self__.__class__.__name__
+    return method.__qualname__.split('.')[0] if hasattr(method, "__qualname__") else None
 
 
 def get_method_file_name(method: Callable) -> str:
@@ -837,6 +851,24 @@ class SubclassJSONSerializer:
 
     save = to_json_file
     load = from_json_file
+
+
+def _pickle_thread(thread_obj) -> Any:
+    """Return a plain object with user-defined attributes but no thread behavior."""
+
+    class DummyThread:
+        pass
+
+    dummy = DummyThread()
+    # Copy only non-thread-related attributes
+    for attr, value in thread_obj.__dict__.items():
+        print(attr)
+        if not attr.startswith("_"):  # Skip internal Thread attributes
+            setattr(dummy, attr, value)
+    return dummy
+
+
+copyreg.pickle(threading.Thread, _pickle_thread)
 
 
 def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:

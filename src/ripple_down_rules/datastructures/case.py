@@ -11,7 +11,8 @@ from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColum
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING
 
 from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, SubclassJSONSerializer, \
-    get_full_class_name, get_type_from_string, make_list, is_iterable, serialize_dataclass, dataclass_to_dict
+    get_full_class_name, get_type_from_string, make_list, is_iterable, serialize_dataclass, dataclass_to_dict, \
+    custom_deepcopy
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
@@ -101,6 +102,18 @@ class Case(UserDict, SubclassJSONSerializer):
         for k, v in data.items():
             data[k] = SubclassJSONSerializer.from_json(v)
         return cls(_obj_type=obj_type, _id=id_, _name=name, **data)
+
+    def __deepcopy__(self, memo: Dict[Hashable, Any]) -> Case:
+        """
+        Create a deep copy of the case.
+
+        :param memo: A dictionary to keep track of objects that have already been copied.
+        :return: A deep copy of the case.
+        """
+        new_case = Case(self._obj_type, _id=self._id, _name=self._name, original_object=self._original_object)
+        for k, v in self.items():
+            new_case[k] = deepcopy(v)
+        return new_case
 
 
 @dataclass
@@ -220,11 +233,16 @@ def create_case(obj: Any, recursion_idx: int = 0, max_recursion_idx: int = 0,
         return create_cases_from_dataframe(obj, obj_name)
     if isinstance(obj, Case) or (is_dataclass(obj) and not isinstance(obj, SQLTable)):
         return obj
-    if ((recursion_idx > max_recursion_idx) or (obj.__class__.__module__ == "builtins")
+    if ((recursion_idx > max_recursion_idx)
+            or (obj.__class__.__module__ == "builtins" and not isinstance(obj, (list, set, dict)))
             or (obj.__class__ in [MetaData, registry])):
         return Case(type(obj), _id=id(obj), _name=obj_name, original_object=obj,
                     **{obj_name or obj.__class__.__name__: make_list(obj) if parent_is_iterable else obj})
     case = Case(type(obj), _id=id(obj), _name=obj_name, original_object=obj)
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            case = create_or_update_case_from_attribute(v, k, obj, obj_name, recursion_idx,
+                                                        max_recursion_idx, parent_is_iterable, case)
     for attr in dir(obj):
         if attr.startswith("_") or callable(getattr(obj, attr)):
             continue

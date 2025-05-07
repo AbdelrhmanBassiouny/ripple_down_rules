@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copyreg
 import importlib
 import sys
 from abc import ABC, abstractmethod

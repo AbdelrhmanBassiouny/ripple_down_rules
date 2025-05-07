@@ -12,7 +12,7 @@ from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import Category
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import GeneralRDR, RippleDownRules
-from ripple_down_rules.utils import get_method_args_as_dict, get_func_rdr_model_path
+from ripple_down_rules.utils import get_method_args_as_dict, get_func_rdr_model_name
 
 
 class RDRDecorator:
@@ -39,6 +39,7 @@ class RDRDecorator:
         self.output_type = output_type
         self.mutual_exclusive = mutual_exclusive
         self.output_name = output_name
+        self.fit: bool = fit
         self.expert = expert if expert else Human()
         self.load()
 
@@ -46,14 +47,16 @@ class RDRDecorator:
 
         @wraps(func)
         def wrapper(*args, **kwargs) -> Category:
+            print("Calling function:", func.__name__)
             case_dict = get_method_args_as_dict(func, *args, **kwargs)
             func_output = func(*args, **kwargs)
             if func_output is not None:
                 case_dict.update({"_output": func_output})
-            case = create_case(case_dict, recursion_idx=3)
-            if fit:
-                case_query = CaseQuery(case, self.output_name, self.output_type, self.mutual_exclusive)
-                output = self.rdr.fit_case(case_query, expert=expert)
+            case = create_case(case_dict, obj_name=get_func_rdr_model_name(func), max_recursion_idx=3)
+            if self.fit:
+                case_query = CaseQuery(case, self.output_name, self.output_type, self.mutual_exclusive,
+                                       scope=func.__globals__)
+                output = self.rdr.fit_case(case_query, expert=self.expert)
                 return output
             else:
                 return self.rdr.classify(case)
