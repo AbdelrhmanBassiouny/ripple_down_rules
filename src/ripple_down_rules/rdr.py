@@ -97,11 +97,12 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             plt.ioff()
             plt.show()
 
-    def __call__(self, case: Union[Case, SQLTable]) -> CaseAttribute:
+    def __call__(self, case: Union[Case, SQLTable]) -> Union[CallableExpression, Dict[str, CallableExpression]]:
         return self.classify(case)
 
     @abstractmethod
-    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False) -> Optional[CaseAttribute]:
+    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False) \
+            -> Optional[Union[CallableExpression, Dict[str, CallableExpression]]]:
         """
         Classify a case.
 
@@ -112,7 +113,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         pass
 
     def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
-            -> Union[CaseAttribute, CallableExpression]:
+            -> Union[CallableExpression, Dict[str, CallableExpression]]:
         """
         Fit the classifier to a case and ask the expert for refinements or alternatives if the classification is
         incorrect by comparing the case with the target category.
@@ -137,7 +138,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
 
     @abstractmethod
     def _fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
-            -> Union[CaseAttribute, CallableExpression]:
+            -> Union[CallableExpression, Dict[str, CallableExpression]]:
         """
         Fit the RDR on a case, and ask the expert for refinements or alternatives if the classification is incorrect by
         comparing the case with the target category.

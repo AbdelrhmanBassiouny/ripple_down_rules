@@ -5,7 +5,7 @@ of the RDRs.
 """
 import os.path
 from functools import wraps
-from typing_extensions import Callable, Optional, Type, Tuple
+from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any
 
 from ripple_down_rules.datastructures.case import create_case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
@@ -48,23 +48,25 @@ class RDRDecorator:
     def decorator(self, func: Callable) -> Callable:
 
         @wraps(func)
-        def wrapper(*args, **kwargs) -> Category:
+        def wrapper(*args, **kwargs) -> Optional[Any]:
             if self.rdr_model_path is None:
                 model_file_name = get_func_rdr_model_name(func, include_file_name=True)
                 model_file_name = (''.join(['_' + c.lower() if c.isupper() else c for c in model_file_name]).lstrip('_')
-                                   .replace('__', '_'))
+                                   .replace('__', '_') + ".json")
                 self.rdr_model_path = os.path.join(self.rdr_models_dir, model_file_name)
                 self.load()
             case_dict = get_method_args_as_dict(func, *args, **kwargs)
             func_output = func(*args, **kwargs)
             if func_output is not None:
-                case_dict.update({"_output": func_output})
+                case_dict.update({self.output_name: func_output})
             case = create_case(case_dict, obj_name=get_func_rdr_model_name(func), max_recursion_idx=3)
             if self.fit:
+                scope = func.__globals__
+                scope.update(case_dict)
                 case_query = CaseQuery(case, self.output_name, self.output_type, self.mutual_exclusive,
-                                       scope=func.__globals__)
+                                       scope=scope, is_function=True)
                 output = self.rdr.fit_case(case_query, expert=self.expert)
-                return output
+                return output[self.output_name]
             else:
                 return self.rdr.classify(case)
 

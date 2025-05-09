@@ -7,49 +7,53 @@ from _ast import AST
 from functools import cached_property
 from textwrap import indent, dedent
 
-from IPython.core.magic import register_line_magic, line_magic, Magics, magics_class
+from IPython.core.magic import line_magic, Magics, magics_class
 from IPython.terminal.embed import InteractiveShellEmbed
+from colorama import Fore, Style
 from pygments import highlight
 from pygments.formatters.terminal import TerminalFormatter
 from pygments.lexers.python import PythonLexer
 from traitlets.config import Config
-from typing_extensions import List, Optional, Tuple, Dict, Type, Union, Any
+from typing_extensions import List, Optional, Tuple, Dict, Type, Union
 
-from .datastructures.enums import PromptFor
-from .datastructures.case import Case
 from .datastructures.callable_expression import CallableExpression, parse_string_to_expression
+from .datastructures.case import Case
 from .datastructures.dataclasses import CaseQuery
-from .utils import extract_dependencies, contains_return_statement, make_set, get_imports_from_scope, make_list, \
-    get_import_from_type, get_imports_from_types, is_iterable, extract_function_source, encapsulate_user_input, \
-    are_results_subclass_of_types
-from colorama import Fore, Style, init
+from .datastructures.enums import PromptFor
+from .utils import extract_dependencies, contains_return_statement, get_imports_from_scope, make_list, \
+    get_imports_from_types, extract_function_source, encapsulate_user_input
 
 
 @magics_class
 class MyMagics(Magics):
-    def __init__(self, shell, scope, output_type: Optional[Type] = None, func_name: str = "user_case",
-                 func_doc: str = "User defined function to be executed on the case.",
+    def __init__(self, shell, scope,
                  code_to_modify: Optional[str] = None,
-                 attribute_type_hint: Optional[str] = None,
                  prompt_for: Optional[PromptFor] = None,
-                 case_name: Optional[str] = None):
+                 case_query: Optional[CaseQuery] = None):
         super().__init__(shell)
         self.scope = scope
         self.temp_file_path = None
-        self.func_name = func_name
-        self.func_doc = func_doc
         self.code_to_modify = code_to_modify
-        self.attribute_type_hint = attribute_type_hint
         self.prompt_for = prompt_for
-        self.case_name = case_name
-        self.output_type = make_list(output_type) if output_type is not None else None
+        self.case_query = case_query
+        self.output_type = self.get_output_type()
         self.user_edit_line = 0
-        self.function_signature: Optional[str] = None
-        self.build_function_signature()
+        self.func_name: str = self.get_func_name()
+        self.func_doc: str = self.get_func_doc()
+        self.function_signature: str = self.get_function_signature()
+
+    def get_output_type(self) -> List[Type]:
+        """
+        :return: The output type of the function as a list of types.
+        """
+        if self.prompt_for == PromptFor.Conditions:
+            output_type = bool
+        else:
+            output_type = self.case_query.attribute_type
+        return make_list(output_type) if output_type is not None else None
 
     @line_magic
     def edit(self, line):
-
         boilerplate_code = self.build_boilerplate_code()
 
         self.write_to_file(boilerplate_code)
@@ -61,22 +65,47 @@ class MyMagics(Magics):
 
     def build_boilerplate_code(self):
         imports = self.get_imports()
-        self.build_function_signature()
+        if self.function_signature is None:
+            self.function_signature = self.get_function_signature()
+        if self.func_doc is None:
+            self.func_doc = self.get_func_doc()
         if self.code_to_modify is not None:
             body = indent(dedent(self.code_to_modify), '    ')
         else:
             body = "    # Write your code here\n    pass"
         boilerplate = f"""{imports}\n\n{self.function_signature}\n    \"\"\"{self.func_doc}\"\"\"\n{body}"""
-        self.user_edit_line = imports.count('\n')+6
+        self.user_edit_line = imports.count('\n') + 6
         return boilerplate
 
-    def build_function_signature(self):
+    def get_function_signature(self) -> str:
+        if self.func_name is None:
+            self.func_name = self.get_func_name()
+        output_type_hint = self.get_output_type_hint()
+        func_args = self.get_function_args()
+        return f"def {self.func_name}({func_args}){output_type_hint}:"
+
+    def get_output_type_hint(self) -> str:
+        """
+        :return: A string containing the output type hint for the function.
+        """
         output_type_hint = ""
         if self.prompt_for == PromptFor.Conditions:
             output_type_hint = " -> bool"
         elif self.prompt_for == PromptFor.Conclusion:
-            output_type_hint = f" -> {self.attribute_type_hint}"
-        self.function_signature = f"def {self.func_name}(case: {self.case_type.__name__}){output_type_hint}:"
+            output_type_hint = f" -> {self.case_query.attribute_type_hint}"
+        return output_type_hint
+
+    def get_function_args(self) -> str:
+        """
+        :return: A string containing the function arguments.
+        """
+        if self.case_query.is_function:
+            func_args = {k: type(v).__name__ if not isinstance(v, type) else f"Type[{v.__name__}]"
+                         for k, v in self.case_query.case.items()}
+            func_args = ', '.join([f"{k}: {v}" for k, v in func_args.items()])
+        else:
+            func_args = f"case: {self.case_type.__name__}"
+        return func_args
 
     def write_to_file(self, code: str):
         tmp = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".py",
@@ -87,7 +116,18 @@ class MyMagics(Magics):
         tmp.close()
 
     def get_imports(self):
-        case_type_import = f"from {self.case_type.__module__} import {self.case_type.__name__}"
+        """
+        :return: A string containing the imports for the function.
+        """
+        case_type_imports = []
+        if self.case_query.is_function:
+            for k, v in self.case_query.case.items():
+                if isinstance(v, type):
+                    case_type_imports.append(f"from {v.__module__} import {v.__name__}")
+                else:
+                    case_type_imports.append(f"\nfrom {type(v).__module__} import {type(v).__name__}")
+        else:
+            case_type_imports.append(f"from {self.case_type.__module__} import {self.case_type.__name__}")
         if self.output_type is None:
             output_type_imports = [f"from typing_extensions import Any"]
         else:
@@ -98,11 +138,31 @@ class MyMagics(Magics):
                 output_type_imports.append("from typing_extensions import List")
         imports = get_imports_from_scope(self.scope)
         imports = [i for i in imports if ("get_ipython" not in i)]
-        if case_type_import not in imports:
-            imports.append(case_type_import)
+        imports.extend(case_type_imports)
         imports.extend([oti for oti in output_type_imports if oti not in imports])
         imports = set(imports)
         return '\n'.join(imports)
+
+    def get_func_doc(self) -> Optional[str]:
+        """
+        :return: A string containing the function docstring.
+        """
+        if self.prompt_for == PromptFor.Conditions:
+            return (f"Get conditions on whether it's possible to conclude a value"
+                    f" for {self.case_query.name}")
+        else:
+            return f"Get possible value(s) for {self.case_query.name}"
+
+    def get_func_name(self) -> Optional[str]:
+        func_name = ""
+        if self.prompt_for == PromptFor.Conditions:
+            func_name = f"{self.prompt_for.value.lower()}_for_"
+        case_name = self.case_query.name.replace(".", "_")
+        if self.case_query.is_function:
+            case_name = case_name.replace(f"_{self.case_query.attribute_name}", "")
+        func_name += case_name
+        # convert any CamelCase word into snake_case by adding _ before each capital letter
+        return ''.join(['_' + i.lower() if i.isupper() else i for i in func_name]).lstrip('_')
 
     @cached_property
     def case_type(self) -> Type:
@@ -154,17 +214,13 @@ Loads the function defined in the temporary file into the user namespace, that c
 
 
 class CustomInteractiveShell(InteractiveShellEmbed):
-    def __init__(self, output_type: Union[Type, Tuple[Type], None] = None, func_name: Optional[str] = None,
-                 func_doc: Optional[str] = None, code_to_modify: Optional[str] = None,
-                 attribute_type_hint: Optional[str] = None, prompt_for: Optional[PromptFor] = None,
-                 case_name: Optional[str] = None, **kwargs):
+    def __init__(self, code_to_modify: Optional[str] = None,
+                 prompt_for: Optional[PromptFor] = None,
+                 case_query: Optional[CaseQuery] = None,
+                 **kwargs):
         super().__init__(**kwargs)
-        keys = ['output_type', 'func_name', 'func_doc', 'code_to_modify', 'attribute_type_hint', 'prompt_for',
-                'case_name']
-        values = [output_type, func_name, func_doc, code_to_modify, attribute_type_hint, prompt_for,
-                  case_name]
-        magics_kwargs = {key: value for key, value in zip(keys, values) if value is not None}
-        self.my_magics = MyMagics(self, self.user_ns, **magics_kwargs)
+        self.my_magics = MyMagics(self, self.user_ns, code_to_modify=code_to_modify,
+                                  prompt_for=prompt_for, case_query=case_query)
         self.register_magics(self.my_magics)
         self.all_lines = []
 
@@ -206,19 +262,10 @@ class IPythonShell:
         """
         self.scope: Dict = scope or {}
         self.header: str = header or ">>> Embedded Ipython Shell"
-        output_type = None
-        if prompt_for is not None:
-            if prompt_for == PromptFor.Conclusion and case_query is not None:
-                output_type = case_query.attribute_type
-            elif prompt_for == PromptFor.Conditions:
-                output_type = bool
         self.case_query: Optional[CaseQuery] = case_query
-        self.output_type: Optional[Type] = output_type
         self.prompt_for: Optional[PromptFor] = prompt_for
         self.code_to_modify: Optional[str] = code_to_modify
         self.user_input: Optional[str] = None
-        self.func_name: str = ""
-        self.func_doc: str = ""
         self.shell: CustomInteractiveShell = self._init_shell()
         self.all_code_lines: List[str] = []
 
@@ -227,60 +274,12 @@ class IPythonShell:
         Initialize the Ipython shell with a custom configuration.
         """
         cfg = Config()
-        self.build_func_name_and_doc()
         shell = CustomInteractiveShell(config=cfg, user_ns=self.scope, banner1=self.header,
-                                       output_type=self.output_type, func_name=self.func_name, func_doc=self.func_doc,
                                        code_to_modify=self.code_to_modify,
-                                       attribute_type_hint=self.case_query.attribute_type_hint,
                                        prompt_for=self.prompt_for,
-                                       case_name=self.case_query.name if self.case_query else None,)
+                                       case_query=self.case_query,
+                                       )
         return shell
-
-    def build_func_name_and_doc(self) -> Tuple[str, str]:
-        """
-        Build the function name and docstring for the user-defined function.
-
-        :return: A tuple containing the function name and docstring.
-        """
-        case = self.scope['case']
-        case_type = case._obj_type if isinstance(case, Case) else type(case)
-        self.func_name = self.build_func_name(case_type)
-        self.func_doc = self.build_func_doc()
-
-    def build_func_doc(self) -> Optional[str]:
-        if self.case_query is None or self.prompt_for is None:
-            return
-
-        if self.prompt_for == PromptFor.Conditions:
-            func_doc = (f"Get conditions on whether it's possible to conclude a value"
-                        f" for {self.case_query.name}")
-        elif self.prompt_for == PromptFor.Conclusion:
-            func_doc = f"Get possible value(s) for {self.case_query.name}"
-        else:
-            return
-
-        possible_types = [t.__name__ for t in self.case_query.attribute_type if t not in [list, set]]
-        if list in self.case_query.attribute_type:
-            func_doc += f" of type list of {' and/or '.join(possible_types)}"
-        else:
-            func_doc += f" of type(s) {', '.join(possible_types)}"
-
-        return func_doc
-
-    def build_func_name(self, case_type: Type) -> Optional[str]:
-        func_name = ""
-        if self.prompt_for == PromptFor.Conditions:
-            func_name = f"{self.prompt_for.value.lower()}_for_"
-
-        if self.case_query is not None:
-            func_name += f"{self.case_query.name.replace('.', '_')}"
-            # output_names = [f"{t.__name__}" for t in self.case_query.attribute_type if t not in [list, set]]
-            # func_name += '_of_type_' + '_'.join(output_names)
-        else:
-            func_name += f"{case_type.__name__}"
-        # convert any camel case word into snake case by adding _ before each capital letter
-        func_name = ''.join(['_' + i.lower() if i.isupper() else i for i in func_name]).lstrip('_')
-        return func_name
 
     def run(self):
         """
@@ -308,12 +307,12 @@ class IPythonShell:
             else:
                 self.user_input = '\n'.join(self.all_code_lines)
                 self.user_input = encapsulate_user_input(self.user_input, self.shell.my_magics.function_signature,
-                                                         self.func_doc)
-                if f"return {self.func_name}(case)" not in self.user_input:
-                    self.user_input = self.user_input.strip() + f"\nreturn {self.func_name}(case)"
+                                                         self.shell.my_magics.func_doc)
+                if f"return {self.shell.my_magics.func_name}(case)" not in self.user_input:
+                    self.user_input = self.user_input.strip() + f"\nreturn {self.shell.my_magics.func_name}(case)"
 
 
-def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, prompt_str: Optional[str] = None)\
+def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, prompt_str: Optional[str] = None) \
         -> Tuple[Optional[str], Optional[CallableExpression]]:
     """
     Prompt the user for an executable python expression to the given case query.
@@ -328,7 +327,6 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, pro
     while True:
         user_input, expression_tree = prompt_user_about_case(case_query, prompt_for, prompt_str,
                                                              code_to_modify=prev_user_input)
-        prev_user_input = '\n'.join(user_input.split('\n')[2:-1])
         if user_input is None:
             if prompt_for == PromptFor.Conclusion:
                 print(f"{Fore.YELLOW}No conclusion provided. Exiting.{Style.RESET_ALL}")
@@ -336,6 +334,7 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, pro
             else:
                 print(f"{Fore.RED}Conditions must be provided. Please try again.{Style.RESET_ALL}")
                 continue
+        prev_user_input = '\n'.join(user_input.split('\n')[2:-1])
         conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
         callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
                                                  scope=case_query.scope)
@@ -384,7 +383,7 @@ def prompt_user_about_case(case_query: CaseQuery, prompt_for: PromptFor,
 
 
 def prompt_user_input_and_parse_to_expression(shell: Optional[IPythonShell] = None,
-                                              user_input: Optional[str] = None)\
+                                              user_input: Optional[str] = None) \
         -> Tuple[Optional[str], Optional[ast.AST]]:
     """
     Prompt the user for input.

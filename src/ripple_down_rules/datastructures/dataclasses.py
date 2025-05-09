@@ -61,6 +61,11 @@ class CaseQuery:
     """
     The conditions that must be satisfied for the target value to be valid.
     """
+    is_function: bool = False
+    """
+    Whether the case is a dict representing the arguments of an actual function or not,
+    most likely means it came from RDRDecorator, the the rdr takes function arguments and outputs the function output.
+    """
 
     @property
     def case_type(self) -> Type:
@@ -195,4 +200,4 @@ class CaseQuery:
         return CaseQuery(self.original_case, self.attribute_name, self.attribute_type,
                          self.mutually_exclusive, _target=self.target, default_value=self.default_value,
                          scope=self.scope, _case=copy_case(self.case), _target_value=self.target_value,
-                         conditions=self.conditions)
+                         conditions=self.conditions, is_function=self.is_function)

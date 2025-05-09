@@ -114,6 +114,17 @@ class Case(UserDict, SubclassJSONSerializer):
             new_case[k] = deepcopy(v)
         return new_case
 
+    def __copy__(self) -> Case:
+        """
+        Create a shallow copy of the case.
+
+        :return: A shallow copy of the case.
+        """
+        new_case = Case(self._obj_type, _id=self._id, _name=self._name, original_object=self._original_object)
+        for k, v in self.items():
+            new_case[k] = copy(v)
+        return new_case
+
 
 @dataclass
 class CaseAttributeValue(SubclassJSONSerializer):
