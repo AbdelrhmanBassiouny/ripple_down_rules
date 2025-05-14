@@ -1,6 +1,7 @@
 import ast
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -20,21 +21,33 @@ from typing_extensions import List, Optional, Tuple, Dict, Type, Union
 from .datastructures.callable_expression import CallableExpression, parse_string_to_expression
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseQuery
-from .datastructures.enums import PromptFor
+from .datastructures.enums import PromptFor, Editor
 from .utils import extract_dependencies, contains_return_statement, get_imports_from_scope, make_list, \
     get_imports_from_types, extract_function_source, encapsulate_user_input
 
 
+def detect_available_editor() -> Optional[Editor]:
+    """
+    Detect the available editor on the system.
+
+    :return: The first found editor that is available on the system.
+    """
+    for editor in [Editor.Pycharm, Editor.Code, Editor.CodeServer]:
+        if shutil.which(editor.value):
+            return editor
+    return None
+
 @magics_class
 class MyMagics(Magics):
-    tmp_filename: Optional[str] = None
+    temp_file_path: Optional[str] = None
+
     def __init__(self, shell, scope,
                  code_to_modify: Optional[str] = None,
                  prompt_for: Optional[PromptFor] = None,
-                 case_query: Optional[CaseQuery] = None):
+                 case_query: Optional[CaseQuery] = None,
+                 editor: Editor = Editor.Pycharm):
         super().__init__(shell)
         self.scope = scope
-        self.temp_file_path = None
         self.code_to_modify = code_to_modify
         self.prompt_for = prompt_for
         self.case_query = case_query
@@ -43,6 +56,7 @@ class MyMagics(Magics):
         self.func_name: str = self.get_func_name()
         self.func_doc: str = self.get_func_doc()
         self.function_signature: str = self.get_function_signature()
+        self.editor: Optional[Editor] = detect_available_editor()
 
     def get_output_type(self) -> List[Type]:
         """
@@ -56,22 +70,39 @@ class MyMagics(Magics):
 
     @line_magic
     def edit(self, line):
-        boilerplate_code = self.build_boilerplate_code()
+        if self.editor is None:
+            print(f"{Fore.RED}ERROR:: No editor found. Please install PyCharm, VSCode or code-server.{Style.RESET_ALL}")
+            return
 
+        boilerplate_code = self.build_boilerplate_code()
         self.write_to_file(boilerplate_code)
 
-        # print(f"Opening {self.temp_file_path} in PyCharm...")
-        # subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
-        #                  stdout=subprocess.DEVNULL,
-        #                  stderr=subprocess.DEVNULL)
-        # Start code-server
-        workspace = os.path.dirname(self.scope['__file__'])
-        subprocess.Popen(["code-server", "--auth", "none", "--bind-addr", "0.0.0.0:8080", workspace,
-                          "--reuse-window", "-g", self.temp_file_path],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print("Starting code-server...")
-        print("Open code-server in your browser at http://localhost:8080")
-        time.sleep(3)  # Allow time to boot
+        self.open_file_in_editor()
+
+    def open_file_in_editor(self):
+        """
+        Open the file in the available editor.
+        """
+        if self.editor == Editor.Pycharm:
+            subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        elif self.editor == Editor.Code:
+            subprocess.Popen(["code", "--line", str(self.user_edit_line), self.temp_file_path],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        elif self.editor == Editor.CodeServer:
+            try:
+                subprocess.check_output(["pgrep", "-f", "code-server"])
+            except subprocess.CalledProcessError:
+                # Start code-server
+                workspace = os.path.dirname(self.scope['__file__'])
+                subprocess.Popen(["code-server", "--auth", "none", "--bind-addr", "0.0.0.0:8080", workspace,
+                                  "--reuse-window", "-g", self.temp_file_path],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print("Starting code-server...")
+                time.sleep(3)  # Allow time to boot
+            print("Open code-server in your browser at http://localhost:8080")
 
     def build_boilerplate_code(self):
         imports = self.get_imports()
@@ -118,12 +149,16 @@ class MyMagics(Magics):
         return func_args
 
     def write_to_file(self, code: str):
-        tmp = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".py",
-                                          dir=os.path.dirname(self.scope['__file__']))
-        tmp.write(code)
-        tmp.flush()
-        self.temp_file_path = tmp.name
-        tmp.close()
+        if self.temp_file_path is None:
+            tmp = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".py",
+                                              dir=os.path.dirname(self.scope['__file__']))
+            tmp.write(code)
+            tmp.flush()
+            self.temp_file_path = tmp.name
+            tmp.close()
+        else:
+            with open(self.temp_file_path, 'w') as f:
+                f.write(code)
 
     def get_imports(self):
         """

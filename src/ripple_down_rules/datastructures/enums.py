@@ -7,6 +7,24 @@ from typing_extensions import List, Dict, Any
 from ripple_down_rules.utils import SubclassJSONSerializer
 
 
+class Editor(str, Enum):
+    """
+    The editor that is used to edit the rules.
+    """
+    Pycharm = "pycharm"
+    """
+    PyCharm editor.
+    """
+    Code = "code"
+    """
+    Visual Studio Code editor.
+    """
+    CodeServer = "code-server"
+    """
+    Visual Studio Code server editor.
+    """
+
+
 class Category(str, SubclassJSONSerializer, Enum):
 
     @classmethod
