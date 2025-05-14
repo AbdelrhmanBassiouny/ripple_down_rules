@@ -27,6 +27,7 @@ from .utils import extract_dependencies, contains_return_statement, get_imports_
 
 @magics_class
 class MyMagics(Magics):
+    tmp_filename: Optional[str] = None
     def __init__(self, shell, scope,
                  code_to_modify: Optional[str] = None,
                  prompt_for: Optional[PromptFor] = None,
@@ -64,9 +65,12 @@ class MyMagics(Magics):
         #                  stdout=subprocess.DEVNULL,
         #                  stderr=subprocess.DEVNULL)
         # Start code-server
-        subprocess.Popen(["code-server", "--auth", "none", "--bind-addr", "0.0.0.0:8080", "--open", self.temp_file_path],
+        workspace = os.path.dirname(self.scope['__file__'])
+        subprocess.Popen(["code-server", "--auth", "none", "--bind-addr", "0.0.0.0:8080", workspace,
+                          "--reuse-window", "-g", self.temp_file_path],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print("Starting code-server...")
+        print("Open code-server in your browser at http://localhost:8080")
         time.sleep(3)  # Allow time to boot
 
     def build_boilerplate_code(self):
