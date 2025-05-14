@@ -3,6 +3,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
 from _ast import AST
 from functools import cached_property
 from textwrap import indent, dedent
@@ -58,10 +59,15 @@ class MyMagics(Magics):
 
         self.write_to_file(boilerplate_code)
 
-        print(f"Opening {self.temp_file_path} in PyCharm...")
-        subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
-                         stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
+        # print(f"Opening {self.temp_file_path} in PyCharm...")
+        # subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
+        #                  stdout=subprocess.DEVNULL,
+        #                  stderr=subprocess.DEVNULL)
+        # Start code-server
+        subprocess.Popen(["code-server", "--auth", "none", "--bind-addr", "0.0.0.0:8080", "--open", self.temp_file_path],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("Starting code-server...")
+        time.sleep(3)  # Allow time to boot
 
     def build_boilerplate_code(self):
         imports = self.get_imports()
