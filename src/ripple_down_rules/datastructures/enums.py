@@ -23,6 +23,14 @@ class Editor(str, Enum):
     """
     Visual Studio Code server editor.
     """
+    @classmethod
+    def from_str(cls, editor: str) -> Editor:
+        """
+        Convert a string to an Editor enum.
+        :param editor: The string to convert.
+        :return: The Editor enum.
+        """
+        return getattr(cls, editor)
 
 
 class Category(str, SubclassJSONSerializer, Enum):

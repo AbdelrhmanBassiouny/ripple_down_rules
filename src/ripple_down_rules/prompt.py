@@ -32,6 +32,9 @@ def detect_available_editor() -> Optional[Editor]:
 
     :return: The first found editor that is available on the system.
     """
+    editor_env = os.environ.get("RDR_EDITOR")
+    if editor_env:
+        return Editor.from_str(editor_env)
     for editor in [Editor.Pycharm, Editor.Code, Editor.CodeServer]:
         if shutil.which(editor.value):
             return editor
@@ -44,8 +47,7 @@ class MyMagics(Magics):
     def __init__(self, shell, scope,
                  code_to_modify: Optional[str] = None,
                  prompt_for: Optional[PromptFor] = None,
-                 case_query: Optional[CaseQuery] = None,
-                 editor: Editor = Editor.Pycharm):
+                 case_query: Optional[CaseQuery] = None):
         super().__init__(shell)
         self.scope = scope
         self.code_to_modify = code_to_modify
@@ -98,8 +100,7 @@ class MyMagics(Magics):
                 # Start code-server
                 workspace = os.path.dirname(self.scope['__file__'])
                 subprocess.Popen(["code-server", "--auth", "none", "--bind-addr", "0.0.0.0:8080", workspace,
-                                  "--reuse-window", "-g", self.temp_file_path],
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                  "--reuse-window", "-g", self.temp_file_path])
                 print("Starting code-server...")
                 time.sleep(3)  # Allow time to boot
             print("Open code-server in your browser at http://localhost:8080")
