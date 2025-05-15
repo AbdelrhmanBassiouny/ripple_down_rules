@@ -43,11 +43,11 @@ def detect_available_editor() -> Optional[Editor]:
     return None
 
 
-def is_port_in_use(port):
+def is_port_in_use(port: int = 8080) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("localhost", port)) == 0
 
-def kill_process_on_port(port):
+def kill_process_on_port(port: int = 8080):
     try:
         output = subprocess.check_output(["lsof", "-t", f"-i:{port}"])
         pids = output.decode().strip().split()
@@ -131,8 +131,8 @@ class MyMagics(Magics):
         elif self.editor == Editor.CodeServer:
             try:
                 subprocess.check_output(["pgrep", "-f", "code-server"])
-                if is_port_in_use(PORT):
-                    kill_process_on_port(PORT)
+                if is_port_in_use():
+                    kill_process_on_port()
                 start_code_server(workspace)
             except subprocess.CalledProcessError:
                 # Start code-server
