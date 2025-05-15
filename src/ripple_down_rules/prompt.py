@@ -85,20 +85,18 @@ class MyMagics(Magics):
         """
         Open the file in the available editor.
         """
+        workspace = os.path.dirname(self.scope['__file__'])
         if self.editor == Editor.Pycharm:
             subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
                              stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL)
         elif self.editor == Editor.Code:
-            subprocess.Popen(["code", "--line", str(self.user_edit_line), self.temp_file_path],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
+            subprocess.Popen(["code", workspace, "-g", self.temp_file_path])
         elif self.editor == Editor.CodeServer:
             try:
                 subprocess.check_output(["pgrep", "-f", "code-server"])
             except subprocess.CalledProcessError:
                 # Start code-server
-                workspace = os.path.dirname(self.scope['__file__'])
                 subprocess.Popen(["code-server", "--auth", "none", "--bind-addr", "0.0.0.0:8080", workspace,
                                   "--reuse-window", "-g", self.temp_file_path])
                 print("Starting code-server...")
