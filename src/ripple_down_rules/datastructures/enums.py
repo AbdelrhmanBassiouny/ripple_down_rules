@@ -24,7 +24,7 @@ class Editor(str, Enum):
     Visual Studio Code server editor.
     """
     @classmethod
-    def from_str(cls, editor: str) -> Type[Editor]:
+    def from_str(cls, editor: str) -> Editor:
         """
         Convert a string value to an Editor enum.
 
