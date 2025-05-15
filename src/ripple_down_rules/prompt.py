@@ -2,6 +2,8 @@ import ast
 import logging
 import os
 import shutil
+import signal
+import socket
 import subprocess
 import tempfile
 import time
@@ -39,6 +41,40 @@ def detect_available_editor() -> Optional[Editor]:
         if shutil.which(editor.value):
             return editor
     return None
+
+
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("localhost", port)) == 0
+
+def kill_process_on_port(port):
+    try:
+        output = subprocess.check_output(["lsof", "-t", f"-i:{port}"])
+        pids = output.decode().strip().split()
+        for pid in pids:
+            print(f"🛑 Killing process {pid} on port {port}")
+            os.kill(int(pid), signal.SIGTERM)
+        time.sleep(1)
+    except subprocess.CalledProcessError:
+        print(f"✅ No process using port {port}")
+
+def start_code_server(workspace, user_data_dir: str = "/.jbdevcontainer/data/code-server",
+                      port: int = 8080):
+    """
+    Start the code-server in the given workspace.
+    """
+    cmd = [
+        "code-server",
+        "--bind-addr", f"0.0.0.0:{port}",
+        # "--user-data-dir", user_data_dir,
+        *["--auth", "none"],
+        workspace,
+    ]
+    print(f"🚀 Starting code-server: {' '.join(cmd)}")
+    subprocess.Popen(cmd)
+    print("Starting code-server...")
+    time.sleep(3)  # Allow time to boot
+
 
 @magics_class
 class MyMagics(Magics):
@@ -95,11 +131,12 @@ class MyMagics(Magics):
         elif self.editor == Editor.CodeServer:
             try:
                 subprocess.check_output(["pgrep", "-f", "code-server"])
+                if is_port_in_use(PORT):
+                    kill_process_on_port(PORT)
+                start_code_server(workspace)
             except subprocess.CalledProcessError:
                 # Start code-server
-                subprocess.Popen(["code-server", workspace, "--auth", "none", "--bind-addr", "0.0.0.0:8080"])
-                print("Starting code-server...")
-                time.sleep(3)  # Allow time to boot
+                start_code_server(workspace)
             print("Open code-server in your browser at http://localhost:8080")
 
     def build_boilerplate_code(self):
