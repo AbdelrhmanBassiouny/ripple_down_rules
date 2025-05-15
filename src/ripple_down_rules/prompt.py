@@ -244,10 +244,11 @@ class MyMagics(Magics):
             func_name = f"{self.prompt_for.value.lower()}_for_"
         case_name = self.case_query.name.replace(".", "_")
         if self.case_query.is_function:
+            # convert any CamelCase word into snake_case by adding _ before each capital letter
+            func_name = ''.join(['_' + i.lower() if i.isupper() else i for i in func_name]).lstrip('_')
             case_name = case_name.replace(f"_{self.case_query.attribute_name}", "")
         func_name += case_name
-        # convert any CamelCase word into snake_case by adding _ before each capital letter
-        return ''.join(['_' + i.lower() if i.isupper() else i for i in func_name]).lstrip('_')
+        return func_name
 
     @cached_property
     def case_type(self) -> Type:
