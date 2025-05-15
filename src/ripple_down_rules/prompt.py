@@ -351,8 +351,12 @@ class IPythonShell:
                 self.user_input = '\n'.join(self.all_code_lines)
                 self.user_input = encapsulate_user_input(self.user_input, self.shell.my_magics.function_signature,
                                                          self.shell.my_magics.func_doc)
-                if f"return {self.shell.my_magics.func_name}(case)" not in self.user_input:
-                    self.user_input = self.user_input.strip() + f"\nreturn {self.shell.my_magics.func_name}(case)"
+                if self.case_query.is_function:
+                    args = "**case"
+                else:
+                    args = "case"
+                if f"return {self.shell.my_magics.func_name}({args})" not in self.user_input:
+                    self.user_input = self.user_input.strip() + f"\nreturn {self.shell.my_magics.func_name}({args})"
 
 
 def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, prompt_str: Optional[str] = None) \
