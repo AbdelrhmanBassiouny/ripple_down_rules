@@ -2,15 +2,14 @@ import ast
 import logging
 import os
 import shutil
-import signal
 import socket
 import subprocess
 import tempfile
-import time
 from _ast import AST
 from functools import cached_property
 from textwrap import indent, dedent
 
+import psutil
 from IPython.core.magic import line_magic, Magics, magics_class
 from IPython.terminal.embed import InteractiveShellEmbed
 from colorama import Fore, Style
@@ -18,14 +17,14 @@ from pygments import highlight
 from pygments.formatters.terminal import TerminalFormatter
 from pygments.lexers.python import PythonLexer
 from traitlets.config import Config
-from typing_extensions import List, Optional, Tuple, Dict, Type, Union
+from typing_extensions import List, Optional, Tuple, Dict, Type
 
 from .datastructures.callable_expression import CallableExpression, parse_string_to_expression
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import PromptFor, Editor
 from .utils import extract_dependencies, contains_return_statement, get_imports_from_scope, make_list, \
-    get_imports_from_types, extract_function_source, encapsulate_user_input
+    get_imports_from_types, extract_function_source, encapsulate_user_input, str_to_snake_case
 
 
 def detect_available_editor() -> Optional[Editor]:
@@ -48,43 +47,30 @@ def is_port_in_use(port: int = 8080) -> bool:
         return s.connect_ex(("localhost", port)) == 0
 
 
-def start_code_server(workspace, user_data_dir: Optional[str] = None,
-                      port: int = 8080, venv_path: Optional[str] = None):
+def start_code_server(workspace):
     """
     Start the code-server in the given workspace.
     """
-    cmd = []
-    if venv_path is not None:
-        cmd += ["source", venv_path, "&&"]
-        cmd += ["export", "DEFAULT_PYTHON_PATH=$(which python)", "&&"]
-
-    cmd += [
-        "code-server",
-        "--bind-addr", f"0.0.0.0:{port}"
-        ]
-
-    if user_data_dir:
-        cmd += ["--user-data-dir", user_data_dir]
-
-    cmd += [
-        *["--auth", "none"],
-        workspace,
-    ]
-    print(f"🚀 Starting code-server: {' '.join(cmd)}")
-    subprocess.Popen(cmd)
-    print("Starting code-server...")
-    time.sleep(3)  # Allow time to boot
+    filename = os.path.join(os.path.dirname(__file__), "start-code-server.sh")
+    os.system(f"chmod +x {filename}")
+    print(f"Starting code-server at {filename}")
+    return subprocess.Popen(["/bin/bash", filename, workspace], stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
 
 
 @magics_class
 class MyMagics(Magics):
-    temp_file_path: Optional[str] = None
+    temp_file_path: str = "edit_code_here.py"
     """
     The path to the temporary file that is created for the user to edit.
     """
-    port: int = os.environ.get("RDR_EDITOR_PORT", 8080)
+    port: int = int(os.environ.get("RDR_EDITOR_PORT", 8080))
     """
     The port to use for the code-server.
+    """
+    process: Optional[subprocess.Popen] = None
+    """
+    The process of the code-server.
     """
 
     def __init__(self, shell, scope,
@@ -138,11 +124,15 @@ class MyMagics(Magics):
         elif self.editor == Editor.CodeServer:
             try:
                 subprocess.check_output(["pgrep", "-f", "code-server"])
-            except subprocess.CalledProcessError:
-                start_code_server(self.workspace, port=self.port, venv_path=os.environ.get("RDR_VENV_PATH", None),
-                                  user_data_dir=os.environ.get("CODE_SERVER_USER_DATA_DIR", None))
+                # check if same port is in use
+                if is_port_in_use(self.port):
+                    print(f"Code-server is already running on port {self.port}.")
+                else:
+                    raise ValueError("Port is not in use.")
+            except (subprocess.CalledProcessError, ValueError) as e:
+                self.process = start_code_server(self.workspace)
             print(f"Open code-server in your browser at http://localhost:{self.port}")
-        print(f"Edit the file {self.temp_file_path} then enter %load to load the function.")
+        print(f"Edit the file: {Fore.BLUE}{self.temp_file_path}")
 
     def build_boilerplate_code(self):
         imports = self.get_imports()
@@ -245,10 +235,9 @@ class MyMagics(Magics):
         case_name = self.case_query.name.replace(".", "_")
         if self.case_query.is_function:
             # convert any CamelCase word into snake_case by adding _ before each capital letter
-            func_name = ''.join(['_' + i.lower() if i.isupper() else i for i in func_name]).lstrip('_')
             case_name = case_name.replace(f"_{self.case_query.attribute_name}", "")
         func_name += case_name
-        return func_name
+        return str_to_snake_case(func_name)
 
     @cached_property
     def case_type(self) -> Type:
@@ -297,6 +286,11 @@ Loads the function defined in the temporary file into the user namespace, that c
  Ipython shell. You can then do `{Fore.GREEN}return {Fore.RESET}function_name(case)`.
         """
         print(help_text)
+
+    def __del__(self):
+        if hasattr(self, 'process') and self.process is not None and self.process.poll() is None:
+            self.process.terminate()  # Graceful shutdown
+            self.process.wait()  # Ensure cleanup
 
 
 class CustomInteractiveShell(InteractiveShellEmbed):

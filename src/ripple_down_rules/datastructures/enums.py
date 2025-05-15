@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import auto, Enum
 
-from typing_extensions import List, Dict, Any
+from typing_extensions import List, Dict, Any, Type
 
 from ripple_down_rules.utils import SubclassJSONSerializer
 
@@ -24,13 +24,16 @@ class Editor(str, Enum):
     Visual Studio Code server editor.
     """
     @classmethod
-    def from_str(cls, editor: str) -> Editor:
+    def from_str(cls, editor: str) -> Type[Editor]:
         """
-        Convert a string to an Editor enum.
-        :param editor: The string to convert.
+        Convert a string value to an Editor enum.
+
+        :param editor: The string that represents the editor name.
         :return: The Editor enum.
         """
-        return getattr(cls, editor)
+        if editor not in cls._value2member_map_:
+            raise ValueError(f"Editor {editor} is not supported.")
+        return cls._value2member_map_[editor]
 
 
 class Category(str, SubclassJSONSerializer, Enum):

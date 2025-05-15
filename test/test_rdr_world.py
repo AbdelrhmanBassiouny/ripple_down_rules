@@ -111,7 +111,7 @@ class TestRDRWorld(TestCase):
                                    for possible_drawer in all_possible_drawers]
 
     def test_view_rdr(self):
-        self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)
+        self.get_view_rdr(use_loaded_answers=False, save_answers=False, append=False)
 
     def test_save_and_load_view_rdr(self):
         view_rdr = self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)
