@@ -121,7 +121,7 @@ class MyMagics(Magics):
                              stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL)
         elif self.editor == Editor.Code:
-            subprocess.Popen(["code", self.workspace, "-g", self.temp_file_path])
+            subprocess.Popen(["code", self.temp_file_path])
         elif self.editor == Editor.CodeServer:
             try:
                 subprocess.check_output(["pgrep", "-f", "code-server"])
