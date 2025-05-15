@@ -47,17 +47,6 @@ def is_port_in_use(port: int = 8080) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("localhost", port)) == 0
 
-def kill_process_on_port(port: int = 8080):
-    try:
-        output = subprocess.check_output(["lsof", "-t", f"-i:{port}"])
-        pids = output.decode().strip().split()
-        for pid in pids:
-            print(f"🛑 Killing process {pid} on port {port}")
-            os.kill(int(pid), signal.SIGTERM)
-        time.sleep(1)
-    except subprocess.CalledProcessError:
-        print(f"✅ No process using port {port}")
-
 def start_code_server(workspace, user_data_dir: str = "/.jbdevcontainer/data/code-server",
                       port: int = 8080):
     """
@@ -129,15 +118,16 @@ class MyMagics(Magics):
         elif self.editor == Editor.Code:
             subprocess.Popen(["code", workspace, "-g", self.temp_file_path])
         elif self.editor == Editor.CodeServer:
+            port = 8080
             try:
                 subprocess.check_output(["pgrep", "-f", "code-server"])
-                if is_port_in_use():
-                    kill_process_on_port()
-                start_code_server(workspace)
+                # while is_port_in_use(port):
+                #     port +=1
+                # start_code_server(workspace, port=port)
             except subprocess.CalledProcessError:
                 # Start code-server
                 start_code_server(workspace)
-            print("Open code-server in your browser at http://localhost:8080")
+            print(f"Open code-server in your browser at http://localhost:{port}")
 
     def build_boilerplate_code(self):
         imports = self.get_imports()
