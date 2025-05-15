@@ -121,12 +121,10 @@ class MyMagics(Magics):
             port = 8080
             try:
                 subprocess.check_output(["pgrep", "-f", "code-server"])
-                # while is_port_in_use(port):
-                #     port +=1
-                # start_code_server(workspace, port=port)
             except subprocess.CalledProcessError:
-                # Start code-server
-                start_code_server(workspace)
+                while is_port_in_use(port):
+                    port +=1
+                start_code_server(workspace, port=port)
             print(f"Open code-server in your browser at http://localhost:{port}")
 
     def build_boilerplate_code(self):
