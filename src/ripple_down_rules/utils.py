@@ -885,7 +885,7 @@ def _pickle_thread(thread_obj) -> Any:
 copyreg.pickle(threading.Thread, _pickle_thread)
 
 
-def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable]:
+def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable, Any]:
     """
     Copy a case.
 

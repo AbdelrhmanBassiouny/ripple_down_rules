@@ -11,7 +11,7 @@ from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColum
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING
 
 from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, SubclassJSONSerializer, \
-    get_full_class_name, get_type_from_string, make_list, is_iterable, serialize_dataclass, dataclass_to_dict
+    get_full_class_name, get_type_from_string, make_list, is_iterable, serialize_dataclass, dataclass_to_dict, copy_case
 
 if TYPE_CHECKING:
     from ripple_down_rules.rules import Rule
@@ -350,9 +350,9 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Dict[str, Any]] =
         if last_evaluated_rule and last_evaluated_rule.fired:
             corner_row_dict = dataclass_to_dict(last_evaluated_rule.corner_case)
     else:
-        case_dict = case
+        case_dict = copy_case(case)
         if last_evaluated_rule and last_evaluated_rule.fired:
-            corner_row_dict = corner_case
+            corner_row_dict = copy_case(corner_case)
 
     if corner_row_dict:
         corner_conclusion = last_evaluated_rule.conclusion(case)
