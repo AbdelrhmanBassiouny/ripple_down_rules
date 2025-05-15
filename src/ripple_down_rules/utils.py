@@ -32,11 +32,8 @@ from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get
 if TYPE_CHECKING:
     from .datastructures.case import Case
     from .datastructures.dataclasses import CaseQuery
-    from .rules import Rule
 
 import ast
-
-matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
 
 
 def are_results_subclass_of_types(result_types: List[Any], types_: List[Type]) -> bool:
@@ -1249,6 +1246,9 @@ def draw_tree(root: Node, fig: plt.Figure):
     """
     Draw the tree using matplotlib and networkx.
     """
+    if matplotlib.get_backend().lower() not in ['qt5agg', 'qt4agg', 'qt6agg']:
+        matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+
     if root is None:
         return
     fig.clf()

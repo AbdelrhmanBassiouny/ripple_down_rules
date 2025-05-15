@@ -47,15 +47,26 @@ def is_port_in_use(port: int = 8080) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(("localhost", port)) == 0
 
-def start_code_server(workspace, user_data_dir: str = "/.jbdevcontainer/data/code-server",
-                      port: int = 8080):
+
+def start_code_server(workspace, user_data_dir: Optional[str] = None,
+                      port: int = 8080, venv_path: Optional[str] = None):
     """
     Start the code-server in the given workspace.
     """
-    cmd = [
+    cmd = []
+    if venv_path is not None:
+        cmd += ["source", venv_path, "&&"]
+        cmd += ["export", "DEFAULT_PYTHON_PATH=$(which python)", "&&"]
+
+    cmd += [
         "code-server",
-        "--bind-addr", f"0.0.0.0:{port}",
-        # "--user-data-dir", user_data_dir,
+        "--bind-addr", f"0.0.0.0:{port}"
+        ]
+
+    if user_data_dir:
+        cmd += ["--user-data-dir", user_data_dir]
+
+    cmd += [
         *["--auth", "none"],
         workspace,
     ]
@@ -68,6 +79,13 @@ def start_code_server(workspace, user_data_dir: str = "/.jbdevcontainer/data/cod
 @magics_class
 class MyMagics(Magics):
     temp_file_path: Optional[str] = None
+    """
+    The path to the temporary file that is created for the user to edit.
+    """
+    port: int = os.environ.get("RDR_EDITOR_PORT", 8080)
+    """
+    The port to use for the code-server.
+    """
 
     def __init__(self, shell, scope,
                  code_to_modify: Optional[str] = None,
@@ -84,6 +102,7 @@ class MyMagics(Magics):
         self.func_doc: str = self.get_func_doc()
         self.function_signature: str = self.get_function_signature()
         self.editor: Optional[Editor] = detect_available_editor()
+        self.workspace: str = os.environ.get("RDR_EDITOR_WORKSPACE", os.path.dirname(self.scope['__file__']))
 
     def get_output_type(self) -> List[Type]:
         """
@@ -110,22 +129,20 @@ class MyMagics(Magics):
         """
         Open the file in the available editor.
         """
-        workspace = os.path.dirname(self.scope['__file__'])
         if self.editor == Editor.Pycharm:
             subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
                              stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL)
         elif self.editor == Editor.Code:
-            subprocess.Popen(["code", workspace, "-g", self.temp_file_path])
+            subprocess.Popen(["code", self.workspace, "-g", self.temp_file_path])
         elif self.editor == Editor.CodeServer:
-            port = 8080
             try:
                 subprocess.check_output(["pgrep", "-f", "code-server"])
             except subprocess.CalledProcessError:
-                while is_port_in_use(port):
-                    port +=1
-                start_code_server(workspace, port=port)
-            print(f"Open code-server in your browser at http://localhost:{port}")
+                start_code_server(self.workspace, port=self.port, venv_path=os.environ.get("RDR_VENV_PATH", None),
+                                  user_data_dir=os.environ.get("CODE_SERVER_USER_DATA_DIR", None))
+            print(f"Open code-server in your browser at http://localhost:{self.port}")
+        print(f"Edit the file {self.temp_file_path} then enter %load to load the function.")
 
     def build_boilerplate_code(self):
         imports = self.get_imports()
@@ -174,7 +191,7 @@ class MyMagics(Magics):
     def write_to_file(self, code: str):
         if self.temp_file_path is None:
             tmp = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".py",
-                                              dir=os.path.dirname(self.scope['__file__']))
+                                              dir=self.workspace)
             tmp.write(code)
             tmp.flush()
             self.temp_file_path = tmp.name
