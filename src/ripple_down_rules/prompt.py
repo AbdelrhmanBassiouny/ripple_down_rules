@@ -60,7 +60,7 @@ def start_code_server(workspace):
 
 @magics_class
 class MyMagics(Magics):
-    temp_file_path: str = "edit_code_here.py"
+    temp_file_path: Optional[str] = None
     """
     The path to the temporary file that is created for the user to edit.
     """
@@ -89,6 +89,7 @@ class MyMagics(Magics):
         self.function_signature: str = self.get_function_signature()
         self.editor: Optional[Editor] = detect_available_editor()
         self.workspace: str = os.environ.get("RDR_EDITOR_WORKSPACE", os.path.dirname(self.scope['__file__']))
+        self.temp_file_path: str = os.path.join(self.workspace, "edit_code_here.py")
 
     def get_output_type(self) -> List[Type]:
         """
@@ -131,7 +132,7 @@ class MyMagics(Magics):
                     raise ValueError("Port is not in use.")
             except (subprocess.CalledProcessError, ValueError) as e:
                 self.process = start_code_server(self.workspace)
-            print(f"Open code-server in your browser at http://localhost:{self.port}")
+            print(f"Open code-server in your browser at http://localhost:{self.port}?folder={self.workspace}")
         print(f"Edit the file: {Fore.BLUE}{self.temp_file_path}")
 
     def build_boilerplate_code(self):
