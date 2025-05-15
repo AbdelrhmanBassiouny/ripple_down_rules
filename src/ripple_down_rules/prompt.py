@@ -97,8 +97,7 @@ class MyMagics(Magics):
                 subprocess.check_output(["pgrep", "-f", "code-server"])
             except subprocess.CalledProcessError:
                 # Start code-server
-                subprocess.Popen(["code-server", "--auth", "none", "--bind-addr", "0.0.0.0:8080", workspace,
-                                  "--reuse-window", "-g", self.temp_file_path])
+                subprocess.Popen(["code-server", workspace, "--auth", "none", "--bind-addr", "0.0.0.0:8080"])
                 print("Starting code-server...")
                 time.sleep(3)  # Allow time to boot
             print("Open code-server in your browser at http://localhost:8080")
