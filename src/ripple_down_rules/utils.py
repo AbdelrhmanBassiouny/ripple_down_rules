@@ -649,6 +649,58 @@ def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> 
     return model_name
 
 
+def extract_bracket_arguments(val: str) -> List[str]:
+    """
+    Extract arguments inside brackets into a list.
+
+    :param val: The string containing brackets.
+    :return: List of arguments inside brackets.
+    """
+    if '[' not in val:
+        return [val]
+    args_start = val.find('[')
+    args_end = val.rfind(']')
+    if args_end == -1:
+        return [val]
+    base_type = val[:args_start]
+    args = val[args_start + 1:args_end].split(',')
+    args = [arg.strip() for arg in args]
+    return [base_type] + args
+
+
+def typing_hint_to_str(type_hint: Any) -> Tuple[str, List[str]]:
+    """
+    Convert a typing hint to a string.
+
+    :param type_hint: The typing hint to convert.
+    :return: The string representation of the typing hint.
+    """
+    val = (str(type_hint).strip("<>")
+           .replace("class ", "")
+           # .replace("typing.", "")
+           .replace("'", ""))
+    all_args = []
+    if '[' in val:
+        args = extract_bracket_arguments(val)
+        args_with_brackets = [arg for arg in args if '[' in arg]
+        all_args.extend([arg for arg in args if '[' not in arg])
+        while args_with_brackets:
+            for arg in args:
+                if '[' in arg:
+                    sub_args = extract_bracket_arguments(arg)
+                    args_with_brackets.remove(arg)
+                    all_args.extend([sarg for sarg in sub_args if '[' not in sarg])
+                    args_with_brackets.extend([sarg for sarg in sub_args if '[' in sarg])
+                elif arg not in all_args:
+                    all_args.append(arg)
+            args = args_with_brackets
+        for arg in all_args:
+            val = val.replace(arg, arg.split('.')[-1])
+    else:
+        val = val.split('.')[-1]
+    return val, all_args
+
+
 def get_method_args_as_dict(method: Callable, *args, **kwargs) -> Dict[str, Any]:
     """
     Get the arguments of a method as a dictionary.
@@ -659,6 +711,8 @@ def get_method_args_as_dict(method: Callable, *args, **kwargs) -> Dict[str, Any]
     :return: A dictionary of the arguments.
     """
     func_arg_names = method.__code__.co_varnames
+    func_arg_names = list(map(lambda arg_name: f"{arg_name}_" if arg_name in ["self", "cls"] else arg_name,
+                              func_arg_names))
     func_arg_values = args + tuple(kwargs.values())
     return dict(zip(func_arg_names, func_arg_values))
 
@@ -684,6 +738,24 @@ def get_method_class_name_if_exists(method: Callable) -> Optional[str]:
         if hasattr(method.__self__, "__class__"):
             return method.__self__.__class__.__name__
     return method.__qualname__.split('.')[0] if hasattr(method, "__qualname__") else None
+
+
+def get_method_class_if_exists(method: Callable, *args) -> Optional[Type]:
+    """
+    Get the class of a method if it has one.
+
+    :param method: The method to get the class of.
+    :return: The class of the method, if it exists otherwise None.
+    """
+    if hasattr(method, "__self__"):
+        if hasattr(method.__self__, "__class__"):
+            return method.__self__.__class__
+    elif method.__code__.co_varnames:
+        if method.__code__.co_varnames[0] == 'self':
+            return args[0].__class__
+        elif method.__code__.co_varnames[0] == 'cls':
+            return args[0]
+    return None
 
 
 def get_method_file_name(method: Callable) -> str:
@@ -896,14 +968,15 @@ def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable, Any]:
         return copy_orm_instance_with_relationships(case)
     else:
         # copy the case recursively for 1 level
-        try:
-            case_copy = deepcopy(case)
-        except Exception as e:
-            case_copy = copy(case)
-            for attr in dir(case):
-                if attr.startswith("_") or callable(getattr(case, attr)):
-                    continue
-                attr_value = getattr(case, attr)
+        # try:
+        #     case_copy = deepcopy(case)
+        # except Exception as e:
+        case_copy = copy(case)
+        for attr in dir(case):
+            if attr.startswith("_") or callable(getattr(case, attr)):
+                continue
+            attr_value = getattr(case, attr)
+            if is_iterable(attr_value):
                 setattr(case_copy, attr, copy(attr_value))
         return case_copy
 
@@ -964,7 +1037,7 @@ def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
     return attr_value_type
 
 
-def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Any], Optional[Any], Tuple[Any]]:
+def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Type], Optional[Type], Tuple[Type]]:
     """
     Get the type hint for an attribute of an object.
 
@@ -984,12 +1057,23 @@ def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Any], Opt
             hint = get_type_hints(obj.__class__)[attr_name]
         except KeyError:
             hint = type(class_attr)
-    origin = get_origin(hint)
-    args = get_args(hint)
+    origin, args = get_origin_and_args_from_type_hint(hint)
+    return origin, origin, args
+
+
+def get_origin_and_args_from_type_hint(type_hint: Type) -> Tuple[Optional[Type], Tuple[Type]]:
+    """
+    Get the origin and arguments from a type hint.W
+
+    :param type_hint: The type hint to get the origin and arguments from.
+    :return: The origin and arguments of the type hint.
+    """
+    origin = get_origin(type_hint)
+    args = get_args(type_hint)
     if origin is Mapped:
-        return args[0], get_origin(args[0]), get_args(args[0])
+        return get_origin(args[0]), get_args(args[0])
     else:
-        return hint, origin, args
+        return origin, args
 
 
 def table_rows_as_str(row_dict: Dict[str, Any], columns_per_row: int = 9):
@@ -1157,7 +1241,7 @@ def get_all_subclasses(cls: Type) -> Dict[str, Type]:
     return all_subclasses
 
 
-def make_set(value: Any) -> Set[Any]:
+def make_set(value: Any) -> Set:
     """
     Make a set from a value.
 

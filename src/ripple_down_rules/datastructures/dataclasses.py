@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import inspect
+import typing
 from dataclasses import dataclass, field
 
 import typing_extensions
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List
+from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, get_origin, Set
 
 from .callable_expression import CallableExpression
 from .case import create_case, Case
-from ..utils import copy_case, make_list, make_set
+from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, get_value_type_from_type_hint, \
+    typing_to_python_type
 
 
 @dataclass
@@ -65,6 +67,10 @@ class CaseQuery:
     """
     Whether the case is a dict representing the arguments of an actual function or not,
     most likely means it came from RDRDecorator, the the rdr takes function arguments and outputs the function output.
+    """
+    function_args_type_hints: Optional[Dict[str, Type]] = None
+    """
+    The type hints of the function arguments. This is used to recreate the function signature.
     """
 
     @property
@@ -122,10 +128,20 @@ class CaseQuery:
         """
         :return: The type of the attribute.
         """
-        if not self.mutually_exclusive and (list not in make_list(self._attribute_types)):
-            self._attribute_types = tuple(set(make_list(self._attribute_types) + [set, list]))
-        elif not isinstance(self._attribute_types, tuple):
-            self._attribute_types = tuple(make_list(self._attribute_types))
+        if not isinstance(self._attribute_types, tuple):
+            self._attribute_types = tuple(make_set(self._attribute_types))
+        origin, args = get_origin_and_args_from_type_hint(self._attribute_types)
+        if origin is not None:
+            att_types = make_set(origin)
+            if origin in (list, set, tuple, List, Set, Union, Tuple):
+                att_types.update(make_set(args))
+            elif origin in (dict, Dict):
+                # ignore the key type
+                if args and len(args) > 1:
+                    att_types.update(make_set(args[1]))
+            self._attribute_types = tuple(att_types)
+        if not self.mutually_exclusive and (list not in self._attribute_types):
+            self._attribute_types = tuple(make_list(self._attribute_types) + [set, list])
         return self._attribute_types
 
     @attribute_type.setter
@@ -156,7 +172,7 @@ class CaseQuery:
         """
         if (self._target is not None) and (not isinstance(self._target, CallableExpression)):
             self._target = CallableExpression(conclusion=self._target, conclusion_type=self.attribute_type,
-                                              scope=self.scope)
+                                              scope=self.scope, mutually_exclusive=self.mutually_exclusive)
         return self._target
 
     @target.setter
@@ -200,4 +216,5 @@ class CaseQuery:
         return CaseQuery(self.original_case, self.attribute_name, self.attribute_type,
                          self.mutually_exclusive, _target=self.target, default_value=self.default_value,
                          scope=self.scope, _case=copy_case(self.case), _target_value=self.target_value,
-                         conditions=self.conditions, is_function=self.is_function)
+                         conditions=self.conditions, is_function=self.is_function,
+                         function_args_type_hints=self.function_args_type_hints)

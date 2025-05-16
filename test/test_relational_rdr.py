@@ -5,42 +5,12 @@ from unittest import TestCase
 
 from typing_extensions import List, Optional, Any
 
+from ripple_down_rules.datasets import Robot, Part, PhysicalObject
 from ripple_down_rules.datastructures.case import CaseAttribute
 from ripple_down_rules.datastructures.dataclasses import CaseQuery, CallableExpression
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.utils import render_tree
-
-
-class PhysicalObject:
-    def __init__(self, name: str, contained_objects: Optional[List[PhysicalObject]] = None):
-        self.name: str = name
-        self._contained_objects: List[PhysicalObject] = contained_objects or []
-
-    @property
-    def contained_objects(self) -> List[PhysicalObject]:
-        return self._contained_objects
-
-    @contained_objects.setter
-    def contained_objects(self, value: List[PhysicalObject]):
-        self._contained_objects = value
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return self.name
-
-
-class Part(PhysicalObject):
-    ...
-
-
-class Robot(PhysicalObject):
-
-    def __init__(self, name: str, parts: Optional[List[Part]] = None):
-        super().__init__(name)
-        self.parts: List[Part] = parts if parts else []
 
 
 class RelationalRDRTestCase(TestCase):
@@ -88,7 +58,7 @@ class RelationalRDRTestCase(TestCase):
         cat = scrdr.fit_case(CaseQuery(self.robot, "contained_objects", (PhysicalObject,), False), expert=expert)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + "/relational_scrdr_classify")
-        assert cat == self.target
+        self.assertEqual(cat, self.target)
 
         if save_answers:
             cwd = os.getcwd()
@@ -98,13 +68,10 @@ class RelationalRDRTestCase(TestCase):
     def test_parse_relational_conditions(self):
         user_input = "case.parts is not None and len(case.parts) > 0"
         conditions = CallableExpression(user_input, bool)
-        print(conditions)
-        print(conditions(self.robot))
-        assert conditions(self.robot) == (self.robot.parts is not None and len(self.robot.parts) > 0)
+        self.assertEqual(conditions(self.robot), (self.robot.parts is not None and len(self.robot.parts) > 0))
 
     def test_parse_relational_conclusions(self):
         user_input = "case.parts.contained_objects"
-        conclusion = CallableExpression(user_input, (CaseAttribute, PhysicalObject,))
-        print(conclusion)
-        print(conclusion(self.robot))
-        assert conclusion(self.robot) == self.target
+        conclusion = CallableExpression(user_input, (CaseAttribute, PhysicalObject,),
+        mutually_exclusive=False)
+        self.assertEqual(conclusion(self.robot), self.target)

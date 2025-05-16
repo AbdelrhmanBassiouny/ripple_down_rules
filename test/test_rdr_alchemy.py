@@ -7,7 +7,7 @@ from sqlalchemy.orm import MappedColumn as Column
 from typing_extensions import List, Sequence
 import pandas as pd
 
-from ripple_down_rules.datasets import Base, Animal, Species, get_dataset, Habitat, HabitatTable
+from ripple_down_rules.datasets import Base, MappedAnimal, Species, get_dataset, Habitat, HabitatTable
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
@@ -20,7 +20,7 @@ class TestAlchemyRDR(TestCase):
     test_results_dir: str = "./test_results"
     expert_answers_dir: str = "./test_expert_answers"
     cache_file: str = f"{test_results_dir}/zoo_dataset.pkl"
-    all_cases: Sequence[Animal]
+    all_cases: Sequence[MappedAnimal]
     targets: List[Species]
 
     @classmethod
@@ -37,7 +37,7 @@ class TestAlchemyRDR(TestCase):
         cls._init_session_and_insert_data(X)
 
         # init cases
-        query = select(Animal)
+        query = select(MappedAnimal)
         cls.all_cases = cls.session.scalars(query).all()
 
         # init targets
@@ -50,7 +50,7 @@ class TestAlchemyRDR(TestCase):
         engine = sqlalchemy.create_engine("sqlite:///:memory:")
         Base.metadata.create_all(engine)
         session = sqlalchemy.orm.Session(engine)
-        session.bulk_insert_mappings(Animal, data.to_dict(orient="records"))
+        session.bulk_insert_mappings(MappedAnimal, data.to_dict(orient="records"))
         session.commit()
         cls.session = session
 
@@ -62,7 +62,7 @@ class TestAlchemyRDR(TestCase):
         if use_loaded_answers:
             expert.load_answers(filename)
 
-        query = select(Animal)
+        query = select(MappedAnimal)
         result = self.session.scalars(query).all()
         scrdr = SingleClassRDR()
         case_queries = [CaseQuery(c, "species", (Species,), True, _target=t)
@@ -102,7 +102,7 @@ class TestAlchemyRDR(TestCase):
         grdr = GeneralRDR()
         grdr.add_rdr(fit_scrdr)
 
-        def get_habitat(x: Animal, t: Column) -> List[Column]:
+        def get_habitat(x: MappedAnimal, t: Column) -> List[Column]:
             habitats = set()
             if t == Species.mammal and x.aquatic == 0:
                 habitats = {HabitatTable(Habitat.land)}

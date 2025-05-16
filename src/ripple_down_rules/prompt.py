@@ -23,7 +23,7 @@ from .datastructures.case import Case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import PromptFor, Editor
 from .utils import extract_dependencies, contains_return_statement, get_imports_from_scope, make_list, \
-    get_imports_from_types, extract_function_source, encapsulate_user_input, str_to_snake_case
+    get_imports_from_types, extract_function_source, encapsulate_user_input, str_to_snake_case, typing_hint_to_str
 
 
 def detect_available_editor() -> Optional[Editor]:
@@ -152,7 +152,7 @@ class MyMagics(Magics):
         if self.func_name is None:
             self.func_name = self.get_func_name()
         output_type_hint = self.get_output_type_hint()
-        func_args = self.get_function_args()
+        func_args = self.get_func_args()
         return f"def {self.func_name}({func_args}){output_type_hint}:"
 
     def get_output_type_hint(self) -> str:
@@ -166,14 +166,20 @@ class MyMagics(Magics):
             output_type_hint = f" -> {self.case_query.attribute_type_hint}"
         return output_type_hint
 
-    def get_function_args(self) -> str:
+    def get_func_args(self) -> str:
         """
         :return: A string containing the function arguments.
         """
         if self.case_query.is_function:
-            func_args = {k: type(v).__name__ if not isinstance(v, type) else f"Type[{v.__name__}]"
-                         for k, v in self.case_query.case.items()}
-            func_args = ', '.join([f"{k}: {v}" for k, v in func_args.items()])
+            func_args = {}
+            for k, v in self.case_query.case.items():
+                if (self.case_query.function_args_type_hints is not None
+                        and k in self.case_query.function_args_type_hints):
+                    func_args[k] = typing_hint_to_str(self.case_query.function_args_type_hints[k])[0]
+                else:
+                    func_args[k] = type(v).__name__ if not isinstance(v, type) else f"Type[{v.__name__}]"
+            func_args = ', '.join([f"{k}: {v}" if str(v) not in ["NoneType", "None"] else str(k)
+                                   for k, v in func_args.items()])
         else:
             func_args = f"case: {self.case_type.__name__}"
         return func_args
@@ -187,7 +193,7 @@ class MyMagics(Magics):
             self.temp_file_path = tmp.name
             tmp.close()
         else:
-            with open(self.temp_file_path, 'w') as f:
+            with open(self.temp_file_path, 'w+') as f:
                 f.write(code)
 
     def get_imports(self):
@@ -197,10 +203,18 @@ class MyMagics(Magics):
         case_type_imports = []
         if self.case_query.is_function:
             for k, v in self.case_query.case.items():
-                if isinstance(v, type):
-                    case_type_imports.append(f"from {v.__module__} import {v.__name__}")
+                if (self.case_query.function_args_type_hints is not None
+                        and k in self.case_query.function_args_type_hints):
+                    hint_list = typing_hint_to_str(self.case_query.function_args_type_hints[k])[1]
+                    for hint in hint_list:
+                        hint_split = hint.split('.')
+                        if len(hint_split) > 1:
+                            case_type_imports.append(f"from {'.'.join(hint_split[:-1])} import {hint_split[-1]}")
                 else:
-                    case_type_imports.append(f"\nfrom {type(v).__module__} import {type(v).__name__}")
+                    if isinstance(v, type):
+                        case_type_imports.append(f"from {v.__module__} import {v.__name__}")
+                    elif hasattr(v, "__module__") and not v.__module__.startswith("__"):
+                        case_type_imports.append(f"\nfrom {type(v).__module__} import {type(v).__name__}")
         else:
             case_type_imports.append(f"from {self.case_type.__module__} import {self.case_type.__name__}")
         if self.output_type is None:
@@ -421,7 +435,8 @@ def prompt_user_for_expression(case_query: CaseQuery, prompt_for: PromptFor, pro
         prev_user_input = '\n'.join(user_input.split('\n')[2:-1])
         conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
         callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
-                                                 scope=case_query.scope)
+                                                 scope=case_query.scope,
+                                                  mutually_exclusive=case_query.mutually_exclusive)
         try:
             result = callable_expression(case_query.case)
             if len(make_list(result)) == 0:

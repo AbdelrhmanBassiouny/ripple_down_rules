@@ -93,9 +93,12 @@ class CallableExpression(SubclassJSONSerializer):
     """
     encapsulating_function: str = "def _get_value(case):"
 
-    def __init__(self, user_input: Optional[str] = None, conclusion_type: Optional[Tuple[Type]] = None,
+    def __init__(self, user_input: Optional[str] = None,
+                 conclusion_type: Optional[Tuple[Type]] = None,
                  expression_tree: Optional[AST] = None,
-                 scope: Optional[Dict[str, Any]] = None, conclusion: Optional[Any] = None):
+                 scope: Optional[Dict[str, Any]] = None,
+                 conclusion: Optional[Any] = None,
+                 mutually_exclusive: bool = True):
         """
         Create a callable expression.
 
@@ -104,6 +107,8 @@ class CallableExpression(SubclassJSONSerializer):
         :param expression_tree: The AST tree parsed from the user input.
         :param scope: The scope to use for the callable expression.
         :param conclusion: The conclusion to use for the callable expression.
+        :param mutually_exclusive: If True, the conclusion is mutually exclusive, i.e. the callable expression can only
+            return one conclusion. If False, the callable expression can return multiple conclusions.
         """
         if user_input is None and conclusion is None:
             raise ValueError("Either user_input or conclusion must be provided.")
@@ -123,6 +128,7 @@ class CallableExpression(SubclassJSONSerializer):
         self.code = compile_expression_to_code(self.expression_tree)
         self.visitor = VariableVisitor()
         self.visitor.visit(self.expression_tree)
+        self.mutually_exclusive: bool = mutually_exclusive
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
@@ -134,8 +140,8 @@ class CallableExpression(SubclassJSONSerializer):
                 if output is None:
                     output = scope['_get_value'](case)
                 if self.conclusion_type is not None:
-                    if not any([issubclass(ct, (list, set)) for ct in self.conclusion_type]) and is_iterable(output):
-                        raise ValueError(f"Expected output to be {self.conclusion_type}, but got {type(output)}")
+                    if self.mutually_exclusive and issubclass(type(output), (list, set)):
+                        raise ValueError(f"Mutually exclusive types cannot be lists or sets, got {type(output)}")
                     output_types = {type(o) for o in make_list(output)}
                     output_types.add(type(output))
                     if not are_results_subclass_of_types(output_types, self.conclusion_type):
@@ -229,6 +235,7 @@ class CallableExpression(SubclassJSONSerializer):
                 "scope": {k: get_full_class_name(v) for k, v in self.scope.items()
                           if hasattr(v, '__module__') and hasattr(v, '__name__')},
                 "conclusion": conclusion_to_json(self.conclusion),
+                "mutually_exclusive": self.mutually_exclusive,
                 }
 
     @classmethod
@@ -237,7 +244,8 @@ class CallableExpression(SubclassJSONSerializer):
                    conclusion_type=tuple(get_type_from_string(t) for t in data["conclusion_type"])
                    if data["conclusion_type"] else None,
                    scope={k: get_type_from_string(v) for k, v in data["scope"].items()},
-                   conclusion=SubclassJSONSerializer.from_json(data["conclusion"]))
+                   conclusion=SubclassJSONSerializer.from_json(data["conclusion"]),
+                   mutually_exclusive=data["mutually_exclusive"])
 
 
 def compile_expression_to_code(expression_tree: AST) -> Any:

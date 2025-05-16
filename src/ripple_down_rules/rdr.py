@@ -931,7 +931,7 @@ class GeneralRDR(RippleDownRules):
         imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
         # add rdr python generated functions.
         for rdr_key, rdr in self.start_rules_dict.items():
-            imports += (f"from {file_path.strip('./')}"
+            imports += (f"from ."
                         f" import {rdr.generated_python_file_name} as {self.rdr_key_to_function_name(rdr_key)}\n")
         return imports
 

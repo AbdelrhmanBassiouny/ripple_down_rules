@@ -65,7 +65,7 @@ class Case(UserDict, SubclassJSONSerializer):
                 new_list.extend(make_list(value))
                 super().__setitem__(name, new_list)
             else:
-                super().__setitem__(name, self[name])
+                super().__setitem__(name, value)
         else:
             super().__setitem__(name, value)
         setattr(self, name, self[name])

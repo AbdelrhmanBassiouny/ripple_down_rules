@@ -138,7 +138,8 @@ class Human(Expert):
             expert_input = self.all_expert_answers.pop(0)
             if expert_input is not None:
                 expression = CallableExpression(expert_input, case_query.attribute_type,
-                                                scope=case_query.scope)
+                                                scope=case_query.scope,
+                                                 mutually_exclusive=case_query.mutually_exclusive)
         else:
             show_current_and_corner_cases(case_query.case)
             expert_input, expression = prompt_user_for_expression(case_query, PromptFor.Conclusion)

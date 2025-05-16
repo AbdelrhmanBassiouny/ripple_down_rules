@@ -131,17 +131,19 @@ class RelationalRDRTestCase(TestCase):
         cls.containments.append(ContainsObject(left=cls.part_d, right=cls.part_e))
         cls.containments.append(ContainsObject(left=cls.part_e, right=cls.part_f))
         cls.robot: PhysicalObject = robot
-        cls.case_query = CaseQuery(robot, robot.contained_objects, (PhysicalObject,), False)
+        cls.case_query = CaseQuery(robot, "contained_objects", (PhysicalObject,), False)
         cls.target = [cls.part_b, cls.part_c, cls.part_d, cls.part_e]
 
     def test_setup(self):
-        assert self.robot.parts == [self.part_a, self.part_b, self.part_c, self.part_d]
-        assert all(len(part.part_of) == 1 and part.part_of[0] == self.robot for part in self.robot.parts)
-        assert self.robot.contained_objects == []
-        assert self.part_a.contained_objects == [self.part_b, self.part_c]
-        assert self.part_c.contained_objects == [self.part_d]
-        assert self.part_d.contained_objects == [self.part_e]
-        assert self.part_e.contained_objects == [self.part_f]
+        self.assertEqual(self.robot.parts, [self.part_a, self.part_b, self.part_c, self.part_d])
+        for part in self.robot.parts:
+            self.assertEqual(len(part.part_of), 1)
+            self.assertEqual(part.part_of[0], self.robot)
+        self.assertEqual(self.robot.contained_objects, [])
+        self.assertEqual(self.part_a.contained_objects, [self.part_b, self.part_c])
+        self.assertEqual(self.part_c.contained_objects, [self.part_d])
+        self.assertEqual(self.part_d.contained_objects, [self.part_e])
+        self.assertEqual(self.part_e.contained_objects, [self.part_f])
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -155,7 +157,7 @@ class RelationalRDRTestCase(TestCase):
         cat = scrdr.fit_case(CaseQuery(self.robot, "contained_objects", (PhysicalObject,), False), expert=expert)
         render_tree(scrdr.start_rule, use_dot_exporter=True,
                     filename=self.test_results_dir + "/relational_scrdr_classify")
-        assert cat == self.target
+        self.assertEqual(cat, self.target)
 
         if save_answers:
             cwd = os.getcwd()
@@ -165,13 +167,10 @@ class RelationalRDRTestCase(TestCase):
     def test_parse_relational_conditions(self):
         user_input = "case.parts is not None and len(case.parts) > 0"
         conditions = CallableExpression(user_input, bool)
-        print(conditions)
-        print(conditions(self.robot))
-        assert conditions(self.robot) == (self.robot.parts is not None and len(self.robot.parts) > 0)
+        self.assertEqual(conditions(self.robot), (self.robot.parts is not None and len(self.robot.parts) > 0))
 
     def test_parse_relational_conclusions(self):
         user_input = "case.parts.contained_objects"
-        conclusion = CallableExpression(user_input, (CaseAttribute, PhysicalObject,))
-        print(conclusion)
-        print(conclusion(self.robot))
-        assert conclusion(self.robot) == self.target
+        conclusion = CallableExpression(user_input, (CaseAttribute, PhysicalObject,),
+         mutually_exclusive=False)
+        self.assertEqual(conclusion(self.robot), self.target)
