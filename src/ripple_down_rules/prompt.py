@@ -9,7 +9,6 @@ from _ast import AST
 from functools import cached_property
 from textwrap import indent, dedent
 
-import psutil
 from IPython.core.magic import line_magic, Magics, magics_class
 from IPython.terminal.embed import InteractiveShellEmbed
 from colorama import Fore, Style
