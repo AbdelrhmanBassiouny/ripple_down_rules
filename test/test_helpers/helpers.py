@@ -67,7 +67,7 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
                  save_answers: bool = False,
                  append: bool = False,
                  no_targets: bool = False) -> Tuple[GeneralRDR, List[dict]]:
-    filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
+    filename = os.path.join(os.path.dirname(__file__), '..', expert_answers_dir, expert_answers_file)
     expert = Human(use_loaded_answers=load_answers, append=append)
     if load_answers:
         expert.load_answers(filename)

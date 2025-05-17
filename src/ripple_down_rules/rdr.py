@@ -883,10 +883,12 @@ class GeneralRDR(RippleDownRules):
             f.write(f"{' ' * 4}return GeneralRDR._classify(classifiers_dict, case)\n")
 
     @property
-    def case_type(self) -> Type:
+    def case_type(self) -> Optional[Type]:
         """
         :return: The type of the case (input) to the RDR classifier.
         """
+        if self.start_rule is None or self.start_rule.corner_case is None:
+            return None
         if isinstance(self.start_rule.corner_case, Case):
             return self.start_rule.corner_case._obj_type
         else:
@@ -900,10 +902,12 @@ class GeneralRDR(RippleDownRules):
         return importlib.import_module(f"{file_path.strip('./')}.{self.generated_python_file_name}").classify
 
     @property
-    def _default_generated_python_file_name(self) -> str:
+    def _default_generated_python_file_name(self) -> Optional[str]:
         """
         :return: The default generated python file name.
         """
+        if self.start_rule is None or self.start_rule.corner_case is None:
+            return None
         if isinstance(self.start_rule.corner_case, Case):
             name = self.start_rule.corner_case._name
         else:
