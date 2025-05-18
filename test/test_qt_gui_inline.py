@@ -1,20 +1,58 @@
 import inspect
 from collections import UserDict
 
-from PyQt6.QtGui import QPixmap, QPainter
+from PyQt6.QtGui import QPixmap, QPainter, QPalette, QColor
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QScrollArea,
-    QSizePolicy, QToolButton, QHBoxLayout, QPushButton, QMainWindow
+    QSizePolicy, QToolButton, QHBoxLayout, QPushButton, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 )
 from PyQt6.QtCore import Qt
 import sys
 
 from colorama import Fore
+from qtconsole.inprocess import QtInProcessKernelManager
+from qtconsole.rich_jupyter_widget import RichJupyterWidget
 from typing_extensions import Optional
 
 from ripple_down_rules.datasets import load_zoo_dataset, Species
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.utils import is_iterable
+
+
+class ImageViewer(QGraphicsView):
+    def __init__(self, image_path):
+        super().__init__()
+        self.setScene(QGraphicsScene(self))
+
+        pixmap = QPixmap(image_path)
+        self.pixmap_item = QGraphicsPixmapItem(pixmap)
+        self.scene().addItem(self.pixmap_item)
+
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+
+        self._zoom = 0
+
+    def wheelEvent(self, event):
+        # Zoom in or out with Ctrl + mouse wheel
+        if event.modifiers() == Qt.ControlModifier:
+            angle = event.angleDelta().y()
+            factor = 1.25 if angle > 0 else 0.8
+
+            self._zoom += 1 if angle > 0 else -1
+            if self._zoom > 10:  # max zoom in limit
+                self._zoom = 10
+                return
+            if self._zoom < -10:  # max zoom out limit
+                self._zoom = -10
+                return
+
+            self.scale(factor, factor)
+        else:
+            super().wheelEvent(event)
 
 
 
@@ -40,14 +78,29 @@ class BackgroundWidget(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         if not self.pixmap.isNull():
+            # Calculate the vertical space used by buttons
+            button_area_height = 0
+            for i in range(self.layout.count()):
+                item = self.layout.itemAt(i)
+                if item.widget():
+                    button_area_height += item.widget().height() + self.layout.spacing()
+
+            remaining_height = self.height() - button_area_height
+            if remaining_height <= 0:
+                return  # No space to draw
+
+            # Scale image to the remaining area (width, height)
             scaled = self.pixmap.scaled(
-                self.size(),
+                self.width(),
+                remaining_height,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             )
+
             x = (self.width() - scaled.width()) // 2
-            y = (self.height() - scaled.height()) // 2
-            painter.drawPixmap(x, y, scaled)
+
+            # Draw the image starting just below the buttons
+            painter.drawPixmap(x, button_area_height+20, scaled)
 
     def resizeEvent(self, event):
         self.update()  # Force repaint on resize
@@ -98,7 +151,7 @@ class CollapsibleBox(QWidget):
         self.content_area.setVisible(is_expanded)
 
         # Trigger resize
-        self.adjust_size_recursive()
+        # self.adjust_size_recursive()
 
     def add_widget(self, widget):
         self.content_layout.addWidget(widget)
@@ -150,8 +203,11 @@ class AttributeViewer(QMainWindow):
         super().__init__(parent)
         self.setWindowTitle("RDR Case Viewer")
 
+        self.setFixedSize(1600, 600)  # or your preferred initial size
+
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
+        self.setStyleSheet("background-color: #333333;")
         main_widget.setStyleSheet("background-color: #333333;")
 
 
@@ -166,18 +222,28 @@ class AttributeViewer(QMainWindow):
         self.attr_widget_layout = QVBoxLayout(attr_widget)
         self.attr_widget_layout.setSpacing(2)
         self.attr_widget_layout.setContentsMargins(6, 6, 6, 6)
+        attr_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setWidget(attr_widget)
 
         self.add_collapsible(name, obj, self.attr_widget_layout, 0, 3)
         self.attr_widget_layout.addStretch()  # Push to top
 
-        scroll.setWidget(attr_widget)
-
         # === Right: Action buttons ===
         action_widget = BackgroundWidget('../images/thinking_pr2.jpg')
 
+        ipython_console = IPythonConsole(locals())
+        action_widget.layout.addWidget(ipython_console)
+
+        self.viewer = ImageViewer("object_diagram.png")  # put your image path here
+
         # Add both to main layout
-        main_layout.addWidget(attr_widget, stretch=1)
-        main_layout.addWidget(action_widget, stretch=3)
+        main_layout.addWidget(scroll, stretch=1)
+        main_layout.addWidget(action_widget, stretch=2)
+        main_layout.addWidget(self.viewer, stretch=2)
+
 
 
     def add_attributes(self, obj, layout, current_depth=0, max_depth=3):
@@ -190,6 +256,7 @@ class AttributeViewer(QMainWindow):
         else:
             methods = []
             attributes = []
+            iterables = []
             for attr in dir(obj):
                 if attr.startswith("_") or attr == "scope":
                     continue
@@ -198,10 +265,13 @@ class AttributeViewer(QMainWindow):
                     if callable(value):
                         methods.append((attr, value))
                         continue
+                    elif is_iterable(value):
+                        iterables.append((attr, value))
+                        continue
                 except Exception as e:
                     value = f"<error: {e}>"
                 attributes.append((attr, value))
-            items = attributes + methods
+            items = attributes + iterables + methods
         for attr, value in items:
             attr = f"{attr}"
             try:
@@ -232,6 +302,51 @@ class AttributeViewer(QMainWindow):
         layout.addWidget(item_label)
 
 
+class IPythonConsole(RichJupyterWidget):
+    def __init__(self, namespace=None, parent=None):
+        super(IPythonConsole, self).__init__(parent)
+
+        self.kernel_manager = QtInProcessKernelManager()
+        self.kernel_manager.start_kernel()
+        self.kernel = self.kernel_manager.kernel
+        self.kernel.gui = 'qt'
+        self.command_log = []
+
+        self.kernel_client = self.kernel_manager.client()
+        self.kernel_client.start_channels()
+
+        # Update the user namespace with your custom variables
+        if namespace:
+            self.kernel.shell.user_ns.update(namespace)
+
+        # Set the underlying QTextEdit's palette
+        palette = QPalette()
+        self._control.setPalette(palette)
+
+        # Override the stylesheet to force background and text colors
+        self._control.setStyleSheet("""
+                    background-color: #121212;
+                    color: #00FF00;
+                    selection-background-color: #006400;
+                    selection-color: white;
+                """)
+
+        # Use a dark syntax style like monokai
+        self.syntax_style = 'monokai'
+
+        self.exit_requested.connect(self.stop)
+
+    def execute(self, source=None, hidden=False, interactive=False):
+        # Log the command before execution
+        source = source if source is not None else self.input_buffer
+        self.command_log.append(source)
+        super().execute(source, hidden, interactive)
+
+    def stop(self):
+        self.kernel_client.stop_channels()
+        self.kernel_manager.shutdown_kernel()
+
+
 # 🎯 Sample nested test object
 class SubObject:
     def __init__(self):
@@ -253,6 +368,6 @@ if __name__ == "__main__":
     cases, targets = load_zoo_dataset(cache_file="zoo")
     cq = CaseQuery(cases[0], "species", (Species,), True, _target=targets[0])
     viewer = AttributeViewer(cq, "CaseQuery")
-    viewer.resize(500, 600)
+    # viewer.resize(500, 600)
     viewer.show()
     sys.exit(app.exec())
