@@ -793,7 +793,7 @@ def is_iterable(obj: Any) -> bool:
 
     :param obj: The object to check.
     """
-    return hasattr(obj, "__iter__") and not isinstance(obj, (str, type))
+    return hasattr(obj, "__iter__") and not isinstance(obj, (str, type, bytes, bytearray))
 
 
 def get_type_from_string(type_path: str):
