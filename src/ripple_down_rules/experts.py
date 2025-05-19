@@ -10,7 +10,8 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.enums import PromptFor
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.case import show_current_and_corner_cases
-from .prompt import prompt_user_for_expression, IPythonShell
+from .prompt import prompt_user_for_expression
+from .ipython_custom_shell import IPythonShell
 from .utils import get_all_subclasses, make_list
 
 if TYPE_CHECKING:

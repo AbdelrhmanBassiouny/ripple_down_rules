@@ -15,29 +15,27 @@ from .utils import is_iterable
 
 
 class ImageViewer(QGraphicsView):
-    def __init__(self, image_path):
+    def __init__(self):
         super().__init__()
         self.setScene(QGraphicsScene(self))
-        self.image_path = image_path
-        pixmap = QPixmap(image_path)
-        self.pixmap_item = QGraphicsPixmapItem(pixmap)
-        self.scene().addItem(self.pixmap_item)
-
         self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
+        self.pixmap_item = None
+
         self._zoom = 0
 
-    def update_image(self, image_path: Optional[str] = None):
-        if image_path:
-            self.image_path = image_path
-        pixmap = QPixmap(self.image_path)
+    def update_image(self, image_path: str):
+        if self.pixmap_item is None:
+            self.pixmap_item = QGraphicsPixmapItem()
+            self.scene().addItem(self.pixmap_item)
+        pixmap = QPixmap(image_path)
         self.pixmap_item.setPixmap(pixmap)
-        # self.setSceneRect(self.pixmap_item.boundingRect())
-        # self.fitInView(self.pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+        self.setSceneRect(self.pixmap_item.boundingRect())
+        self.fitInView(self.pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
 
     def wheelEvent(self, event):
         # Zoom in or out with Ctrl + mouse wheel
@@ -233,7 +231,7 @@ def color_name_to_html(color_name):
 
 
 class RDRCaseViewer(QMainWindow):
-    def __init__(self, obj, name: str, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("RDR Case Viewer")
 
@@ -249,8 +247,6 @@ class RDRCaseViewer(QMainWindow):
         # === Left: Attributes ===
         self._create_attribute_widget()
 
-        self.update_attribute_layout(obj, name)
-
         # === Middle: Ipython & Action buttons ===
         middle_widget = QWidget()
         self.middle_widget_layout = QVBoxLayout(middle_widget)
@@ -261,14 +257,14 @@ class RDRCaseViewer(QMainWindow):
 
         self.buttons_widget = self.create_buttons_widget()
 
-        self.ipython_console = IPythonConsole(locals())
+        self.ipython_console = IPythonConsole()
 
         self.middle_widget_layout.addWidget(self.title_label)
         self.middle_widget_layout.addWidget(self.ipython_console)
         self.middle_widget_layout.addWidget(self.buttons_widget)
 
         # === Right: Object Diagram ===
-        self.obj_diagram_viewer = ImageViewer("object_diagram.png")  # put your image path here
+        self.obj_diagram_viewer = ImageViewer()  # put your image path here
 
         # Add both to main layout
         main_layout.addWidget(self.scroll_widget, stretch=1)
@@ -277,9 +273,10 @@ class RDRCaseViewer(QMainWindow):
 
     def update_for_object(self, obj: Any, name: str):
         graph = generate_object_graph(obj, name)
-        graph.save("object_diagram.png")
+        graph.render("object_diagram", view=False)
         self.update_attribute_layout(obj, name)
         self.title_label.setText(style(f"{name}", 'o', 28, 'bold'))
+        self.ipython_console.update_namespace(locals())
         self.obj_diagram_viewer.update_image("object_diagram.png")
 
     def _create_attribute_widget(self):
@@ -397,7 +394,7 @@ class IPythonConsole(RichJupyterWidget):
 
         # Update the user namespace with your custom variables
         if namespace:
-            self.kernel.shell.user_ns.update(namespace)
+            self.update_namespace(namespace)
 
         # Set the underlying QTextEdit's palette
         palette = QPalette()
@@ -415,6 +412,12 @@ class IPythonConsole(RichJupyterWidget):
         self.syntax_style = 'monokai'
 
         self.exit_requested.connect(self.stop)
+
+    def update_namespace(self, namespace):
+        """
+        Update the user namespace with new variables.
+        """
+        self.kernel.shell.user_ns.update(namespace)
 
     def execute(self, source=None, hidden=False, interactive=False):
         # Log the command before execution
