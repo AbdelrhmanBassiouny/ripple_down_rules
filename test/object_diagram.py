@@ -1,3 +1,5 @@
+from enum import Enum
+
 import graphviz
 
 from ripple_down_rules.datasets import load_zoo_dataset, Species
@@ -23,9 +25,12 @@ def get_colored_value(value):
     else:
         color = '#000000'  # fallback
         val = str(value)
+    val = (val.replace("class ", "").replace("'", "").replace('<', "")
+           .replace('>', "").replace('?', '').replace('\n', ' '))
+    val = val[:50] + '...' if len(val) > 50 else val
     return f'<FONT COLOR="{color}">{val}</FONT>'
 
-def generate_object_graph(obj, name='root', seen=None, graph=None):
+def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth=0, max_depth=3):
     if seen is None:
         seen = set()
     if graph is None:
@@ -33,31 +38,18 @@ def generate_object_graph(obj, name='root', seen=None, graph=None):
         graph.attr('node', shape='plaintext')
 
     obj_id = id(obj)
-    if obj_id in seen:
+    if obj_id in seen or current_depth > max_depth:
         return graph
     seen.add(obj_id)
 
     # Build HTML table label for this object node
-    rows = [f'<TR><TD><B>{name}</B></TD><TD><I>{type(obj).__name__}</I></TD></TR>']
+    type_name = type(obj).__name__ if not isinstance(obj, type) else obj.__name__
+    rows = [f'<TR><TD><B>{name}</B></TD><TD><I>{type_name}</I></TD></TR>']
 
     # We'll keep track of non-simple attrs to add edges later
     non_simple_attrs = []
 
-    if hasattr(obj, '__dict__'):
-        for attr, value in vars(obj).items():
-            if attr.startswith('_'):
-                continue
-            if attr == 'scope':
-                continue
-            if is_simple(value):
-                val_colored = get_colored_value(value)
-                rows.append(f'<TR><TD ALIGN="LEFT" PORT="{attr}">{attr}</TD><TD ALIGN="LEFT">{val_colored}</TD></TR>')
-            else:
-                # Show just name and type inside the node
-                rows.append(f'<TR><TD ALIGN="LEFT" PORT="{attr}">{attr}</TD><TD ALIGN="LEFT"><I>{type(value).__name__}</I></TD></TR>')
-                non_simple_attrs.append((attr, value))
-
-    elif isinstance(obj, (list, tuple, set, dict)):
+    if isinstance(obj, (list, tuple, set, dict)):
         items = obj.items() if isinstance(obj, dict) else enumerate(obj)
         for idx, item in items:
             if idx == "scope":
@@ -67,8 +59,27 @@ def generate_object_graph(obj, name='root', seen=None, graph=None):
                 val_colored = get_colored_value(item)
                 rows.append(f'<TR><TD ALIGN="LEFT" PORT="{idx}">[{idx}]</TD><TD ALIGN="LEFT">{val_colored}</TD></TR>')
             else:
-                rows.append(f'<TR><TD ALIGN="LEFT" PORT="{idx}">[{idx}]</TD><TD ALIGN="LEFT"><I>{type(item).__name__}</I></TD></TR>')
+                type_name = type(item).__name__ if not isinstance(item, type) else item.__name__
+                rows.append(f'<TR><TD ALIGN="LEFT" PORT="{idx}">[{idx}]</TD><TD ALIGN="LEFT"><I>{type_name}</I></TD></TR>')
                 non_simple_attrs.append((str(idx), item))
+
+    else:
+        for attr in dir(obj):
+            if attr.startswith('_'):
+                continue
+            if attr == 'scope':
+                continue
+            value = getattr(obj, attr)
+            if callable(value):
+                continue
+            if is_simple(value):
+                val_colored = get_colored_value(value)
+                rows.append(f'<TR><TD ALIGN="LEFT" PORT="{attr}">{attr}</TD><TD ALIGN="LEFT">{val_colored}</TD></TR>')
+            else:
+                type_name = type(value).__name__ if not isinstance(value, type) else value.__name__
+                # Show just name and type inside the node
+                rows.append(f'<TR><TD ALIGN="LEFT" PORT="{attr}">{attr}</TD><TD ALIGN="LEFT"><I>{type_name}</I></TD></TR>')
+                non_simple_attrs.append((attr, value))
 
     label = f"""<
         <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">
@@ -79,10 +90,18 @@ def generate_object_graph(obj, name='root', seen=None, graph=None):
     graph.node(str(obj_id), label)
 
     # Add edges from this node to non-simple attribute nodes
+    i = 0
     for attr, value in non_simple_attrs:
-        generate_object_graph(value, attr, seen, graph)
+        if attr.startswith('_'):
+            continue
+        if attr == 'scope':
+            continue
+        if callable(value):
+            continue
+        generate_object_graph(value, attr, seen, graph, current_depth + 1, max_depth)
         # Edge from this object's attribute port to nested object's node
         graph.edge(f"{obj_id}:{attr}", str(id(value)), label=attr)
+        i += 1
 
     return graph
 
