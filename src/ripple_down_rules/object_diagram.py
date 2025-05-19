@@ -1,13 +1,9 @@
-from enum import Enum
-
 import graphviz
-
-from ripple_down_rules.datasets import load_zoo_dataset, Species
-from ripple_down_rules.datastructures.dataclasses import CaseQuery
 
 
 def is_simple(obj):
     return isinstance(obj, (int, float, str, bool, type(None)))
+
 
 def get_colored_value(value):
     if isinstance(value, str):
@@ -29,6 +25,7 @@ def get_colored_value(value):
            .replace('>', "").replace('?', '').replace('\n', ' '))
     val = val[:50] + '...' if len(val) > 50 else val
     return f'<FONT COLOR="{color}">{val}</FONT>'
+
 
 def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth=0, max_depth=3):
     if seen is None:
@@ -60,7 +57,8 @@ def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth
                 rows.append(f'<TR><TD ALIGN="LEFT" PORT="{idx}">[{idx}]</TD><TD ALIGN="LEFT">{val_colored}</TD></TR>')
             else:
                 type_name = type(item).__name__ if not isinstance(item, type) else item.__name__
-                rows.append(f'<TR><TD ALIGN="LEFT" PORT="{idx}">[{idx}]</TD><TD ALIGN="LEFT"><I>{type_name}</I></TD></TR>')
+                rows.append(
+                    f'<TR><TD ALIGN="LEFT" PORT="{idx}">[{idx}]</TD><TD ALIGN="LEFT"><I>{type_name}</I></TD></TR>')
                 non_simple_attrs.append((str(idx), item))
 
     else:
@@ -78,7 +76,8 @@ def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth
             else:
                 type_name = type(value).__name__ if not isinstance(value, type) else value.__name__
                 # Show just name and type inside the node
-                rows.append(f'<TR><TD ALIGN="LEFT" PORT="{attr}">{attr}</TD><TD ALIGN="LEFT"><I>{type_name}</I></TD></TR>')
+                rows.append(
+                    f'<TR><TD ALIGN="LEFT" PORT="{attr}">{attr}</TD><TD ALIGN="LEFT"><I>{type_name}</I></TD></TR>')
                 non_simple_attrs.append((attr, value))
 
     label = f"""<
@@ -104,26 +103,3 @@ def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth
         i += 1
 
     return graph
-
-
-
-class Address:
-    def __init__(self, city):
-        self.city = city
-
-class Person:
-    def __init__(self, name, address):
-        self.name = name
-        self.address = address
-
-
-if __name__ == "__main__":
-    # Example usage
-    home = Address("Cairo")
-    p = Person("Ahmed", home)
-
-    cases, targets = load_zoo_dataset(cache_file="zoo")
-    cq = CaseQuery(cases[0], "species", (Species,), True, _target=targets[0])
-
-    graph = generate_object_graph(cq)
-    graph.render('object_diagram', view=True)
