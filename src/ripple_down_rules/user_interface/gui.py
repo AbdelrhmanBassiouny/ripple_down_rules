@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 )
 from qtconsole.inprocess import QtInProcessKernelManager
 from qtconsole.rich_jupyter_widget import RichJupyterWidget
-from typing_extensions import Optional, Any, List, Dict
+from typing_extensions import Optional, Any, List, Dict, Callable
 
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import PromptFor
@@ -275,9 +275,13 @@ class RDRCaseViewer(QMainWindow):
     main_obj: Optional[Dict[str, Any]] = None
     user_input: Optional[str] = None
     attributes_widget: Optional[QWidget] = None
+    save_function: Optional[Callable[str], None] = None
 
-    def __init__(self, parent=None):
+
+    def __init__(self, parent=None, save_file: Optional[str] = None):
         super().__init__(parent)
+        self.save_file = save_file
+
         self.setWindowTitle("RDR Case Viewer")
 
         self.setBaseSize(1600, 600)  # or your preferred initial size
@@ -315,6 +319,15 @@ class RDRCaseViewer(QMainWindow):
         main_layout.addWidget(self.attributes_widget, stretch=1)
         main_layout.addWidget(middle_widget, stretch=2)
         main_layout.addWidget(self.obj_diagram_viewer, stretch=2)
+
+    def set_save_function(self, save_function: Callable[[str], None]) -> None:
+        """
+        Set the function to save the file.
+
+        :param save_function: The function to save the file.
+        """
+        self.save_function = save_function
+        self.save_btn.clicked.connect(lambda: self.save_function(self.save_file))
 
     def print(self, msg):
         """
@@ -406,9 +419,9 @@ class RDRCaseViewer(QMainWindow):
                 self.expand_collapse_all(item.widget(), expand=False)
 
     def expand_collapse_all(self, widget, expand=True, curr_depth=0, max_depth=2):
-        widget.toggle_button.setChecked(expand)
-        widget.toggle()
         if expand and curr_depth < max_depth:
+            widget.toggle_button.setChecked(expand)
+            widget.toggle()
             # do it for recursive children
             for i in range(widget.content_layout.count()):
                 item = widget.content_layout.itemAt(i)
@@ -419,7 +432,14 @@ class RDRCaseViewer(QMainWindow):
 
     def create_buttons_widget(self):
         button_widget = QWidget()
-        button_widget_layout = QHBoxLayout(button_widget)
+        button_widget_layout = QVBoxLayout(button_widget)
+
+        row_1_button_widget = QWidget()
+        row_1_button_widget_layout = QHBoxLayout(row_1_button_widget)
+        row_2_button_widget = QWidget()
+        row_2_button_widget_layout = QHBoxLayout(row_2_button_widget)
+        button_widget_layout.addWidget(row_1_button_widget)
+        button_widget_layout.addWidget(row_2_button_widget)
 
         accept_btn = QPushButton("Accept")
         accept_btn.clicked.connect(self._accept)
@@ -433,9 +453,13 @@ class RDRCaseViewer(QMainWindow):
         load_btn.clicked.connect(self._load)
         load_btn.setStyleSheet(f"background-color: {color_name_to_html('b')}; color: white;")  # Blue button
 
-        button_widget_layout.addWidget(accept_btn)
-        button_widget_layout.addWidget(edit_btn)
-        button_widget_layout.addWidget(load_btn)
+        self.save_btn = QPushButton("Save")
+        self.save_btn.setStyleSheet(f"background-color: {color_name_to_html('b')}; color: white;")  # Blue button
+
+        row_1_button_widget_layout.addWidget(edit_btn)
+        row_1_button_widget_layout.addWidget(load_btn)
+        row_1_button_widget_layout.addWidget(accept_btn)
+        row_2_button_widget_layout.addWidget(self.save_btn)
         return button_widget
 
     def _accept(self):
@@ -595,16 +619,31 @@ class IPythonConsole(RichJupyterWidget):
         self._control.setPalette(palette)
 
         # Override the stylesheet to force background and text colors
-        # self._control.setStyleSheet("""
-        #             background-color: #615f5f;
-        #             color: #3ba8e7;
-        #             selection-background-color: #006400;
-        #             selection-color: white;
-        #         """)
+        self.style_sheet = '''\
+    QPlainTextEdit, QTextEdit {
+        background-color: %(bgcolor)s;
+        background-clip: padding;
+        color: %(fgcolor)s;
+        selection-background-color: %(select)s;
+    }
+    .inverted {
+        background-color: %(fgcolor)s;
+        color: %(bgcolor)s;
+    }
+    .error { color: red; }
+    .in-prompt-number { font-weight: bold; color: %(in_prompt_number_color)s} }
+    .in-prompt { font-weight: bold; color: %(in_prompt_color)s }
+    .out-prompt-number { font-weight: bold; color: %(out_prompt_number_color)s }
+    .out-prompt { font-weight: bold; color: %(out_prompt_color)s }
+'''%dict(
+            bgcolor='#0b0d0b', fgcolor='#47d9cc', select="#555",
+            in_prompt_number_color='lime', in_prompt_color='lime',
+            out_prompt_number_color='red', out_prompt_color='red'
+        )
 
         # Use a dark syntax style like monokai
-        # self.syntax_style = 'monokai'
-        self.set_default_style(colors='linux')
+        self.syntax_style = 'monokai'
+        # self.set_default_style(colors='lightbg')
 
         self.exit_requested.connect(self.stop)
 

@@ -16,9 +16,10 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode
-from .experts import Expert
+from .experts import Expert, Human
 from .helpers import is_matching
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
+from .user_interface.gui import RDRCaseViewer
 from .utils import draw_tree, make_set, copy_case, \
     SubclassJSONSerializer, make_list, get_type_from_string, \
     is_conflicting, update_case, get_imports_from_scope, extract_function_source
@@ -41,12 +42,25 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     The name of the generated python file.
     """
 
-    def __init__(self, start_rule: Optional[Rule] = None):
+    def __init__(self, start_rule: Optional[Rule] = None, viewer: Optional[RDRCaseViewer] = None):
         """
         :param start_rule: The starting rule for the classifier.
         """
         self.start_rule = start_rule
         self.fig: Optional[plt.Figure] = None
+        self.viewer: Optional[RDRCaseViewer] = viewer
+        if self.viewer is not None:
+            self.viewer.set_save_function(self.save)
+
+    def set_viewer(self, viewer: RDRCaseViewer):
+        """
+        Set the viewer for the classifier.
+
+        :param viewer: The viewer to set.
+        """
+        self.viewer = viewer
+        if self.viewer is not None:
+            self.viewer.set_save_function(self.save)
 
     def fit(self, case_queries: List[CaseQuery],
             expert: Optional[Expert] = None,
@@ -703,7 +717,8 @@ class GeneralRDR(RippleDownRules):
      gets called when the final rule fires.
     """
 
-    def __init__(self, category_rdr_map: Optional[Dict[str, Union[SingleClassRDR, MultiClassRDR]]] = None):
+    def __init__(self, category_rdr_map: Optional[Dict[str, Union[SingleClassRDR, MultiClassRDR]]] = None,
+                 **kwargs):
         """
         :param category_rdr_map: A map of case attribute names to ripple down rules classifiers,
         where each category is a parent category that has a set of mutually exclusive (in case of SCRDR) child
@@ -715,7 +730,7 @@ class GeneralRDR(RippleDownRules):
         """
         self.start_rules_dict: Dict[str, Union[SingleClassRDR, MultiClassRDR]] \
             = category_rdr_map if category_rdr_map else {}
-        super(GeneralRDR, self).__init__()
+        super(GeneralRDR, self).__init__(**kwargs)
         self.all_figs: List[plt.Figure] = [sr.fig for sr in self.start_rules_dict.values()]
 
     def add_rdr(self, rdr: Union[SingleClassRDR, MultiClassRDR], attribute_name: Optional[str] = None):
