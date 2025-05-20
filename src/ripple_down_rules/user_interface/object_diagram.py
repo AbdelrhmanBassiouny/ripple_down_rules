@@ -27,11 +27,12 @@ def get_colored_value(value):
     return f'<FONT COLOR="{color}">{val}</FONT>'
 
 
-def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth=0, max_depth=3):
+def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth=0, max_depth=3, chain_name=None,
+                          included_attrs=None):
     if seen is None:
         seen = set()
     if graph is None:
-        graph = graphviz.Digraph(format='png')
+        graph = graphviz.Digraph(format='svg', graph_attr={'dpi': '300'})
         graph.attr('node', shape='plaintext')
 
     obj_id = id(obj)
@@ -87,9 +88,9 @@ def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth
     >"""
 
     graph.node(str(obj_id), label)
+    chain_name = chain_name if chain_name is not None else name
 
     # Add edges from this node to non-simple attribute nodes
-    i = 0
     for attr, value in non_simple_attrs:
         if attr.startswith('_'):
             continue
@@ -97,9 +98,12 @@ def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth
             continue
         if callable(value):
             continue
-        generate_object_graph(value, attr, seen, graph, current_depth + 1, max_depth)
+        attr_chain_name = f"{chain_name}.{attr}"
+        if included_attrs is not None and attr_chain_name not in included_attrs:
+            continue
+        generate_object_graph(value, attr, seen, graph, current_depth + 1, max_depth, chain_name=f"{chain_name}.{attr}",
+                              included_attrs=included_attrs)
         # Edge from this object's attribute port to nested object's node
         graph.edge(f"{obj_id}:{attr}", str(id(value)), label=attr)
-        i += 1
 
     return graph

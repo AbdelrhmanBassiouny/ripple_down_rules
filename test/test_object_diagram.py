@@ -3,7 +3,7 @@ import unittest
 
 # from ripple_down_rules.datasets import load_zoo_dataset, Species
 # from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from ripple_down_rules.object_diagram import generate_object_graph
+from ripple_down_rules.user_interface.object_diagram import generate_object_graph
 
 
 class Address:

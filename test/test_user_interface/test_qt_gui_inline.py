@@ -1,17 +1,15 @@
-import sys
+import os.path
 import unittest
 
-from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import (
     QApplication
 )
-from anyio import sleep
 from typing_extensions import List
 
 from ripple_down_rules.datasets import load_zoo_dataset, Species
 from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from ripple_down_rules.gui import RDRCaseViewer, style
+from ripple_down_rules.user_interface.gui import RDRCaseViewer, style
 from test_object_diagram import Person, Address
 
 
@@ -28,7 +26,7 @@ class GUITestCase(unittest.TestCase):
     def setUpClass(cls):
         print("Setting up GUI test case...")
         cls.app = QApplication([])
-        cls.cases, cls.targets = load_zoo_dataset(cache_file="./test_results/zoo")
+        cls.cases, cls.targets = load_zoo_dataset(cache_file=f"{os.path.dirname(__file__)}/../test_results/zoo")
         cls.cq = CaseQuery(cls.cases[0], "species", (Species,), True, _target=cls.targets[0])
         cls.viewer = RDRCaseViewer()
         cls.person = Person("Ahmed", Address("Cairo"))
@@ -41,10 +39,10 @@ class GUITestCase(unittest.TestCase):
         self.app.exec()
 
     def test_update_image(self):
-        self.viewer.obj_diagram_viewer.update_image("./test_helpers/object_diagram_case_query.png")
+        self.viewer.obj_diagram_viewer.update_image(f"{os.path.dirname(__file__)}/../test_helpers/object_diagram_case_query.png")
         self.viewer.show()
         self.app.exec()
-        self.viewer.obj_diagram_viewer.update_image("./test_helpers/object_diagram_person.png")
+        self.viewer.obj_diagram_viewer.update_image(f"{os.path.dirname(__file__)}/../test_helpers/object_diagram_person.png")
         self.viewer.show()
         self.app.exec()
 

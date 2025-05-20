@@ -1,27 +1,16 @@
-import ast
 import logging
-import os
-import shutil
-import socket
-import subprocess
-import tempfile
-from functools import cached_property
-from textwrap import indent, dedent
-from typing import Optional, List, Type, Dict
+from typing import Optional, List
 
 from IPython.core.magic import magics_class, Magics, line_magic
 from IPython.terminal.embed import InteractiveShellEmbed
 from colorama import Fore, Style
 from traitlets.config import Config
 
-from .datastructures.case import Case
-from .datastructures.dataclasses import CaseQuery
-
-from .datastructures.enums import Editor, PromptFor
+from ..datastructures.dataclasses import CaseQuery
+from ..datastructures.enums import PromptFor
 from .gui import encapsulate_code_lines_into_a_function
 from .template_file_creator import TemplateFileCreator
-from .utils import make_list, typing_hint_to_str, get_imports_from_types, get_imports_from_scope, \
-    str_to_snake_case, contains_return_statement, extract_function_source, extract_dependencies, encapsulate_user_input
+from ..utils import contains_return_statement, extract_dependencies
 
 
 @magics_class

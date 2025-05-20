@@ -9,12 +9,12 @@ from pygments.formatters.terminal import TerminalFormatter
 from pygments.lexers.python import PythonLexer
 from typing_extensions import Optional, Tuple
 
-from .datastructures.callable_expression import CallableExpression, parse_string_to_expression
-from .datastructures.dataclasses import CaseQuery
-from .datastructures.enums import PromptFor, InteractionMode
+from ..datastructures.callable_expression import CallableExpression, parse_string_to_expression
+from ..datastructures.dataclasses import CaseQuery
+from ..datastructures.enums import PromptFor, InteractionMode
 from .gui import RDRCaseViewer
 from .ipython_custom_shell import IPythonShell
-from .utils import make_list
+from ..utils import make_list
 
 
 class UserPrompt:

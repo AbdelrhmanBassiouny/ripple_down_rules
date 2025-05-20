@@ -1,8 +1,6 @@
-import importlib
 import os
 import sys
-import time
-from unittest import TestCase, skip
+from unittest import TestCase
 
 from typing_extensions import List
 
@@ -12,10 +10,10 @@ from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import MCRDRMode
 from ripple_down_rules.experts import Human
-from ripple_down_rules.gui import RDRCaseViewer
+from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR, RDRWithCodeWriter
-from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set, flatten_list, extract_function_source
-from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr, get_habitat
+from ripple_down_rules.utils import render_tree, make_set, extract_function_source
+from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
 
 from PyQt6.QtWidgets import QApplication
 

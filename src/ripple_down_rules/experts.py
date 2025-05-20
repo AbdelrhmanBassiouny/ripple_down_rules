@@ -1,21 +1,16 @@
 from __future__ import annotations
 
 import json
-import sys
 from abc import ABC, abstractmethod
 
-from PyQt6.QtWidgets import QApplication
-from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Type, Any
+from typing_extensions import Optional, TYPE_CHECKING, List
 
-from .datastructures.case import Case, CaseAttribute
 from .datastructures.callable_expression import CallableExpression
-from .datastructures.enums import PromptFor, InteractionMode
+from .datastructures.enums import PromptFor
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.case import show_current_and_corner_cases
-from .gui import RDRCaseViewer
-from .prompt import UserPrompt
-from .ipython_custom_shell import IPythonShell
-from .utils import get_all_subclasses, make_list
+from .user_interface.gui import RDRCaseViewer
+from .user_interface.prompt import UserPrompt
 
 if TYPE_CHECKING:
     from .rdr import Rule

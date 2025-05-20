@@ -1,9 +1,9 @@
+from  __future__ import annotations
+
 import inspect
-import sys
+from copy import copy
 from types import MethodType
 
-from IPython import InteractiveShell
-from IPython.terminal.embed import InteractiveShellEmbed
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QPainter, QPalette
 from PyQt6.QtWidgets import (
@@ -12,13 +12,13 @@ from PyQt6.QtWidgets import (
 )
 from qtconsole.inprocess import QtInProcessKernelManager
 from qtconsole.rich_jupyter_widget import RichJupyterWidget
-from typing_extensions import Optional, Any, Dict, List
+from typing_extensions import Optional, Any, List, Dict
 
-from .datastructures.dataclasses import CaseQuery
-from .datastructures.enums import PromptFor
-from .object_diagram import generate_object_graph
+from ..datastructures.dataclasses import CaseQuery
+from ..datastructures.enums import PromptFor
 from .template_file_creator import TemplateFileCreator
-from .utils import is_iterable, contains_return_statement, encapsulate_user_input
+from ..utils import is_iterable, contains_return_statement, encapsulate_user_input
+from .object_diagram import generate_object_graph
 
 
 class ImageViewer(QGraphicsView):
@@ -114,9 +114,13 @@ class BackgroundWidget(QWidget):
 
 
 class CollapsibleBox(QWidget):
-    def __init__(self, title="", parent=None):
+    def __init__(self, title="", parent=None, viewer: Optional[RDRCaseViewer]=None, chain_name: Optional[str] = None,
+                 main_obj: Optional[Dict[str, Any]] = None):
         super().__init__(parent)
 
+        self.viewer = viewer
+        self.chain_name = chain_name
+        self.main_obj = main_obj
         self.toggle_button = QToolButton(checkable=True, checked=False)
         self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
@@ -155,9 +159,29 @@ class CollapsibleBox(QWidget):
             Qt.ArrowType.DownArrow if is_expanded else Qt.ArrowType.RightArrow
         )
         self.content_area.setVisible(is_expanded)
-
-        # Trigger resize
-        # self.adjust_size_recursive()
+        if is_expanded and self.viewer is not None:
+            self.viewer.included_attrs.append(self.chain_name)
+            main_obj_name = self.chain_name.split('.')[0]
+            main_obj = self.main_obj.get(main_obj_name)
+            self.viewer.update_object_diagram(
+                main_obj, main_obj_name
+            )
+        elif self.viewer is not None and self.chain_name in self.viewer.included_attrs:
+            for name in self.viewer.included_attrs:
+                if name.startswith(self.chain_name):
+                    self.viewer.included_attrs.remove(name)
+            main_obj_name = self.chain_name.split('.')[0]
+            main_obj = self.main_obj.get(main_obj_name)
+            self.viewer.update_object_diagram(
+                main_obj, main_obj_name
+            )
+        # toggle children
+        if not is_expanded:
+            for i in range(self.content_layout.count()):
+                item = self.content_layout.itemAt(i)
+                if isinstance(item.widget(), CollapsibleBox):
+                    item.widget().toggle_button.setChecked(False)
+                    item.widget().toggle()
 
     def add_widget(self, widget):
         self.content_layout.addWidget(widget)
@@ -242,6 +266,8 @@ class RDRCaseViewer(QMainWindow):
     code_to_modify: Optional[str] = None
     template_file_creator: Optional[TemplateFileCreator] = None
     code_lines: Optional[List[str]] = None
+    included_attrs: Optional[List[str]] = None
+    main_obj: Optional[Dict[str, Any]] = None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -299,19 +325,24 @@ class RDRCaseViewer(QMainWindow):
         case_attr_type = style(f"{case_attr_type}", 'g', 28, 'bold')
         case_name = style(f"{case_query.name}", 'b', 28, 'bold')
         title_text = style(f"{title_text} {case_name} of type {case_attr_type}", 'o', 28, 'bold')
-        self.update_for_object(case_query.case, case_query.name, case_query.scope, title_text)
+        self.update_for_object(case_query.case, case_query.case_name, case_query.scope, title_text)
 
     def update_for_object(self, obj: Any, name: str, scope: Optional[dict] = None,
                           title_text: Optional[str] = None):
+        self.main_obj = {name: obj}
         title_text = title_text or style(f"{name}", 'o', 28, 'bold')
         scope = scope or {}
         scope.update({name: obj})
-        graph = generate_object_graph(obj, name)
-        graph.render("object_diagram", view=False)
+        self.update_object_diagram(obj, name)
         self.update_attribute_layout(obj, name)
         self.title_label.setText(title_text)
         self.ipython_console.update_namespace(scope)
-        self.obj_diagram_viewer.update_image("object_diagram.png")
+
+    def update_object_diagram(self, obj: Any, name: str):
+        self.included_attrs = self.included_attrs or []
+        graph = generate_object_graph(obj, name, included_attrs=self.included_attrs)
+        graph.render("object_diagram", view=False, format='svg')
+        self.obj_diagram_viewer.update_image("object_diagram.svg")
 
     def _create_attribute_widget(self):
         scroll = QScrollArea()
@@ -351,7 +382,8 @@ class RDRCaseViewer(QMainWindow):
 
     def _edit(self):
         self.template_file_creator = TemplateFileCreator(self.ipython_console.kernel.shell,
-        self.case_query, self.prompt_for, self.code_to_modify, lambda msg: self.print)
+                                                         self.case_query, self.prompt_for, self.code_to_modify,
+                                                         lambda msg: self.print)
         self.template_file_creator.edit()
 
     def _load(self):
@@ -370,7 +402,7 @@ class RDRCaseViewer(QMainWindow):
         clear_layout(self.attr_widget_layout)
 
         # Re-add the collapsible box with the new object
-        self.add_collapsible(name, obj, self.attr_widget_layout, 0, 3)
+        self.add_collapsible(name, obj, self.attr_widget_layout, 0, 3, chain_name=name)
         self.attr_widget_layout.addStretch()
 
     def create_label_widget(self, text):
@@ -381,7 +413,7 @@ class RDRCaseViewer(QMainWindow):
         label.setWordWrap(True)  # Optional: allow wrapping if needed
         return label
 
-    def add_attributes(self, obj, layout, current_depth=0, max_depth=3):
+    def add_attributes(self, obj, name, layout, current_depth=0, max_depth=3, chain_name=None):
         if current_depth > max_depth:
             return
         if isinstance(obj, dict):
@@ -407,11 +439,12 @@ class RDRCaseViewer(QMainWindow):
                     value = f"<error: {e}>"
                 attributes.append((attr, value))
             items = attributes + iterables + methods
+        chain_name = chain_name if chain_name is not None else name
         for attr, value in items:
             attr = f"{attr}"
             try:
                 if is_iterable(value) or hasattr(value, "__dict__") and not inspect.isfunction(value):
-                    self.add_collapsible(attr, value, layout, current_depth + 1, max_depth)
+                    self.add_collapsible(attr, value, layout, current_depth + 1, max_depth, chain_name=f"{chain_name}.{attr}")
                 else:
                     self.add_non_collapsible(attr, value, layout)
             except Exception as e:
@@ -419,11 +452,12 @@ class RDRCaseViewer(QMainWindow):
                 err.setTextFormat(Qt.TextFormat.RichText)
                 layout.addWidget(err)
 
-    def add_collapsible(self, attr, value, layout, current_depth, max_depth):
+    def add_collapsible(self, attr, value, layout, current_depth, max_depth, chain_name=None):
         type_name = type(value) if not isinstance(value, type) else value
         collapsible = CollapsibleBox(
-            f'<b><span style="color:#FFA07A;">{attr}</span></b> {python_colored_repr(type_name)}')
-        self.add_attributes(value, collapsible.content_layout, current_depth, max_depth)
+            f'<b><span style="color:#FFA07A;">{attr}</span></b> {python_colored_repr(type_name)}', viewer=self,
+        chain_name=chain_name, main_obj=self.main_obj)
+        self.add_attributes(value, attr, collapsible.content_layout, current_depth, max_depth, chain_name=chain_name)
         layout.addWidget(collapsible)
 
     def add_non_collapsible(self, attr, value, layout):
@@ -499,15 +533,16 @@ class IPythonConsole(RichJupyterWidget):
         self._control.setPalette(palette)
 
         # Override the stylesheet to force background and text colors
-        self._control.setStyleSheet("""
-                    background-color: #121212;
-                    color: #00FF00;
-                    selection-background-color: #006400;
-                    selection-color: white;
-                """)
+        # self._control.setStyleSheet("""
+        #             background-color: #615f5f;
+        #             color: #3ba8e7;
+        #             selection-background-color: #006400;
+        #             selection-color: white;
+        #         """)
 
         # Use a dark syntax style like monokai
-        self.syntax_style = 'monokai'
+        # self.syntax_style = 'monokai'
+        self.set_default_style(colors='linux')
 
         self.exit_requested.connect(self.stop)
 

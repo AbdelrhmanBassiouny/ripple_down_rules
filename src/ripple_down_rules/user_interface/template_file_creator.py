@@ -7,15 +7,14 @@ import tempfile
 from functools import cached_property
 from textwrap import indent, dedent
 
-import IPython
 from colorama import Fore, Style
 from ipykernel.inprocess.ipkernel import InProcessInteractiveShell
-from typing_extensions import Optional, Dict, Any, Type, List, Callable
+from typing_extensions import Optional, Type, List, Callable
 
-from ripple_down_rules.datastructures.case import Case
-from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from ripple_down_rules.datastructures.enums import Editor, PromptFor
-from ripple_down_rules.utils import str_to_snake_case, get_imports_from_scope, make_list, typing_hint_to_str, \
+from ..datastructures.case import Case
+from ..datastructures.dataclasses import CaseQuery
+from ..datastructures.enums import Editor, PromptFor
+from ..utils import str_to_snake_case, get_imports_from_scope, make_list, typing_hint_to_str, \
     get_imports_from_types, extract_function_source
 
 
@@ -99,7 +98,8 @@ class TemplateFileCreator:
 
     def edit(self):
         if self.editor is None:
-            self.print_func(f"{Fore.RED}ERROR:: No editor found. Please install PyCharm, VSCode or code-server.{Style.RESET_ALL}")
+            self.print_func(
+                f"{Fore.RED}ERROR:: No editor found. Please install PyCharm, VSCode or code-server.{Style.RESET_ALL}")
             return
 
         boilerplate_code = self.build_boilerplate_code()
@@ -280,8 +280,8 @@ class TemplateFileCreator:
         if updates:
             self.shell.user_ns.update(updates)
             self.all_code_lines = extract_function_source(self.temp_file_path,
-                                                     [self.func_name],
-                                                     join_lines=False)[self.func_name]
+                                                          [self.func_name],
+                                                          join_lines=False)[self.func_name]
             return self.all_code_lines
         else:
             self.print_func(f"{Fore.RED}ERROR:: Function `{self.func_name}` not found.{Style.RESET_ALL}")
