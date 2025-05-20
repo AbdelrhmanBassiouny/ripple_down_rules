@@ -329,7 +329,7 @@ class RDRCaseViewer(QMainWindow):
 
     def update_for_object(self, obj: Any, name: str, scope: Optional[dict] = None,
                           title_text: Optional[str] = None):
-        self.main_obj = {name: obj}
+        self.update_main_obj(obj, name)
         title_text = title_text or style(f"{name}", 'o', 28, 'bold')
         scope = scope or {}
         scope.update({name: obj})
@@ -337,6 +337,10 @@ class RDRCaseViewer(QMainWindow):
         self.update_attribute_layout(obj, name)
         self.title_label.setText(title_text)
         self.ipython_console.update_namespace(scope)
+
+    def update_main_obj(self, obj, name):
+        self.main_obj = {name: obj}
+        self.included_attrs = []
 
     def update_object_diagram(self, obj: Any, name: str):
         self.included_attrs = self.included_attrs or []
