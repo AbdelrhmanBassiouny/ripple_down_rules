@@ -56,6 +56,9 @@ class GUITestCase(unittest.TestCase):
         self.app.exec()
 
     def test_save_button(self):
+        file_path = f"{os.path.dirname(__file__)}/../test_results/grdr_viewer.json"
+        if os.path.exists(file_path):
+            os.remove(file_path)
         grdr, _ = get_fit_grdr(self.cases, self.targets)
         grdr.set_viewer(self.viewer)
         self.viewer.title_label.setText(style("Press `Save` To Test", "o", 28, 'bold'))

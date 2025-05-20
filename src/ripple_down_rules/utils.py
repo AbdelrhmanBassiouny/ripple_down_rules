@@ -492,21 +492,35 @@ def serialize_dataclass(obj: Any, seen=None) -> Any:
 
 def deserialize_dataclass(data: Any, refs: Optional[Dict[str, Any]] = None) -> Any:
     refs = {} if refs is None else refs
-    preloaded = preload_serialized_objects(data, refs)
+    preloaded, var_names, vars_to_construct = preload_serialized_objects(data, refs)
     return resolve_refs(preloaded, refs)
 
 
-def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None) -> Any:
+def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None,
+                               vars_to_construct: Optional[Dict[str, str]] = None) -> Any:
     """
     Recursively deserialize a dataclass from a dictionary, if the dictionary contains a key "__dataclass__" (Most likely
     created by the serialize_dataclass function), it will be treated as a dataclass and deserialized accordingly,
     otherwise it will be returned as is.
 
     :param data: The dictionary to deserialize.
+    :param refs: A dictionary to keep track of references to avoid circular references.
+    :param vars_to_construct: A dictionary to keep track of variables to construct.
     :return: The deserialized dataclass.
     """
     if refs is None:
         refs = {}
+    vars_to_construct = vars_to_construct or {}
+    var_names = []
+
+    def deserialize_dict(data_, refs_, vars_to_construct_) -> Tuple[Dict, List[str], Optional[Dict[str, str]]]:
+        var_instance_ = {}
+        var_names_ = []
+        for k, v in data_.items():
+            var_instance_k_val_, var_names__, vars_to_construct_ = preload_serialized_objects(v, refs_, vars_to_construct_)
+            var_instance_[k] = var_instance_k_val_
+            var_names_.extend(var_names__)
+        return var_instance_, var_names_, vars_to_construct_
 
     if isinstance(data, dict):
 
@@ -514,7 +528,7 @@ def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None) -> Any:
             ref_id = data['$ref']
             if ref_id not in refs:
                 return {'$ref': data['$ref']}
-            return refs[ref_id]
+            return refs[ref_id], var_names, vars_to_construct
 
         elif '$id' in data and '__dataclass__' in data and 'fields' in data:
             cls_path = data['__dataclass__']
@@ -522,24 +536,40 @@ def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None) -> Any:
             cls = getattr(importlib.import_module(module_name), class_name)
 
             dummy_instance = cls.__new__(cls)  # Don't call __init__ yet
+            dummy_instance_varname = f"var_{data['$id']}"
+            dummy_instance_str = f"{dummy_instance_varname} = {cls.__module__}.{cls.__name__}("
+            dummy_instance_setter_str = ""
             refs[data['$id']] = dummy_instance
 
             for f in fields(cls):
                 raw_value = data['fields'].get(f.name)
-                value = preload_serialized_objects(raw_value, refs)
+                value, var_names_, vars_to_construct = preload_serialized_objects(raw_value, refs, vars_to_construct)
+                var_names.extend(var_names_)
                 setattr(dummy_instance, f.name, value)
+                if f.init:
+                    var_name = var_names_[-1] if len(var_names_) > 0 else None
+                    dummy_instance_str += f"{f.name}={var_name}, "
+                else:
+                    dummy_instance_setter_str += f"setattr({dummy_instance_varname}, '{f.name}', {value})"
+            dummy_instance_str = dummy_instance_str[:-2] + ")"
+            vars_to_construct[dummy_instance_varname] = '\n'.join(dummy_instance_str)
 
-            return dummy_instance
+            return dummy_instance, var_names, vars_to_construct
 
         else:
-            return {k: preload_serialized_objects(v, refs) for k, v in data.items()}
+            return deserialize_dict(data, refs, vars_to_construct)
 
     elif isinstance(data, list):
-        return [preload_serialized_objects(item, refs) for item in data]
+        var_instance = []
+        for item in data:
+            val, var_names_, vars_to_construct = preload_serialized_objects(item, refs, vars_to_construct)
+            var_instance.append(val)
+            var_names.extend(var_names_)
+        return var_instance, var_names, vars_to_construct
     elif isinstance(data, dict):
-        return {k: preload_serialized_objects(v, refs) for k, v in data.items()}
+        return deserialize_dict(data, refs, vars_to_construct)
 
-    return data  # Primitive
+    return data, var_names, vars_to_construct # Primitive
 
 
 def resolve_refs(obj, refs, seen=None):
