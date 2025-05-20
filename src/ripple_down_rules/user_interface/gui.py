@@ -269,6 +269,7 @@ class RDRCaseViewer(QMainWindow):
     included_attrs: Optional[List[str]] = None
     main_obj: Optional[Dict[str, Any]] = None
     user_input: Optional[str] = None
+    attributes_widget: Optional[QWidget] = None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -306,7 +307,7 @@ class RDRCaseViewer(QMainWindow):
         self.obj_diagram_viewer = ImageViewer()  # put your image path here
 
         # Add both to main layout
-        main_layout.addWidget(self.scroll_widget, stretch=1)
+        main_layout.addWidget(self.attributes_widget, stretch=1)
         main_layout.addWidget(middle_widget, stretch=2)
         main_layout.addWidget(self.obj_diagram_viewer, stretch=2)
 
@@ -351,6 +352,24 @@ class RDRCaseViewer(QMainWindow):
         self.obj_diagram_viewer.update_image("object_diagram.svg")
 
     def _create_attribute_widget(self):
+        main_widget = QWidget()
+        main_layout = QVBoxLayout(main_widget)
+
+        buttons_widget = QWidget()
+        buttons_layout = QHBoxLayout(buttons_widget)
+
+        expand_btn = QPushButton("Expand All")
+        expand_btn.clicked.connect(self.expand_all)
+        expand_btn.setStyleSheet(f"background-color: white; color: black;")  # Green button
+        buttons_layout.addWidget(expand_btn)
+
+        collapse_btn = QPushButton("Collapse All")
+        collapse_btn.clicked.connect(self.collapse_all)
+        collapse_btn.setStyleSheet(f"background-color: white; color: black;")  # Green button
+        buttons_layout.addWidget(collapse_btn)
+
+        main_layout.addWidget(buttons_widget)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -364,7 +383,34 @@ class RDRCaseViewer(QMainWindow):
         scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setWidget(attr_widget)
-        self.scroll_widget = scroll
+        main_layout.addWidget(scroll)
+        self.attributes_widget = main_widget
+
+    def expand_all(self):
+        # Expand all collapsible boxes
+        for i in range(self.attr_widget_layout.count()):
+            item = self.attr_widget_layout.itemAt(i)
+            if isinstance(item.widget(), CollapsibleBox):
+                self.expand_collapse_all(item.widget(), expand=True)
+
+    def collapse_all(self):
+        # Collapse all collapsible boxes
+        for i in range(self.attr_widget_layout.count()):
+            item = self.attr_widget_layout.itemAt(i)
+            if isinstance(item.widget(), CollapsibleBox):
+                self.expand_collapse_all(item.widget(), expand=False)
+
+    def expand_collapse_all(self, widget, expand=True):
+        widget.toggle_button.setChecked(expand)
+        widget.toggle()
+        if expand:
+            # do it for recursive children
+            for i in range(widget.content_layout.count()):
+                item = widget.content_layout.itemAt(i)
+                if isinstance(item.widget(), CollapsibleBox):
+                    self.expand_collapse_all(item.widget(), expand=True)
+
+
 
     def create_buttons_widget(self):
         button_widget = QWidget()
