@@ -268,6 +268,7 @@ class RDRCaseViewer(QMainWindow):
     code_lines: Optional[List[str]] = None
     included_attrs: Optional[List[str]] = None
     main_obj: Optional[Dict[str, Any]] = None
+    user_input: Optional[str] = None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -341,6 +342,7 @@ class RDRCaseViewer(QMainWindow):
     def update_main_obj(self, obj, name):
         self.main_obj = {name: obj}
         self.included_attrs = []
+        self.user_input = None
 
     def update_object_diagram(self, obj: Any, name: str):
         self.included_attrs = self.included_attrs or []
@@ -367,27 +369,32 @@ class RDRCaseViewer(QMainWindow):
     def create_buttons_widget(self):
         button_widget = QWidget()
         button_widget_layout = QHBoxLayout(button_widget)
+
         accept_btn = QPushButton("Accept")
         accept_btn.clicked.connect(self._accept)
-        accept_btn.setStyleSheet("background-color: #4CAF50; color: white;")  # Green button
+        accept_btn.setStyleSheet(f"background-color: {color_name_to_html('g')}; color: white;")  # Green button
+
         edit_btn = QPushButton("Edit")
         edit_btn.clicked.connect(self._edit)
         edit_btn.setStyleSheet(f"background-color: {color_name_to_html('o')}; color: white;")  # Orange button
+
         load_btn = QPushButton("Load")
         load_btn.clicked.connect(self._load)
-        edit_btn.setStyleSheet("background-color: #2196F3; color: white;")  # Blue button
+        load_btn.setStyleSheet(f"background-color: {color_name_to_html('b')}; color: white;")  # Blue button
+
         button_widget_layout.addWidget(accept_btn)
         button_widget_layout.addWidget(edit_btn)
         button_widget_layout.addWidget(load_btn)
         return button_widget
 
     def _accept(self):
-        self.user_input = None
+        # close the window
+        self.close()
 
     def _edit(self):
         self.template_file_creator = TemplateFileCreator(self.ipython_console.kernel.shell,
                                                          self.case_query, self.prompt_for, self.code_to_modify,
-                                                         lambda msg: self.print)
+                                                         self.print)
         self.template_file_creator.edit()
 
     def _load(self):
