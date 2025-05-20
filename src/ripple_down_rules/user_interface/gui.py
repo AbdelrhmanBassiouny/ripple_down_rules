@@ -153,15 +153,15 @@ class CollapsibleBox(QWidget):
         layout.setSpacing(2)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-    def toggle(self, object_diagram_only=False):
+    def toggle(self):
         is_expanded = self.toggle_button.isChecked()
         self.update_object_diagram(is_expanded)
-        if object_diagram_only:
-            return
         self.toggle_button.setArrowType(
             Qt.ArrowType.DownArrow if is_expanded else Qt.ArrowType.RightArrow
         )
         self.content_area.setVisible(is_expanded)
+
+        self.update_object_diagram(is_expanded)
 
         # toggle children
         if not is_expanded:

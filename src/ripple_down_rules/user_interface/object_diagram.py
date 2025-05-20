@@ -32,7 +32,7 @@ def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth
     if seen is None:
         seen = set()
     if graph is None:
-        graph = graphviz.Digraph(format='svg', graph_attr={'dpi': '96'})
+        graph = graphviz.Digraph(format='svg')
         graph.attr('node', shape='plaintext')
 
     obj_id = id(obj)
