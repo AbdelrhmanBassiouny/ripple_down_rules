@@ -1,8 +1,8 @@
 import os
 import unittest
 
-from ripple_down_rules.datasets import load_zoo_dataset, Species
-from ripple_down_rules.datastructures.dataclasses import CaseQuery
+# from ripple_down_rules.datasets import load_zoo_dataset, Species
+# from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.object_diagram import generate_object_graph
 
 
@@ -21,13 +21,13 @@ class ObjectDiagramTestCase(unittest.TestCase):
     """Test case for generating object diagrams of the ripple down rules package."""
     cases: list
     targets: list
-    cq: CaseQuery
+    # cq: CaseQuery
     person: Person
 
     @classmethod
     def setUpClass(cls):
-        cls.cases, cls.targets = load_zoo_dataset(cache_file="./test_results/zoo")
-        cls.cq = CaseQuery(cls.cases[0], "species", (Species,), True, _target=cls.targets[0])
+        # cls.cases, cls.targets = load_zoo_dataset(cache_file="./test_results/zoo")
+        # cls.cq = CaseQuery(cls.cases[0], "species", (Species,), True, _target=cls.targets[0])
         cls.person = Person("Ahmed", Address("Cairo"))
 
     def test_generate_person_diagram(self):

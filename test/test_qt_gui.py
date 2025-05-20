@@ -13,8 +13,8 @@ from PyQt6.QtCore import QRectF
 from PyQt6.QtCore import Qt
 
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from ripple_down_rules.rdr import GeneralRDR
-from test_helpers.helpers import get_fit_grdr
+# from ripple_down_rules.rdr import GeneralRDR
+# from test_helpers.helpers import get_fit_grdr
 
 def is_custom_instance(obj):
     return hasattr(obj, '__dict__') and not type(obj).__module__ == 'builtins' and not inspect.isclass(obj)
@@ -320,12 +320,13 @@ class MyClass:
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    print(app)
     from ripple_down_rules.datasets import load_zoo_dataset, Species
 
-    cases, targets = load_zoo_dataset(cache_file="zoo")
-    cq = CaseQuery(cases[0], "species", (Species,), True , _target=targets[0])
-    grdr, _ = get_fit_grdr(cases, targets)
-    viewer = UMLViewer(cq)
+    # cases, targets = load_zoo_dataset(cache_file="zoo")
+    # cq = CaseQuery(cases[0], "species", (Species,), True , _target=targets[0])
+    # grdr, _ = get_fit_grdr(cases, targets)
+    viewer = UMLViewer(MyClass)
     viewer.setWindowTitle("UML Class Explorer")
     viewer.resize(1000, 1000)
     viewer.show()

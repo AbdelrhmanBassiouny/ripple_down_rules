@@ -1,5 +1,9 @@
 import inspect
+import sys
+from types import MethodType
 
+from IPython import InteractiveShell
+from IPython.terminal.embed import InteractiveShellEmbed
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QPainter, QPalette
 from PyQt6.QtWidgets import (
@@ -8,10 +12,13 @@ from PyQt6.QtWidgets import (
 )
 from qtconsole.inprocess import QtInProcessKernelManager
 from qtconsole.rich_jupyter_widget import RichJupyterWidget
-from typing_extensions import Optional, Any
+from typing_extensions import Optional, Any, Dict, List
 
+from .datastructures.dataclasses import CaseQuery
+from .datastructures.enums import PromptFor
 from .object_diagram import generate_object_graph
-from .utils import is_iterable
+from .template_file_creator import TemplateFileCreator
+from .utils import is_iterable, contains_return_statement, encapsulate_user_input
 
 
 class ImageViewer(QGraphicsView):
@@ -35,13 +42,12 @@ class ImageViewer(QGraphicsView):
         pixmap = QPixmap(image_path)
         self.pixmap_item.setPixmap(pixmap)
         self.setSceneRect(self.pixmap_item.boundingRect())
-        self.fitInView(self.pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
 
     def wheelEvent(self, event):
         # Zoom in or out with Ctrl + mouse wheel
         if event.modifiers() == Qt.ControlModifier:
             angle = event.angleDelta().y()
-            factor = 1.25 if angle > 0 else 0.8
+            factor = 1.2 if angle > 0 else 0.8
 
             self._zoom += 1 if angle > 0 else -1
             if self._zoom > 10:  # max zoom in limit
@@ -231,6 +237,12 @@ def color_name_to_html(color_name):
 
 
 class RDRCaseViewer(QMainWindow):
+    case_query: Optional[CaseQuery] = None
+    prompt_for: Optional[PromptFor] = None
+    code_to_modify: Optional[str] = None
+    template_file_creator: Optional[TemplateFileCreator] = None
+    code_lines: Optional[List[str]] = None
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("RDR Case Viewer")
@@ -257,7 +269,7 @@ class RDRCaseViewer(QMainWindow):
 
         self.buttons_widget = self.create_buttons_widget()
 
-        self.ipython_console = IPythonConsole()
+        self.ipython_console = IPythonConsole(parent=self)
 
         self.middle_widget_layout.addWidget(self.title_label)
         self.middle_widget_layout.addWidget(self.ipython_console)
@@ -271,12 +283,34 @@ class RDRCaseViewer(QMainWindow):
         main_layout.addWidget(middle_widget, stretch=2)
         main_layout.addWidget(self.obj_diagram_viewer, stretch=2)
 
-    def update_for_object(self, obj: Any, name: str):
+    def print(self, msg):
+        """
+        Print a message to the console.
+        """
+        self.ipython_console._append_plain_text(msg + '\n', True)
+
+    def update_for_case_query(self, case_query: CaseQuery, title_txt: Optional[str] = None,
+                              prompt_for: Optional[PromptFor] = None, code_to_modify: Optional[str] = None):
+        self.case_query = case_query
+        self.prompt_for = prompt_for
+        self.code_to_modify = code_to_modify
+        title_text = title_txt or ""
+        case_attr_type = ', '.join([t.__name__ for t in case_query.core_attribute_type])
+        case_attr_type = style(f"{case_attr_type}", 'g', 28, 'bold')
+        case_name = style(f"{case_query.name}", 'b', 28, 'bold')
+        title_text = style(f"{title_text} {case_name} of type {case_attr_type}", 'o', 28, 'bold')
+        self.update_for_object(case_query.case, case_query.name, case_query.scope, title_text)
+
+    def update_for_object(self, obj: Any, name: str, scope: Optional[dict] = None,
+                          title_text: Optional[str] = None):
+        title_text = title_text or style(f"{name}", 'o', 28, 'bold')
+        scope = scope or {}
+        scope.update({name: obj})
         graph = generate_object_graph(obj, name)
         graph.render("object_diagram", view=False)
         self.update_attribute_layout(obj, name)
-        self.title_label.setText(style(f"{name}", 'o', 28, 'bold'))
-        self.ipython_console.update_namespace(locals())
+        self.title_label.setText(title_text)
+        self.ipython_console.update_namespace(scope)
         self.obj_diagram_viewer.update_image("object_diagram.png")
 
     def _create_attribute_widget(self):
@@ -299,12 +333,37 @@ class RDRCaseViewer(QMainWindow):
         button_widget = QWidget()
         button_widget_layout = QHBoxLayout(button_widget)
         accept_btn = QPushButton("Accept")
+        accept_btn.clicked.connect(self._accept)
         accept_btn.setStyleSheet("background-color: #4CAF50; color: white;")  # Green button
         edit_btn = QPushButton("Edit")
+        edit_btn.clicked.connect(self._edit)
+        edit_btn.setStyleSheet(f"background-color: {color_name_to_html('o')}; color: white;")  # Orange button
+        load_btn = QPushButton("Load")
+        load_btn.clicked.connect(self._load)
         edit_btn.setStyleSheet("background-color: #2196F3; color: white;")  # Blue button
         button_widget_layout.addWidget(accept_btn)
         button_widget_layout.addWidget(edit_btn)
+        button_widget_layout.addWidget(load_btn)
         return button_widget
+
+    def _accept(self):
+        self.user_input = None
+
+    def _edit(self):
+        self.template_file_creator = TemplateFileCreator(self.ipython_console.kernel.shell,
+        self.case_query, self.prompt_for, self.code_to_modify, lambda msg: self.print)
+        self.template_file_creator.edit()
+
+    def _load(self):
+        if not self.template_file_creator:
+            return
+        self.code_lines = self.template_file_creator.load()
+        if self.code_lines is not None:
+            self.user_input = encapsulate_code_lines_into_a_function(
+                self.code_lines, self.template_file_creator.func_name,
+                self.template_file_creator.function_signature,
+                self.template_file_creator.func_doc, self.case_query)
+        self.template_file_creator = None
 
     def update_attribute_layout(self, obj, name: str):
         # Clear the existing layout
@@ -379,6 +438,28 @@ class RDRCaseViewer(QMainWindow):
         layout.addWidget(item_label)
 
 
+def encapsulate_code_lines_into_a_function(code_lines: List[str], function_name: str, function_signature: str,
+                                           func_doc: str, case_query: CaseQuery) -> str:
+    """
+    Encapsulate the given code lines into a function with the specified name, signature, and docstring.
+
+    :param code_lines: The lines of code to include in the user input.
+    :param function_name: The name of the function to include in the user input.
+    :param function_signature: The function signature to include in the user input.
+    :param func_doc: The function docstring to include in the user input.
+    :param case_query: The case query object.
+    """
+    code = '\n'.join(code_lines)
+    code = encapsulate_user_input(code, function_signature, func_doc)
+    if case_query.is_function:
+        args = "**case"
+    else:
+        args = "case"
+    if f"return {function_name}({args})" not in code:
+        code = code.strip() + f"\nreturn {function_name}({args})"
+    return code
+
+
 class IPythonConsole(RichJupyterWidget):
     def __init__(self, namespace=None, parent=None):
         super(IPythonConsole, self).__init__(parent)
@@ -388,6 +469,23 @@ class IPythonConsole(RichJupyterWidget):
         self.kernel = self.kernel_manager.kernel
         self.kernel.gui = 'qt'
         self.command_log = []
+
+        # Monkey patch its run_cell method
+        def custom_run_cell(this, raw_cell, **kwargs):
+            print(raw_cell)
+            if contains_return_statement(raw_cell) and 'def ' not in raw_cell:
+                if self.parent.template_file_creator and self.parent.template_file_creator.func_name in raw_cell:
+                    self.command_log = self.parent.code_lines
+                self.command_log.append(raw_cell)
+                this.history_manager.store_inputs(line_num=this.execution_count, source=raw_cell)
+                return None
+            result = original_run_cell(raw_cell, **kwargs)
+            if result.error_in_exec is None and result.error_before_exec is None:
+                self.command_log.append(raw_cell)
+            return result
+
+        original_run_cell = self.kernel.shell.run_cell
+        self.kernel.shell.run_cell = MethodType(custom_run_cell, self.kernel.shell)
 
         self.kernel_client = self.kernel_manager.client()
         self.kernel_client.start_channels()
@@ -422,7 +520,7 @@ class IPythonConsole(RichJupyterWidget):
     def execute(self, source=None, hidden=False, interactive=False):
         # Log the command before execution
         source = source if source is not None else self.input_buffer
-        self.command_log.append(source)
+        # self.command_log.append(source)
         super().execute(source, hidden, interactive)
 
     def stop(self):

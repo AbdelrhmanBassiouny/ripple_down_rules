@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import json
+import sys
 from abc import ABC, abstractmethod
 
+from PyQt6.QtWidgets import QApplication
 from typing_extensions import Optional, Dict, TYPE_CHECKING, List, Type, Any
 
 from .datastructures.case import Case, CaseAttribute
 from .datastructures.callable_expression import CallableExpression
-from .datastructures.enums import PromptFor
+from .datastructures.enums import PromptFor, InteractionMode
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.case import show_current_and_corner_cases
-from .prompt import prompt_user_for_expression
+from .gui import RDRCaseViewer
+from .prompt import UserPrompt
 from .ipython_custom_shell import IPythonShell
 from .utils import get_all_subclasses, make_list
 
@@ -67,12 +70,20 @@ class Human(Expert):
     The Human Expert class, an expert that asks the human to provide differentiating features and conclusions.
     """
 
+    def __init__(self, use_loaded_answers: bool = False, append: bool = False, viewer: Optional[RDRCaseViewer] = None):
+        """
+        Initialize the Human expert.
+
+        :param viewer: The RDRCaseViewer instance to use for prompting the user.
+        """
+        super().__init__(use_loaded_answers=use_loaded_answers, append=append)
+        self.user_prompt = UserPrompt(viewer)
+
     def save_answers(self, path: str):
         """
         Save the expert answers to a file.
 
         :param path: The path to save the answers to.
-        :param append: A flag to indicate if the answers should be appended to the file or not.
         """
         if self.append:
             # read the file and append the new answers
@@ -119,7 +130,7 @@ class Human(Expert):
         if user_input:
             condition = CallableExpression(user_input, bool, scope=case_query.scope)
         else:
-            user_input, condition = prompt_user_for_expression(case_query, PromptFor.Conditions)
+            user_input, condition = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conditions)
         if not self.use_loaded_answers:
             self.all_expert_answers.append(user_input)
         case_query.conditions = condition
@@ -143,7 +154,7 @@ class Human(Expert):
                                                  mutually_exclusive=case_query.mutually_exclusive)
         else:
             show_current_and_corner_cases(case_query.case)
-            expert_input, expression = prompt_user_for_expression(case_query, PromptFor.Conclusion)
+            expert_input, expression = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conclusion)
             self.all_expert_answers.append(expert_input)
         case_query.target = expression
         return expression

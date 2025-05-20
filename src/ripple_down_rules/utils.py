@@ -1347,7 +1347,7 @@ def draw_tree(root: Node, fig: plt.Figure):
     Draw the tree using matplotlib and networkx.
     """
     if matplotlib.get_backend().lower() not in ['qt5agg', 'qt4agg', 'qt6agg']:
-        matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+        matplotlib.use("Qt6Agg")  # or "Qt6Agg", depending on availability
 
     if root is None:
         return

@@ -15,7 +15,7 @@ from ripple_down_rules.gui import RDRCaseViewer, style
 from test_object_diagram import Person, Address
 
 
-@unittest.skip("GUI tests need visual inspection and cannot be run automatically.")
+# @unittest.skip("GUI tests need visual inspection and cannot be run automatically.")
 class GUITestCase(unittest.TestCase):
     """Test case for the GUI components of the ripple down rules package."""
     app: QApplication
@@ -26,7 +26,8 @@ class GUITestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.app = QApplication(sys.argv)
+        print("Setting up GUI test case...")
+        cls.app = QApplication([])
         cls.cases, cls.targets = load_zoo_dataset(cache_file="./test_results/zoo")
         cls.cq = CaseQuery(cls.cases[0], "species", (Species,), True, _target=cls.targets[0])
         cls.viewer = RDRCaseViewer()
