@@ -977,7 +977,11 @@ def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable, Any]:
                 continue
             attr_value = getattr(case, attr)
             if is_iterable(attr_value):
-                setattr(case_copy, attr, copy(attr_value))
+                try:
+                    setattr(case_copy, attr, copy(attr_value))
+                except AttributeError as e:
+                    # if the attribute is not settable, just skip it
+                    pass
         return case_copy
 
 

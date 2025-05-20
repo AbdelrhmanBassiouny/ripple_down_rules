@@ -153,12 +153,25 @@ class CollapsibleBox(QWidget):
         layout.setSpacing(2)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-    def toggle(self):
+    def toggle(self, object_diagram_only=False):
         is_expanded = self.toggle_button.isChecked()
+        self.update_object_diagram(is_expanded)
+        if object_diagram_only:
+            return
         self.toggle_button.setArrowType(
             Qt.ArrowType.DownArrow if is_expanded else Qt.ArrowType.RightArrow
         )
         self.content_area.setVisible(is_expanded)
+
+        # toggle children
+        if not is_expanded:
+            for i in range(self.content_layout.count()):
+                item = self.content_layout.itemAt(i)
+                if isinstance(item.widget(), CollapsibleBox):
+                    item.widget().toggle_button.setChecked(False)
+                    item.widget().toggle()
+
+    def update_object_diagram(self, is_expanded):
         if is_expanded and self.viewer is not None:
             self.viewer.included_attrs.append(self.chain_name)
             main_obj_name = self.chain_name.split('.')[0]
@@ -173,15 +186,7 @@ class CollapsibleBox(QWidget):
             main_obj_name = self.chain_name.split('.')[0]
             main_obj = self.main_obj.get(main_obj_name)
             self.viewer.update_object_diagram(
-                main_obj, main_obj_name
-            )
-        # toggle children
-        if not is_expanded:
-            for i in range(self.content_layout.count()):
-                item = self.content_layout.itemAt(i)
-                if isinstance(item.widget(), CollapsibleBox):
-                    item.widget().toggle_button.setChecked(False)
-                    item.widget().toggle()
+                main_obj, main_obj_name)
 
     def add_widget(self, widget):
         self.content_layout.addWidget(widget)
@@ -400,15 +405,15 @@ class RDRCaseViewer(QMainWindow):
             if isinstance(item.widget(), CollapsibleBox):
                 self.expand_collapse_all(item.widget(), expand=False)
 
-    def expand_collapse_all(self, widget, expand=True):
+    def expand_collapse_all(self, widget, expand=True, curr_depth=0, max_depth=2):
         widget.toggle_button.setChecked(expand)
         widget.toggle()
-        if expand:
+        if expand and curr_depth < max_depth:
             # do it for recursive children
             for i in range(widget.content_layout.count()):
                 item = widget.content_layout.itemAt(i)
                 if isinstance(item.widget(), CollapsibleBox):
-                    self.expand_collapse_all(item.widget(), expand=True)
+                    self.expand_collapse_all(item.widget(), expand=True, curr_depth=curr_depth + 1, max_depth=max_depth)
 
 
 

@@ -28,11 +28,11 @@ def get_colored_value(value):
 
 
 def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth=0, max_depth=3, chain_name=None,
-                          included_attrs=None):
+                          included_attrs=None, iterable_limit=3):
     if seen is None:
         seen = set()
     if graph is None:
-        graph = graphviz.Digraph(format='svg', graph_attr={'dpi': '300'})
+        graph = graphviz.Digraph(format='svg', graph_attr={'dpi': '96'})
         graph.attr('node', shape='plaintext')
 
     obj_id = id(obj)
@@ -49,9 +49,13 @@ def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth
 
     if isinstance(obj, (list, tuple, set, dict)):
         items = obj.items() if isinstance(obj, dict) else enumerate(obj)
+        i = 0
         for idx, item in items:
             if idx == "scope":
                 continue
+            if i >= iterable_limit:
+                rows.append(f'<TR><TD ALIGN="LEFT" PORT="{idx}">...</TD><TD ALIGN="LEFT">...</TD></TR>')
+                break
             # Represent items as attr = index + type (for the label)
             if is_simple(item):
                 val_colored = get_colored_value(item)
@@ -61,6 +65,7 @@ def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth
                 rows.append(
                     f'<TR><TD ALIGN="LEFT" PORT="{idx}">[{idx}]</TD><TD ALIGN="LEFT"><I>{type_name}</I></TD></TR>')
                 non_simple_attrs.append((str(idx), item))
+            i += 1
 
     else:
         for attr in dir(obj):
