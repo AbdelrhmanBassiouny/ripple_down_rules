@@ -15,6 +15,13 @@ SCRDR, MCRDR, and GRDR implementation were inspired from the book:
 sudo apt-get install graphviz graphviz-dev
 pip install ripple_down_rules
 ```
+For GUI support, also install:
+
+```bash
+sudo apt-get install libxcb-cursor-dev
+```
+
+```bash
 
 ## Example Usage
 

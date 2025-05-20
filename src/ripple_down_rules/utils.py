@@ -793,7 +793,7 @@ def is_iterable(obj: Any) -> bool:
 
     :param obj: The object to check.
     """
-    return hasattr(obj, "__iter__") and not isinstance(obj, (str, type))
+    return hasattr(obj, "__iter__") and not isinstance(obj, (str, type, bytes, bytearray))
 
 
 def get_type_from_string(type_path: str):
@@ -1347,7 +1347,7 @@ def draw_tree(root: Node, fig: plt.Figure):
     Draw the tree using matplotlib and networkx.
     """
     if matplotlib.get_backend().lower() not in ['qt5agg', 'qt4agg', 'qt6agg']:
-        matplotlib.use("Qt5Agg")  # or "Qt5Agg", depending on availability
+        matplotlib.use("Qt6Agg")  # or "Qt6Agg", depending on availability
 
     if root is None:
         return

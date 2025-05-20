@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import List, Optional
 from unittest import TestCase
 
+from PyQt6.QtWidgets import QApplication
+
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
+from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.helpers import is_matching
 from ripple_down_rules.rdr import GeneralRDR
 
@@ -84,6 +88,8 @@ class Cabinet(View):
 class TestRDRWorld(TestCase):
     drawer_case_queries: List[CaseQuery]
     world: World
+    app: QApplication
+    viewer: RDRCaseViewer
 
     @classmethod
     def setUpClass(cls):
@@ -109,6 +115,8 @@ class TestRDRWorld(TestCase):
         print(all_possible_drawers)
         cls.drawer_case_queries = [CaseQuery(possible_drawer, "correct", (bool,), True, default_value=False)
                                    for possible_drawer in all_possible_drawers]
+        cls.app = QApplication(sys.argv)
+        cls.viewer = RDRCaseViewer()
 
     def test_view_rdr(self):
         self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)
@@ -133,7 +141,7 @@ class TestRDRWorld(TestCase):
 
     def get_view_rdr(self, views=(Drawer, Cabinet), use_loaded_answers: bool = True, save_answers: bool = False,
                      append: bool = False):
-        expert = Human(use_loaded_answers=use_loaded_answers, append=append)
+        expert = Human(use_loaded_answers=use_loaded_answers, append=append, viewer=self.viewer)
         filename = os.path.join(os.getcwd(), "test_expert_answers/view_rdr_expert_answers_fit")
         if use_loaded_answers:
             expert.load_answers(filename)

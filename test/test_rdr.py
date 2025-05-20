@@ -1,7 +1,6 @@
-import importlib
 import os
-import time
-from unittest import TestCase, skip
+import sys
+from unittest import TestCase
 
 from typing_extensions import List
 
@@ -11,9 +10,12 @@ from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import MCRDRMode
 from ripple_down_rules.experts import Human
+from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR, RDRWithCodeWriter
-from ripple_down_rules.utils import render_tree, get_all_subclasses, make_set, flatten_list, extract_function_source
-from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr, get_habitat
+from ripple_down_rules.utils import render_tree, make_set, extract_function_source
+from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
+
+from PyQt6.QtWidgets import QApplication
 
 
 class TestRDR(TestCase):
@@ -24,6 +26,8 @@ class TestRDR(TestCase):
     expert_answers_dir: str = "./test_expert_answers"
     generated_rdrs_dir: str = "./test_generated_rdrs"
     cache_file: str = f"{test_results_dir}/zoo_dataset.pkl"
+    app: QApplication
+    viewer: RDRCaseViewer
 
     @classmethod
     def setUpClass(cls):
@@ -34,12 +38,14 @@ class TestRDR(TestCase):
         for test_dir in [cls.test_results_dir, cls.expert_answers_dir, cls.generated_rdrs_dir]:
             if not os.path.exists(test_dir):
                 os.makedirs(test_dir)
+        cls.app = QApplication(sys.argv)
+        cls.viewer = RDRCaseViewer()
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
         save_answers = False
         filename = self.expert_answers_dir + "/scrdr_expert_answers_classify"
-        expert = Human(use_loaded_answers=use_loaded_answers)
+        expert = Human(use_loaded_answers=use_loaded_answers, viewer=self.viewer)
         if use_loaded_answers:
             expert.load_answers(filename)
 
@@ -345,3 +351,13 @@ class TestRDR(TestCase):
         for conclusion_name, rdr in grdr.start_rules_dict.items():
             render_tree(rdr.start_rule, use_dot_exporter=True,
                         filename=self.test_results_dir + f"/grdr_{conclusion_name}")
+
+
+if __name__ == "__main__":
+    pass
+    # tests = TestRDR()
+    # app = QApplication.instance()
+    # if app is None:
+    #     app = QApplication(sys.argv)
+    # tests.setUpClass()
+    # tests.test_classify_scrdr()

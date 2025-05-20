@@ -18,6 +18,8 @@ from .rdr_decorators import RDRDecorator
 def load_cached_dataset(cache_file):
     """Loads the dataset from cache if it exists."""
     dataset = {}
+    if '.pkl' not in cache_file:
+        cache_file += ".pkl"
     for key in ["features", "targets", "ids"]:
         part_file = cache_file.replace(".pkl", f"_{key}.pkl")
         if not os.path.exists(part_file):
@@ -43,6 +45,9 @@ def save_dataset_to_cache(dataset, cache_file):
 
 def get_dataset(dataset_id, cache_file: Optional[str] = None):
     """Fetches dataset from cache or downloads it if not available."""
+    if cache_file is not None:
+        if not cache_file.endswith(".pkl"):
+            cache_file += ".pkl"
     dataset = load_cached_dataset(cache_file) if cache_file else None
     if dataset is None:
         print("Downloading dataset...")

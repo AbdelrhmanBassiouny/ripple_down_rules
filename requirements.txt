@@ -6,12 +6,11 @@ pygraphviz>=1.7
 ucimlrepo>=0.0.7
 typing-extensions>=4.12.2
 matplotlib>=3.7.5
-prompt-toolkit>=3
 sqlalchemy
-pyqt5
+pyqt6
+qtconsole
+graphviz
 tabulate
-pdbpp
-pytest
 ipython
 requests
 colorama

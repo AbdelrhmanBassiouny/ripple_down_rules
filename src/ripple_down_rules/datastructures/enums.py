@@ -7,6 +7,20 @@ from typing_extensions import List, Dict, Any, Type
 from ripple_down_rules.utils import SubclassJSONSerializer
 
 
+class InteractionMode(Enum):
+    """
+    The interaction mode of the RDR.
+    """
+    IPythonOnly = auto()
+    """
+    IPythonOnly mode, the mode where the user uses only an Ipython shell to interact with the RDR.
+    """
+    GUI = auto()
+    """
+    GUI mode, the mode where the user uses a GUI to interact with the RDR.
+    """
+
+
 class Editor(str, Enum):
     """
     The editor that is used to edit the rules.

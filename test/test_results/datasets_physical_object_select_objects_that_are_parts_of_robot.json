@@ -13,8 +13,8 @@
                     ],
                     "scope": {
                         "List": "typing.List",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
-                        "Robot": "ripple_down_rules.datasets.Robot"
+                        "Robot": "ripple_down_rules.datasets.Robot",
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -32,8 +32,8 @@
                     ],
                     "scope": {
                         "List": "typing.List",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
-                        "Robot": "ripple_down_rules.datasets.Robot"
+                        "Robot": "ripple_down_rules.datasets.Robot",
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
