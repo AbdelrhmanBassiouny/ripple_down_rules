@@ -9,7 +9,7 @@ from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .case import create_case, Case
 from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json, is_iterable, \
-    build_user_input_from_conclusion, encapsulate_user_input, extract_function_source, are_results_subclass_of_types, \
+    build_user_input_from_conclusion, encapsulate_user_input, extract_function_or_class_source, are_results_subclass_of_types, \
     make_list
 
 
@@ -170,7 +170,7 @@ class CallableExpression(SubclassJSONSerializer):
         """
         Update the user input from a file.
         """
-        new_function_body = extract_function_source(file_path, [function_name])[function_name]
+        new_function_body = extract_function_or_class_source(file_path, function_name)
         if new_function_body is None:
             return
         self.user_input = self.encapsulating_function + '\n' + new_function_body

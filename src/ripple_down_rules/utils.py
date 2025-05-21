@@ -134,48 +134,94 @@ def extract_imports(file_path):
     return scope
 
 
-def extract_function_source(file_path: str,
-                            function_names: List[str], join_lines: bool = True,
-                            return_line_numbers: bool = False,
-                            include_signature: bool = True) \
+def extract_function_or_class_source(file_path: str,
+                                     func_and_cls_names: List[str], join_lines: bool = True,
+                                     return_line_numbers: bool = False,
+                                     include_signature: bool = True,
+                                     until_line_number: Optional[int] = None) \
         -> Union[Dict[str, Union[str, List[str]]],
-        Tuple[Dict[str, Union[str, List[str]]], List[Tuple[int, int]]]]:
+        Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]]]:
     """
     Extract the source code of a function from a file.
 
     :param file_path: The path to the file.
-    :param function_names: The names of the functions to extract.
+    :param func_and_cls_names: The names of the functions and/or classes to extract.
     :param join_lines: Whether to join the lines of the function.
     :param return_line_numbers: Whether to return the line numbers of the function.
-    :param include_signature: Whether to include the function signature in the source code.
-    :return: A dictionary mapping function names to their source code as a string if join_lines is True,
+    :param include_signature: Whether to include the function signature / class definition in the source code.
+    :param until_line_number: The line number to stop reading the file at.
+    :return: A dictionary mapping function/class names to their source code as a string if join_lines is True,
      otherwise as a list of strings.
     """
     with open(file_path, "r") as f:
-        source = f.read()
+        if until_line_number is not None:
+            # Read only until the specified line number
+            lines = f.readlines()
+            source = "".join(lines[:until_line_number])
+        else:
+            # Read the entire file
+            source = f.read()
 
     # Parse the source code into an AST
     tree = ast.parse(source)
-    function_names = make_list(function_names)
+    func_and_cls_names = make_list(func_and_cls_names)
     functions_source: Dict[str, Union[str, List[str]]] = {}
-    line_numbers = []
+    line_numbers: Dict[str, Tuple[int, int]] = {}
+    found_functions_and_classes = []
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name in function_names:
-            # Get the line numbers of the function
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            found_functions_and_classes.append(node)
+            if node.name not in func_and_cls_names:
+                continue
+            # Get the line numbers of the function/class
             lines = source.splitlines()
             func_lines = lines[node.lineno - 1:node.end_lineno]
             if not include_signature:
                 func_lines = func_lines[1:]
-            line_numbers.append((node.lineno, node.end_lineno))
+            line_numbers[node.name] = (node.lineno, node.end_lineno)
             functions_source[node.name] = "\n".join(func_lines) if join_lines else func_lines
-            if len(functions_source) == len(function_names):
+            if len(functions_source) == len(func_and_cls_names):
                 break
-    if len(functions_source) != len(function_names):
-        raise ValueError(f"Could not find all functions in {file_path}: {function_names} not found,"
-                         f"functions not found: {set(function_names) - set(functions_source.keys())}")
+    if len(functions_source) != len(func_and_cls_names):
+        raise ValueError(f"Could not find all functions in {file_path}: {func_and_cls_names} not found,"
+                         f"functions not found: {set(func_and_cls_names) - set(functions_source.keys())}")
     if return_line_numbers:
         return functions_source, line_numbers
     return functions_source
+
+
+def get_node_from_source(tree: Union[ast.FunctionDef, ast.ClassDef], func_and_cls_names: List[str],
+                         source: str, include_signature: bool = True, join_lines: bool = True) -> Tuple[Optional[str, List[str]],
+                                                                                                  Optional[Dict[str, Tuple[int, int]]]]:
+    # Get the line numbers of the function/class
+    found_functions_and_classes = []
+    line_numbers = {}
+    functions_source: Dict[str, Union[str, List[str], None]] = {}
+    for i, node in enumerate(tree.body):
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            found_functions_and_classes.append(node)
+            if node.name not in func_and_cls_names:
+                continue
+            # Get the line numbers of the function/class
+            lines = source.splitlines()
+            func_lines = lines[node.lineno - 1:node.end_lineno]
+            if not include_signature:
+                func_lines = func_lines[1:]
+            line_numbers[node.name] = (node.lineno, node.end_lineno)
+            functions_source[node.name] = "\n".join(func_lines) if join_lines else func_lines
+            if len(functions_source) == len(func_and_cls_names):
+                break
+        if i == len(tree.body) - 1:
+            for found in found_functions_and_classes:
+                missing = list(set(func_and_cls_names) - set(functions_source.keys()))
+                functions_source_, line_numbers = get_node_from_source(found, missing, source, include_signature,
+                                                                       join_lines)
+                functions_source.update(functions_source_)
+                line_numbers.update(line_numbers)
+                if len(functions_source) == len(func_and_cls_names):
+                    break
+    return functions_source, line_numbers
+
 
 
 def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optional[str] = None) -> str:
@@ -392,7 +438,7 @@ def get_names_used(node):
     return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
 
 
-def extract_dependencies(code_lines):
+def extract_dependencies(code_lines: List['str']):
     full_code = '\n'.join(code_lines)
     tree = ast.parse(full_code)
     final_stmt = tree.body[-1]

@@ -22,7 +22,7 @@ from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .user_interface.gui import RDRCaseViewer
 from .utils import draw_tree, make_set, copy_case, \
     SubclassJSONSerializer, make_list, get_type_from_string, \
-    is_conflicting, update_case, get_imports_from_scope, extract_function_source
+    is_conflicting, update_case, get_imports_from_scope, extract_function_or_class_source
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -236,7 +236,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         conclusion_func_names = [f'conclusion_{rid}' for rid in rule_ids]
         all_func_names = condition_func_names + conclusion_func_names
         filepath = f"{package_dir}/{self.generated_python_defs_file_name}.py"
-        functions_source = extract_function_source(filepath, all_func_names, include_signature=False)
+        functions_source = extract_function_or_class_source(filepath, all_func_names, include_signature=False)
         for rule in [self.start_rule] + list(self.start_rule.descendants):
             if rule.conditions is not None:
                 rule.conditions.user_input = functions_source[f"conditions_{rule.uid}"]

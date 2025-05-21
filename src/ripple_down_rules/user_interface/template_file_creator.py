@@ -15,7 +15,7 @@ from ..datastructures.case import Case
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import Editor, PromptFor
 from ..utils import str_to_snake_case, get_imports_from_scope, make_list, typing_hint_to_str, \
-    get_imports_from_types, extract_function_source
+    get_imports_from_types, extract_function_or_class_source
 
 
 def detect_available_editor() -> Optional[Editor]:
@@ -279,9 +279,9 @@ class TemplateFileCreator:
                 break
         if updates:
             self.shell.user_ns.update(updates)
-            self.all_code_lines = extract_function_source(self.temp_file_path,
-                                                          [self.func_name],
-                                                          join_lines=False)[self.func_name]
+            self.all_code_lines = extract_function_or_class_source(self.temp_file_path,
+                                                                   [self.func_name],
+                                                                   join_lines=False)[self.func_name]
             return self.all_code_lines
         else:
             self.print_func(f"{Fore.RED}ERROR:: Function `{self.func_name}` not found.{Style.RESET_ALL}")

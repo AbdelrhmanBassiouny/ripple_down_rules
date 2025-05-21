@@ -12,7 +12,7 @@ from ripple_down_rules.datastructures.enums import MCRDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR, RDRWithCodeWriter
-from ripple_down_rules.utils import render_tree, make_set, extract_function_source
+from ripple_down_rules.utils import render_tree, make_set, extract_function_or_class_source
 from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
 
 from PyQt6.QtWidgets import QApplication
@@ -180,10 +180,10 @@ class TestRDR(TestCase):
         scrdr.write_to_python_file(self.generated_rdrs_dir, postfix="_modified")
         filepath = os.path.join(self.generated_rdrs_dir, f"{scrdr.generated_python_defs_file_name}.py")
         func_name = f"conditions_{scrdr.start_rule.uid}"
-        first_rule_conditions, line_numbers = extract_function_source(filepath,
-                                                                      func_name,
-                                                                      join_lines=False,
-                                                                      return_line_numbers=True)
+        first_rule_conditions, line_numbers = extract_function_or_class_source(filepath,
+                                                                               func_name,
+                                                                               join_lines=False,
+                                                                               return_line_numbers=True)
         self.assertEqual(first_rule_conditions[func_name][-1], "    return case.milk == 1")
         # modify the condition to be case.milk==0
         with open(filepath, "r") as f:
@@ -191,10 +191,10 @@ class TestRDR(TestCase):
         lines[line_numbers[-1][-1]-1] = "    return case.milk == 0\n"
         with open(filepath, "w") as f:
             f.writelines(lines)
-        first_rule_conditions, line_numbers = extract_function_source(filepath,
-                                                                      func_name,
-                                                                      join_lines=False,
-                                                                      return_line_numbers=True)
+        first_rule_conditions, line_numbers = extract_function_or_class_source(filepath,
+                                                                               func_name,
+                                                                               join_lines=False,
+                                                                               return_line_numbers=True)
         self.assertEqual(first_rule_conditions[func_name][-1], "    return case.milk == 0")
         scrdr: RDRWithCodeWriter
         scrdr.update_from_python_file(self.generated_rdrs_dir)
