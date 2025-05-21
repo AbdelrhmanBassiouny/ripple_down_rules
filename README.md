@@ -27,8 +27,9 @@ sudo apt-get install libxcb-cursor-dev
 
 Fit the SCRDR to the data, then classify one of the data cases to check if its correct,
 and render the tree to a file:
+```
 
-```Python
+```python
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.rdr import SingleClassRDR
 from ripple_down_rules.datasets import load_zoo_dataset
@@ -49,3 +50,10 @@ render_tree(scrdr.start_rule, use_dot_exporter=True, filename="scrdr")
 cat = scrdr.classify(all_cases[50])
 assert cat == targets[50]
 ```
+
+@software{bassiouny2025rdr,
+author = {Bassiouny, Abdelrhman},
+title = {Ripple-Down-Rules},
+url = {https://github.com/AbdelrhmanBassiouny/ripple_down_rules},
+version = {0.4.1},
+}
