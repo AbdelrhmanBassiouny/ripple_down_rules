@@ -50,6 +50,9 @@ render_tree(scrdr.start_rule, use_dot_exporter=True, filename="scrdr")
 cat = scrdr.classify(all_cases[50])
 assert cat == targets[50]
 ```
+
+## To Cite:
+
 ```bib
 @software{bassiouny2025rdr,
 author = {Bassiouny, Abdelrhman},
