@@ -188,7 +188,7 @@ class TestRDR(TestCase):
         # modify the condition to be case.milk==0
         with open(filepath, "r") as f:
             lines = f.readlines()
-        lines[line_numbers[-1][-1]-1] = "    return case.milk == 0\n"
+        lines[line_numbers[func_name][-1]-1] = "    return case.milk == 0\n"
         with open(filepath, "w") as f:
             f.writelines(lines)
         first_rule_conditions, line_numbers = extract_function_or_class_source(filepath,

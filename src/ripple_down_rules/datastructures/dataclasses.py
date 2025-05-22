@@ -5,8 +5,9 @@ import typing
 from dataclasses import dataclass, field
 
 import typing_extensions
+from omegaconf import MISSING
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, get_origin, Set
+from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, get_origin, Set, Callable
 
 from .callable_expression import CallableExpression
 from .case import create_case, Case
@@ -36,6 +37,11 @@ class CaseQuery:
     mutually_exclusive: bool
     """
     Whether the attribute can only take one value (i.e. True) or multiple values (i.e. False).
+    """
+    case_conf: Optional[CaseConf] = None
+    """
+    The case configuration that is used to (re)create the original case, recommended to be used when you want to 
+    the case to persist in the rule base, this would allow it to be used for merging with other similar conclusion RDRs.
     """
     _target: Optional[CallableExpression] = None
     """
@@ -218,3 +224,11 @@ class CaseQuery:
                          scope=self.scope, _case=copy_case(self.case), _target_value=self.target_value,
                          conditions=self.conditions, is_function=self.is_function,
                          function_args_type_hints=self.function_args_type_hints)
+
+
+@dataclass
+class CaseConf:
+    factory_method: Callable[[Any], Any] = MISSING
+
+    def create(self) -> Any:
+        return self.factory_method()

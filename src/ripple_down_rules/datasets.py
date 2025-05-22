@@ -10,9 +10,9 @@ from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column, relationshi
 from typing_extensions import Tuple, List, Set, Optional, Self
 from ucimlrepo import fetch_ucirepo
 
-from .datastructures.case import Case, create_cases_from_dataframe
-from .datastructures.enums import Category
-from .rdr_decorators import RDRDecorator
+from ripple_down_rules.datastructures.case import Case, create_cases_from_dataframe
+from ripple_down_rules.datastructures.enums import Category
+from ripple_down_rules.rdr_decorators import RDRDecorator
 
 
 def load_cached_dataset(cache_file):
@@ -219,4 +219,75 @@ class MappedAnimal(MappedAsDataclass, Base):
     species: Mapped[Species] = mapped_column(nullable=True)
 
     habitats: Mapped[Set[HabitatTable]] = relationship(default_factory=set)
+
+
+@dataclass
+class WorldEntity:
+    world: Optional[World] = field(default=None, kw_only=True, repr=False, hash=False)
+
+
+@dataclass(unsafe_hash=True)
+class Body(WorldEntity):
+    name: str
+
+
+@dataclass(unsafe_hash=True)
+class Handle(Body):
+    ...
+
+
+@dataclass(unsafe_hash=True)
+class Container(Body):
+    ...
+
+
+@dataclass(unsafe_hash=True)
+class Connection(WorldEntity):
+    parent: Body
+    child: Body
+
+
+@dataclass(unsafe_hash=True)
+class FixedConnection(Connection):
+    ...
+
+
+@dataclass(unsafe_hash=True)
+class PrismaticConnection(Connection):
+    ...
+
+
+@dataclass
+class World:
+    id: int = 0
+    bodies: List[Body] = field(default_factory=list)
+    connections: List[Connection] = field(default_factory=list)
+    views: List[View] = field(default_factory=list, repr=False)
+
+    def __eq__(self, other):
+        if not isinstance(other, World):
+            return False
+        return self.id == other.id
+
+
+@dataclass(unsafe_hash=True)
+class View(WorldEntity):
+    ...
+
+
+@dataclass(unsafe_hash=True)
+class Drawer(View):
+    handle: Handle
+    container: Container
+    correct: Optional[bool] = None
+
+
+@dataclass
+class Cabinet(View):
+    container: Container
+    drawers: List[Drawer] = field(default_factory=list)
+
+    def __hash__(self):
+        return hash((self.__class__.__name__, self.container))
+
 

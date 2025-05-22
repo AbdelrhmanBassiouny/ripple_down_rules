@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import builtins
 import copyreg
 import importlib
@@ -27,7 +26,6 @@ from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQ
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
     get_origin, get_args, Tuple, Optional, List, Union, Self
-
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
@@ -191,15 +189,16 @@ def extract_function_or_class_source(file_path: str,
 
 
 def get_node_from_source(tree: Union[ast.FunctionDef, ast.ClassDef], func_and_cls_names: List[str],
-                         source: str, include_signature: bool = True, join_lines: bool = True) -> Tuple[Optional[str, List[str]],
-                                                                                                  Optional[Dict[str, Tuple[int, int]]]]:
+                         source: str, include_signature: bool = True, join_lines: bool = True) -> Tuple[
+    Optional[str, List[str]],
+    Optional[Dict[str, Tuple[int, int]]]]:
     # Get the line numbers of the function/class
-    found_functions_and_classes = []
+    found_functions_and_classes = set()
     line_numbers = {}
     functions_source: Dict[str, Union[str, List[str], None]] = {}
-    for i, node in enumerate(tree.body):
+    for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-            found_functions_and_classes.append(node)
+            found_functions_and_classes.add(node)
             if node.name not in func_and_cls_names:
                 continue
             # Get the line numbers of the function/class
@@ -211,17 +210,17 @@ def get_node_from_source(tree: Union[ast.FunctionDef, ast.ClassDef], func_and_cl
             functions_source[node.name] = "\n".join(func_lines) if join_lines else func_lines
             if len(functions_source) == len(func_and_cls_names):
                 break
-        if i == len(tree.body) - 1:
-            for found in found_functions_and_classes:
-                missing = list(set(func_and_cls_names) - set(functions_source.keys()))
-                functions_source_, line_numbers = get_node_from_source(found, missing, source, include_signature,
-                                                                       join_lines)
-                functions_source.update(functions_source_)
-                line_numbers.update(line_numbers)
-                if len(functions_source) == len(func_and_cls_names):
-                    break
+    missing = list(set(func_and_cls_names) - set(functions_source.keys()))
+    if len(missing) > 0:
+        for found in found_functions_and_classes:
+            missing = list(set(func_and_cls_names) - set(functions_source.keys()))
+            functions_source_, line_numbers = get_node_from_source(found, missing, source, include_signature,
+                                                                   join_lines)
+            functions_source.update(functions_source_)
+            line_numbers.update(line_numbers)
+            if len(functions_source) == len(func_and_cls_names):
+                break
     return functions_source, line_numbers
-
 
 
 def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optional[str] = None) -> str:
@@ -563,7 +562,8 @@ def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None,
         var_instance_ = {}
         var_names_ = []
         for k, v in data_.items():
-            var_instance_k_val_, var_names__, vars_to_construct_ = preload_serialized_objects(v, refs_, vars_to_construct_)
+            var_instance_k_val_, var_names__, vars_to_construct_ = preload_serialized_objects(v, refs_,
+                                                                                              vars_to_construct_)
             var_instance_[k] = var_instance_k_val_
             var_names_.extend(var_names__)
         return var_instance_, var_names_, vars_to_construct_
@@ -615,7 +615,7 @@ def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None,
     elif isinstance(data, dict):
         return deserialize_dict(data, refs, vars_to_construct)
 
-    return data, var_names, vars_to_construct # Primitive
+    return data, var_names, vars_to_construct  # Primitive
 
 
 def resolve_refs(obj, refs, seen=None):

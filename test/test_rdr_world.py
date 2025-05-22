@@ -1,88 +1,26 @@
 from __future__ import annotations
 
-import os
 import sys
-from dataclasses import dataclass, field
-from typing import List, Optional
 from unittest import TestCase
 
 from PyQt6.QtWidgets import QApplication
 
+from conf.world.handles_and_containers import HandlesAndContainersWorld
+from ripple_down_rules.datasets import *
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
-from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.helpers import is_matching
 from ripple_down_rules.rdr import GeneralRDR
+from ripple_down_rules.user_interface.gui import RDRCaseViewer
 
 
-@dataclass
-class WorldEntity:
-    world: Optional[World] = field(default=None, kw_only=True, repr=False, hash=False)
-
-
-@dataclass(unsafe_hash=True)
-class Body(WorldEntity):
-    name: str
-
-
-@dataclass(unsafe_hash=True)
-class Handle(Body):
-    ...
-
-
-@dataclass(unsafe_hash=True)
-class Container(Body):
-    ...
-
-
-@dataclass(unsafe_hash=True)
-class Connection(WorldEntity):
-    parent: Body
-    child: Body
-
-
-@dataclass(unsafe_hash=True)
-class FixedConnection(Connection):
-    ...
-
-
-@dataclass(unsafe_hash=True)
-class PrismaticConnection(Connection):
-    ...
-
-
-@dataclass
-class World:
-    id: int = 0
-    bodies: List[Body] = field(default_factory=list)
-    connections: List[Connection] = field(default_factory=list)
-    views: List[View] = field(default_factory=list, repr=False)
-
-    def __eq__(self, other):
-        if not isinstance(other, World):
-            return False
-        return self.id == other.id
-
-
-@dataclass(unsafe_hash=True)
-class View(WorldEntity):
-    ...
-
-
-@dataclass(unsafe_hash=True)
-class Drawer(View):
-    handle: Handle
-    container: Container
-    correct: Optional[bool] = None
-
-
-@dataclass
-class Cabinet(View):
-    container: Container
-    drawers: List[Drawer] = field(default_factory=list)
-
-    def __hash__(self):
-        return hash((self.__class__.__name__, self.container))
+def get_all_possible_drawers(world: World) -> List[Drawer]:
+    all_possible_drawers = []
+    for handle in [body for body in world.bodies if isinstance(body, Handle)]:
+        for container in [body for body in world.bodies if isinstance(body, Container)]:
+            view = Drawer(handle, container, world=world)
+            all_possible_drawers.append(view)
+    return all_possible_drawers
 
 
 class TestRDRWorld(TestCase):
@@ -93,28 +31,12 @@ class TestRDRWorld(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        world = World()
-        cls.world = world
+        cls.world = HandlesAndContainersWorld().create()
+        cls.all_possible_drawers = get_all_possible_drawers(cls.world)
 
-        handle = Handle('h1', world=world)
-        handle_2 = Handle('h2', world=world)
-        container_1 = Container('c1', world=world)
-        container_2 = Container('c2', world=world)
-        connection_1 = FixedConnection(container_1, handle, world=world)
-        connection_2 = PrismaticConnection(container_2, container_1, world=world)
-
-        world.bodies = [handle, container_1, container_2, handle_2]
-        world.connections = [connection_1, connection_2]
-
-        all_possible_drawers = []
-        for handle in [body for body in world.bodies if isinstance(body, Handle)]:
-            for container in [body for body in world.bodies if isinstance(body, Container)]:
-                view = Drawer(handle, container, world=world)
-                all_possible_drawers.append(view)
-
-        print(all_possible_drawers)
+        print(cls.all_possible_drawers)
         cls.drawer_case_queries = [CaseQuery(possible_drawer, "correct", (bool,), True, default_value=False)
-                                   for possible_drawer in all_possible_drawers]
+                                   for possible_drawer in cls.all_possible_drawers]
         cls.app = QApplication(sys.argv)
         cls.viewer = RDRCaseViewer()
 

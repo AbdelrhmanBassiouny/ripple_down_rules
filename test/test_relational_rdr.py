@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from unittest import TestCase
 
-from typing_extensions import List, Optional, Any
+from typing_extensions import List, Any
 
 from ripple_down_rules.datasets import Robot, Part, PhysicalObject
 from ripple_down_rules.datastructures.case import CaseAttribute
