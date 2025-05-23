@@ -23,7 +23,6 @@ import requests
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
-from rospy import logwarn
 from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
@@ -107,9 +106,12 @@ def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     return imports
 
 
-def extract_imports(file_path):
-    with open(file_path, "r") as f:
-        tree = ast.parse(f.read(), filename=file_path)
+def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = None) -> Dict[str, Any]:
+    if tree is None:
+        if file_path is None:
+            raise ValueError("Either file_path or tree must be provided")
+        with open(file_path, "r") as f:
+            tree = ast.parse(f.read(), filename=file_path)
 
     scope = {}
 
@@ -131,7 +133,7 @@ def extract_imports(file_path):
                     module = importlib.import_module(module_name)
                     scope[asname] = getattr(module, name)
                 except (ImportError, AttributeError) as e:
-                    logwarn(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
+                    logging.warning(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
 
     return scope
 

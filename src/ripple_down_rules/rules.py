@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from uuid import uuid4
 
 from anytree import NodeMixin
-from rospy import logwarn, logdebug
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple
 
@@ -164,7 +164,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         try:
             corner_case = Case.from_json(data["corner_case"])
         except Exception as e:
-            logdebug("Failed to load corner case from json, setting it to None.")
+            logging.debug("Failed to load corner case from json, setting it to None.")
             corner_case = None
         loaded_rule = cls(conditions=CallableExpression.from_json(data["conditions"]),
                           conclusion=CallableExpression.from_json(data["conclusion"]),

@@ -475,7 +475,10 @@ class RDRCaseViewer(QMainWindow):
     def _load(self):
         if not self.template_file_creator:
             return
-        self.code_lines = self.template_file_creator.load()
+        self.code_lines, updates = self.template_file_creator.load(self.template_file_creator.temp_file_path,
+                                                                    self.template_file_creator.func_name,
+                                                                    self.template_file_creator.print_func)
+        self.ipython_console.kernel.shell.user_ns.update(updates)
         if self.code_lines is not None:
             self.user_input = encapsulate_code_lines_into_a_function(
                 self.code_lines, self.template_file_creator.func_name,

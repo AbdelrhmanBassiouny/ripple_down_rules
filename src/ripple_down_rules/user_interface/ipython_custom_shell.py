@@ -30,7 +30,10 @@ class MyMagics(Magics):
 
     @line_magic
     def load(self, line):
-        self.all_code_lines = self.rule_editor.load()
+        self.all_code_lines, updates = self.rule_editor.load(self.rule_editor.temp_file_path,
+                                                             self.rule_editor.func_name,
+                                                             self.rule_editor.print_func)
+        self.shell.user_ns.update(updates)
 
     @line_magic
     def help(self, line):
