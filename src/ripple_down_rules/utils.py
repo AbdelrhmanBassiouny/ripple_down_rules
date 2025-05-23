@@ -14,6 +14,7 @@ from collections import UserDict
 from copy import deepcopy, copy
 from dataclasses import is_dataclass, fields
 from enum import Enum
+from textwrap import dedent
 from types import NoneType
 
 import matplotlib
@@ -168,7 +169,7 @@ def extract_function_source(file_path: str,
             if not include_signature:
                 func_lines = func_lines[1:]
             line_numbers.append((node.lineno, node.end_lineno))
-            functions_source[node.name] = "\n".join(func_lines) if join_lines else func_lines
+            functions_source[node.name] = dedent("\n".join(func_lines)) if join_lines else func_lines
             if len(functions_source) == len(function_names):
                 break
     if len(functions_source) != len(function_names):

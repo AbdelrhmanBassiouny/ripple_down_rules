@@ -12,9 +12,9 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Robot": "ripple_down_rules.datasets.Robot",
+                        "List": "typing.List",
                         "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
-                        "List": "typing.List"
+                        "Robot": "ripple_down_rules.datasets.Robot"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -31,9 +31,9 @@
                         "builtins.list"
                     ],
                     "scope": {
-                        "Robot": "ripple_down_rules.datasets.Robot",
+                        "List": "typing.List",
                         "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
-                        "List": "typing.List"
+                        "Robot": "ripple_down_rules.datasets.Robot"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",

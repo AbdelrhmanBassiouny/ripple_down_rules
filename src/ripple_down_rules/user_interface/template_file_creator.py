@@ -79,7 +79,7 @@ class TemplateFileCreator:
         self.case_query = case_query
         self.output_type = self.get_output_type()
         self.user_edit_line = 0
-        self.func_name: str = self.get_func_name()
+        self.func_name: str = self.get_func_name(self.prompt_for, self.case_query)
         self.func_doc: str = self.get_func_doc()
         self.function_signature: str = self.get_function_signature()
         self.editor: Optional[Editor] = detect_available_editor()
@@ -146,7 +146,7 @@ class TemplateFileCreator:
 
     def get_function_signature(self) -> str:
         if self.func_name is None:
-            self.func_name = self.get_func_name()
+            self.func_name = self.get_func_name(self.prompt_for, self.case_query)
         output_type_hint = self.get_output_type_hint()
         func_args = self.get_func_args()
         return f"def {self.func_name}({func_args}){output_type_hint}:"
@@ -238,15 +238,19 @@ class TemplateFileCreator:
         else:
             return f"Get possible value(s) for {self.case_query.name}"
 
-    def get_func_name(self) -> Optional[str]:
+    @staticmethod
+    def get_func_name(prompt_for, case_query) -> Optional[str]:
         func_name = ""
-        if self.prompt_for == PromptFor.Conditions:
-            func_name = f"{self.prompt_for.value.lower()}_for_"
-        case_name = self.case_query.name.replace(".", "_")
-        if self.case_query.is_function:
+        if prompt_for == PromptFor.Conditions:
+            func_name = f"{prompt_for.value.lower()}_for_"
+        case_name = case_query.name.replace(".", "_")
+        if case_query.is_function:
             # convert any CamelCase word into snake_case by adding _ before each capital letter
-            case_name = case_name.replace(f"_{self.case_query.attribute_name}", "")
+            case_name = case_name.replace(f"_{case_query.attribute_name}", "")
         func_name += case_name
+        attr_types = [t for t in case_query.core_attribute_type if t.__module__ != "builtins" and t is not None
+                      and t is not type(None)]
+        func_name += f"_of_type_{'_or_'.join(map(lambda c: c.__name__, attr_types))}"
         return str_to_snake_case(func_name)
 
     @cached_property
