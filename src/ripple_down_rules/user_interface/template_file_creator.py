@@ -263,8 +263,9 @@ class TemplateFileCreator:
             # convert any CamelCase word into snake_case by adding _ before each capital letter
             case_name = case_name.replace(f"_{case_query.attribute_name}", "")
         func_name += case_name
-        func_name += f"_of_type_{'_or_'.join(map(lambda c: c.__name__,
-                                                 TemplateFileCreator.get_core_attribute_types(case_query)))}"
+        attribute_types = TemplateFileCreator.get_core_attribute_types(case_query)
+        attribute_type_names = [t.__name__ for t in attribute_types]
+        func_name += f"_of_type_{'_or_'.join(attribute_type_names)}"
         return str_to_snake_case(func_name)
 
     @cached_property
