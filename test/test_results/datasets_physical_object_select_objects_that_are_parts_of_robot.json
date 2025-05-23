@@ -1,7 +1,7 @@
 {
     "_type": "ripple_down_rules.rdr.GeneralRDR",
     "start_rules": {
-        "null": {
+        "output_": {
             "_type": "ripple_down_rules.rdr.MultiClassRDR",
             "start_rule": {
                 "_type": "ripple_down_rules.rules.MultiClassTopRule",
@@ -12,9 +12,9 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "List": "typing.List",
                         "Robot": "ripple_down_rules.datasets.Robot",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
+                        "List": "typing.List"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -31,9 +31,9 @@
                         "builtins.list"
                     ],
                     "scope": {
-                        "List": "typing.List",
                         "Robot": "ripple_down_rules.datasets.Robot",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
+                        "List": "typing.List"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",

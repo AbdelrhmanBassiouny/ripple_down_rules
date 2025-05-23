@@ -1,7 +1,7 @@
 {
     "_type": "ripple_down_rules.rdr.GeneralRDR",
     "start_rules": {
-        "null": {
+        "output_": {
             "_type": "ripple_down_rules.rdr.SingleClassRDR",
             "start_rule": {
                 "_type": "ripple_down_rules.rules.SingleClassRule",

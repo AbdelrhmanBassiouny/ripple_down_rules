@@ -142,7 +142,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         if case_query is None:
             raise ValueError("The case query cannot be None.")
-        self.name = case_query.name if self.name is None else self.name
+        self.name = case_query.attribute_name if self.name is None else self.name
         if case_query.target is None:
             case_query_cp = copy(case_query)
             self.classify(case_query_cp.case, modify_case=True)
@@ -767,7 +767,7 @@ class GeneralRDR(RippleDownRules):
         :param rdr: The ripple down rules classifier to add.
         :param case_query: The case query to add the classifier for.
         """
-        name = case_query.name if case_query else rdr.name
+        name = case_query.attribute_name if case_query else rdr.name
         self.start_rules_dict[name] = rdr
 
     @property
@@ -811,8 +811,7 @@ class GeneralRDR(RippleDownRules):
         case_cp = copy_case(case) if not modify_original_case else case
         while True:
             new_conclusions = {}
-            for rdr_name, rdr in classifiers_dict.items():
-                attribute_name = rdr_name.split('.')[-1]
+            for attribute_name, rdr in classifiers_dict.items():
                 pred_atts = rdr.classify(case_cp)
                 if pred_atts is None:
                     continue
@@ -857,7 +856,7 @@ class GeneralRDR(RippleDownRules):
         self.classify(case_query_cp.case, modify_case=True)
         case_query_cp.update_target_value()
 
-        self.start_rules_dict[case_query_cp.name].fit_case(case_query_cp, expert, **kwargs)
+        self.start_rules_dict[case_query_cp.attribute_name].fit_case(case_query_cp, expert, **kwargs)
 
         return self.classify(case_query.case)
 
@@ -868,7 +867,7 @@ class GeneralRDR(RippleDownRules):
         :param case_query: The case query to update the starting rule with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         """
-        if case_query.name not in self.start_rules_dict:
+        if case_query.attribute_name not in self.start_rules_dict:
             new_rdr = self.initialize_new_rdr_for_attribute(case_query)
             self.add_rdr(new_rdr, case_query)
 
@@ -881,7 +880,7 @@ class GeneralRDR(RippleDownRules):
             else MultiClassRDR()
 
     def _to_json(self) -> Dict[str, Any]:
-        return {"start_rules": {rdr.name: rdr.to_json() for rdr in self.start_rules_dict.values()}
+        return {"start_rules": {name: rdr.to_json() for name, rdr in self.start_rules_dict.items()}
                 , "generated_python_file_name": self.generated_python_file_name,
                 "name": self.name}
 
@@ -955,7 +954,7 @@ class GeneralRDR(RippleDownRules):
         """
         :return: The default generated python file name.
         """
-        if self.start_rule is None or self.start_rule.corner_case is None:
+        if self.start_rule is None or self.start_rule.conclusion is None:
             return None
         if isinstance(self.start_rule.corner_case, Case):
             name = self.start_rule.corner_case._name
