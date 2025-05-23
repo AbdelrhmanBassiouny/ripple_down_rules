@@ -134,14 +134,14 @@ class UserPrompt:
         """
         while True:
             if user_input is None:
-                if QApplication.instance() is None:
+                if self.viewer is None:
                     shell = IPythonShell() if shell is None else shell
                     shell.run()
                     user_input = shell.user_input
                 else:
                     app = QApplication.instance()
                     if app is None:
-                        app = QApplication([])
+                        raise RuntimeError("QApplication instance is None. Please run the application first.")
                     self.viewer.show()
                     app.exec()
                     user_input = self.viewer.user_input
