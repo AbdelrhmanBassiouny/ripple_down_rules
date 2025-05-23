@@ -1,7 +1,7 @@
 {
     "_type": "ripple_down_rules.rdr.GeneralRDR",
     "start_rules": {
-        "output_": {
+        "null": {
             "_type": "ripple_down_rules.rdr.SingleClassRDR",
             "start_rule": {
                 "_type": "ripple_down_rules.rules.SingleClassRule",
@@ -50,7 +50,11 @@
                 "uid": "300233995736769722077967002350628871999",
                 "refinement": null,
                 "alternative": null
-            }
+            },
+            "generated_python_file_name": "physicalobject_is_a_robot_output__scrdr",
+            "name": null
         }
-    }
+    },
+    "generated_python_file_name": "physicalobject_is_a_robot_rdr",
+    "name": null
 }

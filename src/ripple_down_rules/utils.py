@@ -22,6 +22,7 @@ import requests
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
 from matplotlib import pyplot as plt
+from rospy import logwarn
 from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
@@ -129,7 +130,7 @@ def extract_imports(file_path):
                     module = importlib.import_module(module_name)
                     scope[asname] = getattr(module, name)
                 except (ImportError, AttributeError) as e:
-                    print(f"Could not import {name} from {module_name}: {e}")
+                    logwarn(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
 
     return scope
 

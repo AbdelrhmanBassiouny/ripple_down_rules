@@ -1,7 +1,7 @@
 {
     "_type": "ripple_down_rules.rdr.GeneralRDR",
     "start_rules": {
-        "output_": {
+        "null": {
             "_type": "ripple_down_rules.rdr.MultiClassRDR",
             "start_rule": {
                 "_type": "ripple_down_rules.rules.MultiClassTopRule",
@@ -12,8 +12,8 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Robot": "ripple_down_rules.datasets.Robot",
                         "List": "typing.List",
+                        "Robot": "ripple_down_rules.datasets.Robot",
                         "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
                     },
                     "conclusion": {
@@ -31,8 +31,8 @@
                         "builtins.list"
                     ],
                     "scope": {
-                        "Robot": "ripple_down_rules.datasets.Robot",
                         "List": "typing.List",
+                        "Robot": "ripple_down_rules.datasets.Robot",
                         "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
                     },
                     "conclusion": {
@@ -62,7 +62,11 @@
                 "uid": "305450865738894413987276833171960184124",
                 "refinement": null,
                 "alternative": null
-            }
+            },
+            "generated_python_file_name": "physicalobject_select_objects_that_are_parts_of_robot_output__mcrdr",
+            "name": null
         }
-    }
+    },
+    "generated_python_file_name": "physicalobject_select_objects_that_are_parts_of_robot_rdr",
+    "name": null
 }

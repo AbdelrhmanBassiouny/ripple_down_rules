@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from uuid import uuid4
 
 from anytree import NodeMixin
+from rospy import logwarn, logdebug
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple
 
@@ -151,7 +152,8 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         json_serialization = {"conditions": self.conditions.to_json(),
                               "conclusion": conclusion_to_json(self.conclusion),
                               "parent": self.parent.json_serialization if self.parent else None,
-                              "corner_case": SubclassJSONSerializer.to_json_static(self.corner_case),
+                              "corner_case": SubclassJSONSerializer.to_json_static(self.corner_case)
+                              if self.corner_case else None,
                               "conclusion_name": self.conclusion_name,
                               "weight": self.weight,
                               "uid": self.uid}
@@ -159,10 +161,15 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Rule:
+        try:
+            corner_case = Case.from_json(data["corner_case"])
+        except Exception as e:
+            logdebug("Failed to load corner case from json, setting it to None.")
+            corner_case = None
         loaded_rule = cls(conditions=CallableExpression.from_json(data["conditions"]),
                           conclusion=CallableExpression.from_json(data["conclusion"]),
                           parent=cls.from_json(data["parent"]),
-                          corner_case=Case.from_json(data["corner_case"]),
+                          corner_case=corner_case,
                           conclusion_name=data["conclusion_name"],
                           weight=data["weight"],
                           uid=data["uid"])

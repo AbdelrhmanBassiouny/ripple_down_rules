@@ -22,7 +22,7 @@ from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .user_interface.gui import RDRCaseViewer
 from .utils import draw_tree, make_set, copy_case, \
     SubclassJSONSerializer, make_list, get_type_from_string, \
-    is_conflicting, update_case, get_imports_from_scope, extract_function_source
+    is_conflicting, update_case, get_imports_from_scope, extract_function_source, extract_imports
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -40,6 +40,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     _generated_python_file_name: Optional[str] = None
     """
     The name of the generated python file.
+    """
+    name: Optional[str] = None
+    """
+    The name of the classifier.
     """
 
     def __init__(self, start_rule: Optional[Rule] = None, viewer: Optional[RDRCaseViewer] = None):
@@ -138,6 +142,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         if case_query is None:
             raise ValueError("The case query cannot be None.")
+        self.name = case_query.name if self.name is None else self.name
         if case_query.target is None:
             case_query_cp = copy(case_query)
             self.classify(case_query_cp.case, modify_case=True)
@@ -237,11 +242,15 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         all_func_names = condition_func_names + conclusion_func_names
         filepath = f"{package_dir}/{self.generated_python_defs_file_name}.py"
         functions_source = extract_function_source(filepath, all_func_names, include_signature=False)
+        # get the scope from the imports in the file
+        scope = extract_imports(filepath)
         for rule in [self.start_rule] + list(self.start_rule.descendants):
             if rule.conditions is not None:
                 rule.conditions.user_input = functions_source[f"conditions_{rule.uid}"]
+                rule.conditions.scope = scope
             if rule.conclusion is not None:
                 rule.conclusion.user_input = functions_source[f"conclusion_{rule.uid}"]
+                rule.conclusion.scope = scope
 
     @abstractmethod
     def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = "",
@@ -275,6 +284,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             imports += f"from .{self.generated_python_defs_file_name} import *\n"
             imports += f"from ripple_down_rules.rdr import {self.__class__.__name__}\n"
             f.write(imports + "\n\n")
+            f.write(f"attribute_name = '{self.attribute_name}'\n")
             f.write(f"conclusion_type = ({', '.join([ct.__name__ for ct in self.conclusion_type])},)\n")
             f.write(f"type_ = {self.__class__.__name__}\n")
             f.write(f"\n\n{func_def}")
@@ -384,6 +394,31 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         """
         return self.start_rule.conclusion_name
 
+    def _to_json(self) -> Dict[str, Any]:
+        return {"start_rule": self.start_rule.to_json(),  "generated_python_file_name": self.generated_python_file_name,
+                "name": self.name}
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> Self:
+        """
+        Create an instance of the class from a json
+        """
+        start_rule = cls.start_rule_type().from_json(data["start_rule"])
+        new_rdr = cls(start_rule)
+        if "generated_python_file_name" in data:
+            new_rdr.generated_python_file_name = data["generated_python_file_name"]
+        if "name" in data:
+            new_rdr.name = data["name"]
+        return new_rdr
+
+    @staticmethod
+    @abstractmethod
+    def start_rule_type() -> Type[Rule]:
+        """
+        :return: The type of the starting rule of the RDR classifier.
+        """
+        pass
+
 
 class SingleClassRDR(RDRWithCodeWriter):
 
@@ -478,16 +513,12 @@ class SingleClassRDR(RDRWithCodeWriter):
             return (type(self.default_conclusion),)
         return super().conclusion_type
 
-    def _to_json(self) -> Dict[str, Any]:
-        return {"start_rule": self.start_rule.to_json()}
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
+    @staticmethod
+    def start_rule_type() -> Type[Rule]:
         """
-        Create an instance of the class from a json
+        :return: The type of the starting rule of the RDR classifier.
         """
-        start_rule = SingleClassRule.from_json(data["start_rule"])
-        return cls(start_rule)
+        return SingleClassRule
 
 
 class MultiClassRDR(RDRWithCodeWriter):
@@ -693,16 +724,12 @@ class MultiClassRDR(RDRWithCodeWriter):
         """
         self.start_rule.alternative = MultiClassTopRule(conditions, conclusion, corner_case=corner_case)
 
-    def _to_json(self) -> Dict[str, Any]:
-        return {"start_rule": self.start_rule.to_json()}
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> Self:
+    @staticmethod
+    def start_rule_type() -> Type[Rule]:
         """
-        Create an instance of the class from a json
+        :return: The type of the starting rule of the RDR classifier.
         """
-        start_rule = SingleClassRule.from_json(data["start_rule"])
-        return cls(start_rule)
+        return MultiClassTopRule
 
 
 class GeneralRDR(RippleDownRules):
@@ -733,15 +760,15 @@ class GeneralRDR(RippleDownRules):
         super(GeneralRDR, self).__init__(**kwargs)
         self.all_figs: List[plt.Figure] = [sr.fig for sr in self.start_rules_dict.values()]
 
-    def add_rdr(self, rdr: Union[SingleClassRDR, MultiClassRDR], attribute_name: Optional[str] = None):
+    def add_rdr(self, rdr: Union[SingleClassRDR, MultiClassRDR], case_query: Optional[CaseQuery] = None):
         """
         Add a ripple down rules classifier to the map of classifiers.
 
         :param rdr: The ripple down rules classifier to add.
-        :param attribute_name: The name of the attribute that the classifier is classifying.
+        :param case_query: The case query to add the classifier for.
         """
-        attribute_name = attribute_name if attribute_name else rdr.attribute_name
-        self.start_rules_dict[attribute_name] = rdr
+        name = case_query.name if case_query else rdr.name
+        self.start_rules_dict[name] = rdr
 
     @property
     def start_rule(self) -> Optional[Union[SingleClassRule, MultiClassTopRule]]:
@@ -784,7 +811,8 @@ class GeneralRDR(RippleDownRules):
         case_cp = copy_case(case) if not modify_original_case else case
         while True:
             new_conclusions = {}
-            for attribute_name, rdr in classifiers_dict.items():
+            for rdr_name, rdr in classifiers_dict.items():
+                attribute_name = rdr_name.split('.')[-1]
                 pred_atts = rdr.classify(case_cp)
                 if pred_atts is None:
                     continue
@@ -825,12 +853,11 @@ class GeneralRDR(RippleDownRules):
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :return: The categories that the case belongs to.
         """
-
         case_query_cp = copy(case_query)
         self.classify(case_query_cp.case, modify_case=True)
         case_query_cp.update_target_value()
 
-        self.start_rules_dict[case_query_cp.attribute_name].fit_case(case_query_cp, expert, **kwargs)
+        self.start_rules_dict[case_query_cp.name].fit_case(case_query_cp, expert, **kwargs)
 
         return self.classify(case_query.case)
 
@@ -841,9 +868,9 @@ class GeneralRDR(RippleDownRules):
         :param case_query: The case query to update the starting rule with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         """
-        if case_query.attribute_name not in self.start_rules_dict:
+        if case_query.name not in self.start_rules_dict:
             new_rdr = self.initialize_new_rdr_for_attribute(case_query)
-            self.add_rdr(new_rdr, case_query.attribute_name)
+            self.add_rdr(new_rdr, case_query)
 
     @staticmethod
     def initialize_new_rdr_for_attribute(case_query: CaseQuery):
@@ -854,7 +881,9 @@ class GeneralRDR(RippleDownRules):
             else MultiClassRDR()
 
     def _to_json(self) -> Dict[str, Any]:
-        return {"start_rules": {t: rdr.to_json() for t, rdr in self.start_rules_dict.items()}}
+        return {"start_rules": {rdr.name: rdr.to_json() for rdr in self.start_rules_dict.values()}
+                , "generated_python_file_name": self.generated_python_file_name,
+                "name": self.name}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> GeneralRDR:
@@ -864,7 +893,12 @@ class GeneralRDR(RippleDownRules):
         start_rules_dict = {}
         for k, v in data["start_rules"].items():
             start_rules_dict[k] = get_type_from_string(v['_type']).from_json(v)
-        return cls(start_rules_dict)
+        new_rdr = cls(start_rules_dict)
+        if "generated_python_file_name" in data:
+            new_rdr.generated_python_file_name = data["generated_python_file_name"]
+        if "name" in data:
+            new_rdr.name = data["name"]
+        return new_rdr
 
     def update_from_python_file(self, package_dir: str) -> None:
         """

@@ -103,7 +103,7 @@ class Human(Expert):
     def ask_for_conditions(self, case_query: CaseQuery,
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
-        if not self.use_loaded_answers:
+        if not self.use_loaded_answers and self.user_prompt.viewer is None:
             show_current_and_corner_cases(case_query.case, {case_query.attribute_name: case_query.target_value},
                                           last_evaluated_rule=last_evaluated_rule)
         return self._get_conditions(case_query)
@@ -148,7 +148,8 @@ class Human(Expert):
                                                 scope=case_query.scope,
                                                  mutually_exclusive=case_query.mutually_exclusive)
         else:
-            show_current_and_corner_cases(case_query.case)
+            if self.user_prompt.viewer is None:
+                show_current_and_corner_cases(case_query.case)
             expert_input, expression = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conclusion)
             self.all_expert_answers.append(expert_input)
         case_query.target = expression
