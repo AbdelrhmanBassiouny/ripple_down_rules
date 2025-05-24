@@ -22,12 +22,18 @@ include = ["ripple_down_rules*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "ripple_down_rules.__version__"}
-dependencies = {file = "requirements.txt"}
-
-[project.optional-dependencies]
-gui = [
-    "pyqt6",
-    "qtconsole",
+dependencies = [
+    "anytree>=2.8.0",
+    "ordered_set>=4",
+    "pygraphviz>=1.7",
+    "typing-extensions>=4.12.2",
+    "graphviz",
+    "tabulate",
+    "ipython",
+    "requests",
+    "colorama",
+    "pygments",
+    "sqlalchemy",
 ]
 viz = [
     "matplotlib",

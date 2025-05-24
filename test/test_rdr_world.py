@@ -112,7 +112,7 @@ class TestRDRWorld(TestCase):
                 view = Drawer(handle, container, world=world)
                 all_possible_drawers.append(view)
 
-        print(all_possible_drawers)
+        # print(all_possible_drawers)
         cls.drawer_case_queries = [CaseQuery(possible_drawer, "correct", (bool,), True, default_value=False)
                                    for possible_drawer in all_possible_drawers]
         cls.app = QApplication(sys.argv)
@@ -152,7 +152,7 @@ class TestRDRWorld(TestCase):
             expert.save_answers(filename)
 
         found_views = rdr.classify(self.world)
-        print(found_views)
+        # print(found_views)
         for view in views:
             self.assertTrue(len([v for v in found_views["views"] if isinstance(v, view)]) > 0)
 

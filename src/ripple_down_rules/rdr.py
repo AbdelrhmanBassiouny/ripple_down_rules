@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copyreg
 import importlib
-import logging
+from . import logger
 import sys
 from abc import ABC, abstractmethod
 from copy import copy
@@ -13,7 +13,7 @@ try:
     from matplotlib import pyplot as plt
     Figure = plt.Figure
 except ImportError as e:
-    logging.debug(f"{e}: matplotlib is not installed")
+    logger.debug(f"{e}: matplotlib is not installed")
     matplotlib = None
     Figure = None
     plt = None
@@ -122,13 +122,13 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             all_predictions = [1 if is_matching(self.classify, case_query) else 0 for case_query in case_queries
                                if case_query.target is not None]
             all_pred = sum(all_predictions)
-            print(f"Accuracy: {all_pred}/{len(targets)}")
+            logger.info(f"Accuracy: {all_pred}/{len(targets)}")
             all_predicted = targets and all_pred == len(targets)
             num_iter_reached = n_iter and i >= n_iter
             stop_iterating = all_predicted or num_iter_reached
             if stop_iterating:
                 break
-        print(f"Finished training in {i} iterations")
+        logger.info(f"Finished training in {i} iterations")
         if animate_tree:
             plt.ioff()
             plt.show()

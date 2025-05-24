@@ -1098,24 +1098,29 @@ def get_origin_and_args_from_type_hint(type_hint: Type) -> Tuple[Optional[Type],
         return origin, args
 
 
-def table_rows_as_str(row_dict: Dict[str, Any], columns_per_row: int = 9):
+def table_rows_as_str(row_dicts: List[Dict[str, Any]], columns_per_row: int = 20):
     """
     Print a table row.
 
-    :param row_dict: The row to print.
+    :param row_dicts: The rows to print.
     :param columns_per_row: The maximum number of columns per row.
     """
-    all_items = list(row_dict.items())
+    all_row_dicts_items = [list(row_dict.items()) for row_dict in row_dicts]
     # make items a list of n rows such that each row has a max size of 4
-    all_items = [all_items[i:i + columns_per_row] for i in range(0, len(all_items), columns_per_row)]
+    all_items = [all_items[i:i + columns_per_row] for all_items in all_row_dicts_items
+                 for i in range(0, len(all_items), columns_per_row)]
     keys = [list(map(lambda i: i[0], row)) for row in all_items]
     values = [list(map(lambda i: i[1], row)) for row in all_items]
+    zipped_keys = list(zip(*keys))
+    zipped_values = list(zip(*values))
+    keys_values = [list(zip(zipped_keys[i], zipped_values[i])) for i in range(len(zipped_keys))]
+    keys_values = [list(r[0]) + list(r[1]) if len(r) > 1 else r[0] for r in keys_values]
     all_table_rows = []
-    for row_keys, row_values in zip(keys, values):
-        row_values = [str(v) if v is not None else "" for v in row_values]
-        row_values = [v.lower() if v in ["True", "False"] else v for v in row_values]
-        table = tabulate([row_values], headers=row_keys, tablefmt='plain', maxcolwidths=[20] * len(row_keys))
-        all_table_rows.append(table)
+    row_values = [list(map(lambda v: str(v) if v is not None else "", row)) for row in keys_values]
+    row_values = [list(map(lambda v: v[:150] + '...' if len(v) > 150 else v, row)) for row in row_values]
+    row_values = [list(map(lambda v: v.lower() if v in ["True", "False"] else v, row)) for row in row_values]
+    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=[150] * 2)
+    all_table_rows.append(table)
     return "\n".join(all_table_rows)
 
 

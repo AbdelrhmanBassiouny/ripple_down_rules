@@ -131,9 +131,9 @@ class TestAlchemyRDR(TestCase):
                 case_queries.append(CaseQuery(case, attr, (Species,) if attr == 'species' else (HabitatTable,),
                                               True if attr == 'species' else False, _target=target))
         grdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-        for rule in grdr.start_rules:
-            render_tree(rule, use_dot_exporter=True,
-                        filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
+        # for rule in grdr.start_rules:
+        #     render_tree(rule, use_dot_exporter=True,
+        #                 filename=self.test_results_dir + f"/grdr_{type(rule.conclusion).__name__}")
 
         for case, case_targets in zip(self.all_cases[:n], habitat_targets):
             cat = grdr.classify(case)
