@@ -8,14 +8,13 @@ from functools import cached_property
 from textwrap import indent, dedent
 
 from colorama import Fore, Style
-from ipykernel.inprocess.ipkernel import InProcessInteractiveShell
-from typing_extensions import Optional, Type, List, Callable
+from typing_extensions import Optional, Type, List, Callable, Tuple, Dict
 
 from ..datastructures.case import Case
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import Editor, PromptFor
 from ..utils import str_to_snake_case, get_imports_from_scope, make_list, typing_hint_to_str, \
-    get_imports_from_types, extract_function_or_class_source
+    get_imports_from_types, extract_function_or_class_source, extract_imports
 
 
 def detect_available_editor() -> Optional[Editor]:
@@ -49,6 +48,9 @@ def start_code_server(workspace):
                             stderr=subprocess.PIPE, text=True)
 
 
+FunctionData = Tuple[Optional[List[str]], Optional[Dict[str, Callable]]]
+
+
 class TemplateFileCreator:
     """
     A class to create a rule template file for a given case and prompt for the user to edit it.
@@ -70,16 +72,15 @@ class TemplateFileCreator:
     The list of all code lines in the function in the temporary file.
     """
 
-    def __init__(self, shell: InProcessInteractiveShell, case_query: CaseQuery, prompt_for: PromptFor,
-                 code_to_modify: Optional[str] = None, print_func: Optional[Callable[[str], None]] = None):
-        self.print_func = print_func if print_func else print
-        self.shell = shell
+    def __init__(self, case_query: CaseQuery, prompt_for: PromptFor,
+                 code_to_modify: Optional[str] = None, print_func: Callable[[str], None] = print):
+        self.print_func = print_func
         self.code_to_modify = code_to_modify
         self.prompt_for = prompt_for
         self.case_query = case_query
         self.output_type = self.get_output_type()
         self.user_edit_line = 0
-        self.func_name: str = self.get_func_name()
+        self.func_name: str = self.get_func_name(self.prompt_for, self.case_query)
         self.func_doc: str = self.get_func_doc()
         self.function_signature: str = self.get_function_signature()
         self.editor: Optional[Editor] = detect_available_editor()
@@ -146,7 +147,7 @@ class TemplateFileCreator:
 
     def get_function_signature(self) -> str:
         if self.func_name is None:
-            self.func_name = self.get_func_name()
+            self.func_name = self.get_func_name(self.prompt_for, self.case_query)
         output_type_hint = self.get_output_type_hint()
         func_args = self.get_func_args()
         return f"def {self.func_name}({func_args}){output_type_hint}:"
@@ -228,25 +229,41 @@ class TemplateFileCreator:
         imports = set(imports)
         return '\n'.join(imports)
 
+    @staticmethod
+    def get_core_attribute_types(case_query: CaseQuery) -> List[Type]:
+        """
+        Get the core attribute types of the case query.
+
+        :return: A list of core attribute types.
+        """
+        attr_types = [t for t in case_query.core_attribute_type if t.__module__ != "builtins" and t is not None
+                      and t is not type(None)]
+        return attr_types
+
     def get_func_doc(self) -> Optional[str]:
         """
         :return: A string containing the function docstring.
         """
+        type_data = f" of type {' or '.join(map(lambda c: c.__name__, self.get_core_attribute_types(self.case_query)))}"
         if self.prompt_for == PromptFor.Conditions:
             return (f"Get conditions on whether it's possible to conclude a value"
-                    f" for {self.case_query.name}")
+                    f" for {self.case_query.name} {type_data}.")
         else:
-            return f"Get possible value(s) for {self.case_query.name}"
+            return f"Get possible value(s) for {self.case_query.name} {type_data}."
 
-    def get_func_name(self) -> Optional[str]:
+    @staticmethod
+    def get_func_name(prompt_for, case_query) -> Optional[str]:
         func_name = ""
-        if self.prompt_for == PromptFor.Conditions:
-            func_name = f"{self.prompt_for.value.lower()}_for_"
-        case_name = self.case_query.name.replace(".", "_")
-        if self.case_query.is_function:
+        if prompt_for == PromptFor.Conditions:
+            func_name = f"{prompt_for.value.lower()}_for_"
+        case_name = case_query.name.replace(".", "_")
+        if case_query.is_function:
             # convert any CamelCase word into snake_case by adding _ before each capital letter
-            case_name = case_name.replace(f"_{self.case_query.attribute_name}", "")
+            case_name = case_name.replace(f"_{case_query.attribute_name}", "")
         func_name += case_name
+        attribute_types = TemplateFileCreator.get_core_attribute_types(case_query)
+        attribute_type_names = [t.__name__ for t in attribute_types]
+        func_name += f"_of_type_{'_or_'.join(attribute_type_names)}"
         return str_to_snake_case(func_name)
 
     @cached_property
@@ -259,33 +276,43 @@ class TemplateFileCreator:
         case = self.case_query.scope['case']
         return case._obj_type if isinstance(case, Case) else type(case)
 
-    def load(self) -> Optional[List[str]]:
-        if not self.temp_file_path:
-            self.print_func(f"{Fore.RED}ERROR:: No file to load. Run %edit first.{Style.RESET_ALL}")
-            return None
+    @staticmethod
+    def load(file_path: str, func_name: str, print_func: Callable = print) -> FunctionData:
+        """
+        Load the function from the given file path.
 
-        with open(self.temp_file_path, 'r') as f:
+        :param file_path: The path to the file to load.
+        :param func_name: The name of the function to load.
+        :param print_func: The function to use for printing messages.
+        :return: A tuple containing the function source code and the function object as a dictionary
+        with the function name as the key and the function object as the value.
+        """
+        if not file_path:
+            print_func(f"{Fore.RED}ERROR:: No file to load. Run %edit first.{Style.RESET_ALL}")
+            return None, None
+
+        with open(file_path, 'r') as f:
             source = f.read()
 
         tree = ast.parse(source)
         updates = {}
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef) and node.name == self.func_name:
+            if isinstance(node, ast.FunctionDef) and node.name == func_name:
                 exec_globals = {}
-                exec(source, self.case_query.scope, exec_globals)
-                user_function = exec_globals[self.func_name]
-                updates[self.func_name] = user_function
-                self.print_func(f"{Fore.BLUE}Loaded `{self.func_name}` function into user namespace.{Style.RESET_ALL}")
+                scope = extract_imports(tree=tree)
+                exec(source, scope, exec_globals)
+                user_function = exec_globals[func_name]
+                updates[func_name] = user_function
+                print_func(f"{Fore.BLUE}Loaded `{func_name}` function into user namespace.{Style.RESET_ALL}")
                 break
         if updates:
-            self.shell.user_ns.update(updates)
-            self.all_code_lines = extract_function_or_class_source(self.temp_file_path,
-                                                                   [self.func_name],
-                                                                   join_lines=False)[self.func_name]
-            return self.all_code_lines
+            all_code_lines = extract_function_or_class_source(file_path,
+                                                          [func_name],
+                                                          join_lines=False)[func_name]
+            return all_code_lines, updates
         else:
-            self.print_func(f"{Fore.RED}ERROR:: Function `{self.func_name}` not found.{Style.RESET_ALL}")
-            return None
+            print_func(f"{Fore.RED}ERROR:: Function `{func_name}` not found.{Style.RESET_ALL}")
+            return None, None
 
     def __del__(self):
         if hasattr(self, 'process') and self.process is not None and self.process.poll() is None:

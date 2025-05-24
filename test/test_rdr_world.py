@@ -74,7 +74,7 @@ class TestRDRWorld(TestCase):
             expert.save_answers(filename)
 
         found_views = rdr.classify(self.world)
-        print(found_views)
+        # print(found_views)
         for view in views:
             self.assertTrue(len([v for v in found_views["views"] if isinstance(v, view)]) > 0)
 

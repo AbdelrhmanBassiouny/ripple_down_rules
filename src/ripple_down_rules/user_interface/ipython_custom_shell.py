@@ -8,9 +8,8 @@ from traitlets.config import Config
 
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import PromptFor
-from .gui import encapsulate_code_lines_into_a_function
 from .template_file_creator import TemplateFileCreator
-from ..utils import contains_return_statement, extract_dependencies
+from ..utils import contains_return_statement, extract_dependencies, encapsulate_code_lines_into_a_function
 
 
 @magics_class
@@ -21,7 +20,7 @@ class MyMagics(Magics):
                  prompt_for: Optional[PromptFor] = None,
                  case_query: Optional[CaseQuery] = None):
         super().__init__(shell)
-        self.rule_editor = TemplateFileCreator(shell, case_query, prompt_for=prompt_for, code_to_modify=code_to_modify)
+        self.rule_editor = TemplateFileCreator(case_query, prompt_for=prompt_for, code_to_modify=code_to_modify)
         self.all_code_lines: Optional[List[str]] = None
 
     @line_magic
@@ -30,7 +29,10 @@ class MyMagics(Magics):
 
     @line_magic
     def load(self, line):
-        self.all_code_lines = self.rule_editor.load()
+        self.all_code_lines, updates = self.rule_editor.load(self.rule_editor.temp_file_path,
+                                                             self.rule_editor.func_name,
+                                                             self.rule_editor.print_func)
+        self.shell.user_ns.update(updates)
 
     @line_magic
     def help(self, line):

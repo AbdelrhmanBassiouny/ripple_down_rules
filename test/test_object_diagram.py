@@ -26,18 +26,18 @@ class ObjectDiagramTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.cases, cls.targets = load_zoo_dataset(cache_file="../test_results/zoo")
+        cls.cases, cls.targets = load_zoo_dataset(cache_file=f"{os.path.dirname(__file__)}/test_results/zoo")
         cls.cq = CaseQuery(cls.cases[0], "species", (Species,), True, _target=cls.targets[0])
         cls.person = Person("Ahmed", Address("Cairo"))
 
     def test_generate_person_diagram(self):
         # Generate object diagram for the Person instance
         graph = generate_object_graph(self.person)
-        graph.render('../test_results/person_object_diagram', view=False)
-        self.assertTrue(os.path.isfile('../test_results/person_object_diagram.svg'))
+        graph.render(f'{os.path.dirname(__file__)}/test_results/person_object_diagram', view=False)
+        self.assertTrue(os.path.isfile(f'{os.path.dirname(__file__)}/test_results/person_object_diagram.svg'))
 
     def test_generate_case_query_diagram(self):
         # Generate object diagram for the CaseQuery instance
         graph = generate_object_graph(self.cq)
-        graph.render('../test_results/case_query_object_diagram', view=False)
-        self.assertTrue(os.path.isfile('../test_results/case_query_object_diagram.svg'))
+        graph.render(f'{os.path.dirname(__file__)}/test_results/case_query_object_diagram', view=False)
+        self.assertTrue(os.path.isfile(f'{os.path.dirname(__file__)}/test_results/case_query_object_diagram.svg'))

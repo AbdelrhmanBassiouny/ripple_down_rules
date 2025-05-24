@@ -62,7 +62,13 @@
                 "uid": "305450865738894413987276833171960184124",
                 "refinement": null,
                 "alternative": null
-            }
+            },
+            "generated_python_file_name": "physicalobject_select_objects_that_are_parts_of_robot_output__mcrdr",
+            "name": "select_objects_that_are_parts_of_robot",
+            "case_type": "builtins.dict"
         }
-    }
+    },
+    "generated_python_file_name": "physicalobject_select_objects_that_are_parts_of_robot_rdr",
+    "name": "select_objects_that_are_parts_of_robot",
+    "case_type": "builtins.dict"
 }

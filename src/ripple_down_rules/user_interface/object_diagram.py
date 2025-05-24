@@ -1,4 +1,10 @@
-import graphviz
+import logging
+
+try:
+    import graphviz
+except ImportError:
+    graphviz = None
+    logging.debug("Graphviz is not installed")
 
 
 def is_simple(obj):

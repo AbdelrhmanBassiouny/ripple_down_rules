@@ -1,23 +1,29 @@
 from  __future__ import annotations
 
 import inspect
-from copy import copy
+import logging
 from types import MethodType
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QPainter, QPalette
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QScrollArea,
-    QSizePolicy, QToolButton, QHBoxLayout, QPushButton, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-)
-from qtconsole.inprocess import QtInProcessKernelManager
-from qtconsole.rich_jupyter_widget import RichJupyterWidget
+try:
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QPixmap, QPainter, QPalette
+    from PyQt6.QtWidgets import (
+        QWidget, QVBoxLayout, QLabel, QScrollArea,
+        QSizePolicy, QToolButton, QHBoxLayout, QPushButton, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
+    )
+    from qtconsole.inprocess import QtInProcessKernelManager
+    from qtconsole.rich_jupyter_widget import RichJupyterWidget
+except ImportError as e:
+    logging.debug("RDRCaseViewer is not available. GUI features will not work. "
+                  "Make sure you have PyQt6 installed if you want to use the GUI features.")
+    raise ImportError("PyQt6 is required for the GUI features. Please install it using 'pip install PyQt6'") from e
+
 from typing_extensions import Optional, Any, List, Dict, Callable
 
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import PromptFor
 from .template_file_creator import TemplateFileCreator
-from ..utils import is_iterable, contains_return_statement, encapsulate_user_input
+from ..utils import is_iterable, contains_return_statement, encapsulate_code_lines_into_a_function
 from .object_diagram import generate_object_graph
 
 
@@ -467,15 +473,17 @@ class RDRCaseViewer(QMainWindow):
         self.close()
 
     def _edit(self):
-        self.template_file_creator = TemplateFileCreator(self.ipython_console.kernel.shell,
-                                                         self.case_query, self.prompt_for, self.code_to_modify,
+        self.template_file_creator = TemplateFileCreator(self.case_query, self.prompt_for, self.code_to_modify,
                                                          self.print)
         self.template_file_creator.edit()
 
     def _load(self):
         if not self.template_file_creator:
             return
-        self.code_lines = self.template_file_creator.load()
+        self.code_lines, updates = self.template_file_creator.load(self.template_file_creator.temp_file_path,
+                                                                    self.template_file_creator.func_name,
+                                                                    self.template_file_creator.print_func)
+        self.ipython_console.kernel.shell.user_ns.update(updates)
         if self.code_lines is not None:
             self.user_input = encapsulate_code_lines_into_a_function(
                 self.code_lines, self.template_file_creator.func_name,
@@ -556,28 +564,6 @@ class RDRCaseViewer(QMainWindow):
         item_label.setText(text)
         item_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(item_label)
-
-
-def encapsulate_code_lines_into_a_function(code_lines: List[str], function_name: str, function_signature: str,
-                                           func_doc: str, case_query: CaseQuery) -> str:
-    """
-    Encapsulate the given code lines into a function with the specified name, signature, and docstring.
-
-    :param code_lines: The lines of code to include in the user input.
-    :param function_name: The name of the function to include in the user input.
-    :param function_signature: The function signature to include in the user input.
-    :param func_doc: The function docstring to include in the user input.
-    :param case_query: The case query object.
-    """
-    code = '\n'.join(code_lines)
-    code = encapsulate_user_input(code, function_signature, func_doc)
-    if case_query.is_function:
-        args = "**case"
-    else:
-        args = "case"
-    if f"return {function_name}({args})" not in code:
-        code = code.strip() + f"\nreturn {function_name}({args})"
-    return code
 
 
 class IPythonConsole(RichJupyterWidget):

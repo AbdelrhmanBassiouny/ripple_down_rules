@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from abc import ABC, abstractmethod
 
 from typing_extensions import Optional, TYPE_CHECKING, List
@@ -9,7 +10,10 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.enums import PromptFor
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.case import show_current_and_corner_cases
-from .user_interface.gui import RDRCaseViewer
+try:
+    from .user_interface.gui import RDRCaseViewer
+except ImportError as e:
+    RDRCaseViewer = None
 from .user_interface.prompt import UserPrompt
 
 if TYPE_CHECKING:
@@ -103,7 +107,7 @@ class Human(Expert):
     def ask_for_conditions(self, case_query: CaseQuery,
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
-        if not self.use_loaded_answers:
+        if not self.use_loaded_answers and self.user_prompt.viewer is None:
             show_current_and_corner_cases(case_query.case, {case_query.attribute_name: case_query.target_value},
                                           last_evaluated_rule=last_evaluated_rule)
         return self._get_conditions(case_query)
@@ -148,7 +152,8 @@ class Human(Expert):
                                                 scope=case_query.scope,
                                                  mutually_exclusive=case_query.mutually_exclusive)
         else:
-            show_current_and_corner_cases(case_query.case)
+            if self.user_prompt.viewer is None:
+                show_current_and_corner_cases(case_query.case)
             expert_input, expression = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conclusion)
             self.all_expert_answers.append(expert_input)
         case_query.target = expression

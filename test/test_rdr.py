@@ -2,7 +2,7 @@ import os
 import sys
 from unittest import TestCase
 
-from typing_extensions import List
+from typing_extensions import List, Optional
 
 from ripple_down_rules.datasets import Habitat, Species
 from ripple_down_rules.datasets import load_zoo_dataset
@@ -10,12 +10,16 @@ from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import MCRDRMode
 from ripple_down_rules.experts import Human
-from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR, RDRWithCodeWriter
 from ripple_down_rules.utils import render_tree, make_set, extract_function_or_class_source
 from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
 
-from PyQt6.QtWidgets import QApplication
+try:
+    from PyQt6.QtWidgets import QApplication
+    from ripple_down_rules.user_interface.gui import RDRCaseViewer
+except ImportError as e:
+    RDRCaseViewer = None
+    QApplication = None
 
 
 class TestRDR(TestCase):
@@ -26,8 +30,9 @@ class TestRDR(TestCase):
     expert_answers_dir: str = "./test_expert_answers"
     generated_rdrs_dir: str = "./test_generated_rdrs"
     cache_file: str = f"{test_results_dir}/zoo_dataset.pkl"
-    app: QApplication
-    viewer: RDRCaseViewer
+    app: Optional[QApplication] = None
+    viewer: Optional[RDRCaseViewer] = None
+    use_gui: bool = False
 
     @classmethod
     def setUpClass(cls):
@@ -38,8 +43,9 @@ class TestRDR(TestCase):
         for test_dir in [cls.test_results_dir, cls.expert_answers_dir, cls.generated_rdrs_dir]:
             if not os.path.exists(test_dir):
                 os.makedirs(test_dir)
-        cls.app = QApplication(sys.argv)
-        cls.viewer = RDRCaseViewer()
+        if RDRCaseViewer is not None and QApplication is not None and cls.use_gui:
+            cls.app = QApplication(sys.argv)
+            cls.viewer = RDRCaseViewer()
 
     def test_classify_scrdr(self):
         use_loaded_answers = True
@@ -63,8 +69,8 @@ class TestRDR(TestCase):
                                  expert_answers_dir=self.expert_answers_dir,
                                  expert_answers_file="scrdr_expert_answers_fit",
                                  load_answers=True)
-        render_tree(scrdr.start_rule, use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/scrdr")
+        # render_tree(scrdr.start_rule, use_dot_exporter=True,
+        #             filename=self.test_results_dir + f"/scrdr")
 
     def test_fit_scrdr_with_no_targets(self):
         # Test with no targets
@@ -73,8 +79,8 @@ class TestRDR(TestCase):
                                             expert_answers_file="scrdr_expert_answers_fit_no_targets",
                                             load_answers=True,
                                             save_answers=False)
-        render_tree(scrdr.start_rule, use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/scrdr_no_targets")
+        # render_tree(scrdr.start_rule, use_dot_exporter=True,
+        #             filename=self.test_results_dir + f"/scrdr_no_targets")
 
     def test_write_scrdr_no_targets_to_python_file(self):
         # Test with no targets
@@ -95,8 +101,8 @@ class TestRDR(TestCase):
                               expert_answers_file="mcrdr_expert_answers_fit_no_targets",
                               load_answers=True,
                               save_answers=False)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/mcrdr_no_targets")
+        # render_tree(mcrdr.start_rule, use_dot_exporter=True,
+        #             filename=self.test_results_dir + f"/mcrdr_no_targets")
         for case, target in zip(self.all_cases[:20], self.targets[:20]):
             cat = mcrdr.classify(case)
             self.assertEqual(make_set(cat), make_set(target))
@@ -152,8 +158,8 @@ class TestRDR(TestCase):
                                  expert_answers_file="scrdr_multi_line_expert_answers_fit",
                                  load_answers=True,
                                  save_answers=False)
-        render_tree(scrdr.start_rule, use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/scrdr_multi_line")
+        # render_tree(scrdr.start_rule, use_dot_exporter=True,
+        #             filename=self.test_results_dir + f"/scrdr_multi_line")
 
     def test_write_multi_line_scrdr_to_python_file(self):
         n = 20
@@ -266,8 +272,8 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR()
         case_queries = self.case_queries
         mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/mcrdr_stop_only")
+        # render_tree(mcrdr.start_rule, use_dot_exporter=True,
+        #             filename=self.test_results_dir + f"/mcrdr_stop_only")
         for case_query in case_queries:
             cat = mcrdr.classify(case_query.case)
             self.assertEqual(make_set(cat), make_set(case_query.target_value))
@@ -288,8 +294,8 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRule)
         case_queries = self.case_queries
         mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/mcrdr_stop_plus_rule")
+        # render_tree(mcrdr.start_rule, use_dot_exporter=True,
+        #             filename=self.test_results_dir + f"/mcrdr_stop_plus_rule")
         for case_query in case_queries:
             cat = mcrdr.classify(case_query.case)
             self.assertEqual(make_set(cat), make_set(case_query.target_value))
@@ -310,8 +316,8 @@ class TestRDR(TestCase):
         mcrdr = MultiClassRDR(mode=MCRDRMode.StopPlusRuleCombined)
         case_queries = self.case_queries
         mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
-        render_tree(mcrdr.start_rule, use_dot_exporter=True,
-                    filename=self.test_results_dir + f"/mcrdr_stop_plus_rule_combined")
+        # render_tree(mcrdr.start_rule, use_dot_exporter=True,
+        #             filename=self.test_results_dir + f"/mcrdr_stop_plus_rule_combined")
         for case_query in case_queries:
             cat = mcrdr.classify(case_query.case)
             self.assertEqual(make_set(cat), make_set(case_query.target_value))
@@ -348,9 +354,9 @@ class TestRDR(TestCase):
     def test_fit_grdr(self):
         grdr, all_targets = get_fit_grdr(self.all_cases, self.targets, draw_tree=False,
                                          load_answers=True, save_answers=False)
-        for conclusion_name, rdr in grdr.start_rules_dict.items():
-            render_tree(rdr.start_rule, use_dot_exporter=True,
-                        filename=self.test_results_dir + f"/grdr_{conclusion_name}")
+        # for conclusion_name, rdr in grdr.start_rules_dict.items():
+        #     render_tree(rdr.start_rule, use_dot_exporter=True,
+        #                 filename=self.test_results_dir + f"/grdr_{conclusion_name}")
 
 
 if __name__ == "__main__":

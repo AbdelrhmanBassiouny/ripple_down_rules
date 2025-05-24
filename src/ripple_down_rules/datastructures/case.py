@@ -7,7 +7,7 @@ from enum import Enum
 
 from pandas import DataFrame
 from sqlalchemy import MetaData
-from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
+from sqlalchemy.orm import DeclarativeBase as SQLTable, registry
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING
 
 from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, SubclassJSONSerializer, \
@@ -354,11 +354,13 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Dict[str, Any]] =
         if last_evaluated_rule and last_evaluated_rule.fired:
             corner_row_dict = copy_case(corner_case)
 
+    case_dict.update(targets)
+    case_dict.update(current_conclusions)
+    all_table_rows = [case_dict]
     if corner_row_dict:
         corner_conclusion = last_evaluated_rule.conclusion(case)
         corner_row_dict.update({corner_conclusion.__class__.__name__: corner_conclusion})
-        print(table_rows_as_str(corner_row_dict))
-    print("=" * 50)
-    case_dict.update(targets)
-    case_dict.update(current_conclusions)
-    print(table_rows_as_str(case_dict))
+        all_table_rows.append(corner_row_dict)
+        # print(table_rows_as_str(corner_row_dict))
+    print("\n" + "=" * 50)
+    print(table_rows_as_str(all_table_rows))
