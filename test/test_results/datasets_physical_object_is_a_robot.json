@@ -27,8 +27,8 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Robot": "ripple_down_rules.datasets.Robot",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
+                        "Robot": "ripple_down_rules.datasets.Robot"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -52,9 +52,11 @@
                 "alternative": null
             },
             "generated_python_file_name": "physicalobject_is_a_robot_output__scrdr",
-            "name": null
+            "name": "is_a_robot",
+            "case_type": "builtins.dict"
         }
     },
     "generated_python_file_name": "physicalobject_is_a_robot_rdr",
-    "name": null
+    "name": "is_a_robot",
+    "case_type": "builtins.dict"
 }

@@ -22,7 +22,7 @@ from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 from .user_interface.gui import RDRCaseViewer
 from .utils import draw_tree, make_set, copy_case, \
     SubclassJSONSerializer, make_list, get_type_from_string, \
-    is_conflicting, update_case, get_imports_from_scope, extract_function_source, extract_imports
+    is_conflicting, update_case, get_imports_from_scope, extract_function_source, extract_imports, get_full_class_name
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -44,6 +44,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     name: Optional[str] = None
     """
     The name of the classifier.
+    """
+    case_type: Optional[Type] = None
+    """
+    The type of the case (input) to the RDR classifier.
     """
 
     def __init__(self, start_rule: Optional[Rule] = None, viewer: Optional[RDRCaseViewer] = None):
@@ -143,6 +147,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if case_query is None:
             raise ValueError("The case query cannot be None.")
         self.name = case_query.attribute_name if self.name is None else self.name
+        self.case_type = case_query.case_type if self.case_type is None else self.case_type
         if case_query.target is None:
             case_query_cp = copy(case_query)
             self.classify(case_query_cp.case, modify_case=True)
@@ -368,16 +373,6 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             return "SCRDR"
 
     @property
-    def case_type(self) -> Type:
-        """
-        :return: The type of the case (input) to the RDR classifier.
-        """
-        if isinstance(self.start_rule.corner_case, Case):
-            return self.start_rule.corner_case._obj_type
-        else:
-            return type(self.start_rule.corner_case)
-
-    @property
     def conclusion_type(self) -> Tuple[Type]:
         """
         :return: The type of the conclusion of the RDR classifier.
@@ -396,7 +391,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
 
     def _to_json(self) -> Dict[str, Any]:
         return {"start_rule": self.start_rule.to_json(),  "generated_python_file_name": self.generated_python_file_name,
-                "name": self.name}
+                "name": self.name, "case_type": get_full_class_name(self.case_type) if self.case_type is not None else None}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Self:
@@ -409,6 +404,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             new_rdr.generated_python_file_name = data["generated_python_file_name"]
         if "name" in data:
             new_rdr.name = data["name"]
+        if "case_type" in data:
+            new_rdr.case_type = get_type_from_string(data["case_type"])
         return new_rdr
 
     @staticmethod
@@ -882,7 +879,8 @@ class GeneralRDR(RippleDownRules):
     def _to_json(self) -> Dict[str, Any]:
         return {"start_rules": {name: rdr.to_json() for name, rdr in self.start_rules_dict.items()}
                 , "generated_python_file_name": self.generated_python_file_name,
-                "name": self.name}
+                "name": self.name,
+                "case_type": get_full_class_name(self.case_type) if self.case_type is not None else None}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> GeneralRDR:
@@ -897,6 +895,8 @@ class GeneralRDR(RippleDownRules):
             new_rdr.generated_python_file_name = data["generated_python_file_name"]
         if "name" in data:
             new_rdr.name = data["name"]
+        if "case_type" in data:
+            new_rdr.case_type = get_type_from_string(data["case_type"])
         return new_rdr
 
     def update_from_python_file(self, package_dir: str) -> None:
@@ -929,18 +929,6 @@ class GeneralRDR(RippleDownRules):
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
             f.write(f"{' ' * 4}return GeneralRDR._classify(classifiers_dict, case)\n")
-
-    @property
-    def case_type(self) -> Optional[Type]:
-        """
-        :return: The type of the case (input) to the RDR classifier.
-        """
-        if self.start_rule is None or self.start_rule.corner_case is None:
-            return None
-        if isinstance(self.start_rule.corner_case, Case):
-            return self.start_rule.corner_case._obj_type
-        else:
-            return type(self.start_rule.corner_case)
 
     def get_rdr_classifier_from_python_file(self, file_path: str) -> Callable[[Any], Any]:
         """

@@ -12,9 +12,9 @@
                         "builtins.bool"
                     ],
                     "scope": {
+                        "List": "typing.List",
                         "Robot": "ripple_down_rules.datasets.Robot",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
-                        "List": "typing.List"
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -31,9 +31,9 @@
                         "builtins.list"
                     ],
                     "scope": {
+                        "List": "typing.List",
                         "Robot": "ripple_down_rules.datasets.Robot",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
-                        "List": "typing.List"
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -64,9 +64,11 @@
                 "alternative": null
             },
             "generated_python_file_name": "physicalobject_select_objects_that_are_parts_of_robot_output__mcrdr",
-            "name": null
+            "name": "select_objects_that_are_parts_of_robot",
+            "case_type": "builtins.dict"
         }
     },
     "generated_python_file_name": "physicalobject_select_objects_that_are_parts_of_robot_rdr",
-    "name": null
+    "name": "select_objects_that_are_parts_of_robot",
+    "case_type": "builtins.dict"
 }

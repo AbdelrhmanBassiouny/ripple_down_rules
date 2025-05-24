@@ -891,8 +891,8 @@ class SubclassJSONSerializer:
         if not filename.endswith(".json"):
             filename += ".json"
         with open(filename, "r") as f:
-            scrdr_json = json.load(f)
-        deserialized_obj = cls.from_json(scrdr_json)
+            rdr_json = json.load(f)
+        deserialized_obj = cls.from_json(rdr_json)
         cls.data_class_refs.clear()
         return deserialized_obj
 
