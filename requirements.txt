@@ -10,3 +10,4 @@ colorama
 pygments
 sqlalchemy
 pandas
+omegaconf
