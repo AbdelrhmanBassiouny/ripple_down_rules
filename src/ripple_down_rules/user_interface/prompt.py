@@ -2,7 +2,11 @@ import ast
 import logging
 from _ast import AST
 
-from PyQt6.QtWidgets import QApplication
+try:
+    from PyQt6.QtWidgets import QApplication
+except ImportError:
+    QApplication = None
+
 from colorama import Fore, Style
 from pygments import highlight
 from pygments.formatters.terminal import TerminalFormatter
@@ -11,7 +15,7 @@ from typing_extensions import Optional, Tuple
 
 from ..datastructures.callable_expression import CallableExpression, parse_string_to_expression
 from ..datastructures.dataclasses import CaseQuery
-from ..datastructures.enums import PromptFor, InteractionMode
+from ..datastructures.enums import PromptFor
 from .gui import RDRCaseViewer
 from .ipython_custom_shell import IPythonShell
 from ..utils import make_list
@@ -90,7 +94,7 @@ class UserPrompt:
                 prompt_str = f"Give conditions on when can the rule be evaluated for:"
         case_query.scope.update({'case': case_query.case})
         shell = None
-        if QApplication.instance() is None:
+        if self.viewer is None:
             prompt_str = self.construct_prompt_str_for_shell(case_query, prompt_for, prompt_str)
             shell = IPythonShell(header=prompt_str, prompt_for=prompt_for, case_query=case_query,
                                  code_to_modify=code_to_modify)
