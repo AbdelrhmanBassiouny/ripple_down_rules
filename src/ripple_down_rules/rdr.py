@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import copyreg
 import importlib
+import logging
 import sys
 from abc import ABC, abstractmethod
 from copy import copy
 from io import TextIOWrapper
 from types import ModuleType
 
-from matplotlib import pyplot as plt
+try:
+    from matplotlib import pyplot as plt
+    Figure = plt.Figure
+except ImportError as e:
+    logging.debug(f"{e}: matplotlib is not installed")
+    matplotlib = None
+    Figure = None
+    plt = None
+
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tuple, Callable, Set
 
@@ -19,7 +28,10 @@ from .datastructures.enums import MCRDRMode
 from .experts import Expert, Human
 from .helpers import is_matching
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
-from .user_interface.gui import RDRCaseViewer
+try:
+    from .user_interface.gui import RDRCaseViewer
+except ImportError as e:
+    RDRCaseViewer = None
 from .utils import draw_tree, make_set, copy_case, \
     SubclassJSONSerializer, make_list, get_type_from_string, \
     is_conflicting, update_case, get_imports_from_scope, extract_function_source, extract_imports, get_full_class_name
@@ -29,7 +41,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     """
     The abstract base class for the ripple down rules classifiers.
     """
-    fig: Optional[plt.Figure] = None
+    fig: Optional[Figure] = None
     """
     The figure to draw the tree on.
     """
@@ -55,7 +67,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param start_rule: The starting rule for the classifier.
         """
         self.start_rule = start_rule
-        self.fig: Optional[plt.Figure] = None
+        self.fig: Optional[Figure] = None
         self.viewer: Optional[RDRCaseViewer] = viewer
         if self.viewer is not None:
             self.viewer.set_save_function(self.save)
@@ -86,6 +98,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         targets = []
         if animate_tree:
+            if plt is None:
+                raise ImportError("matplotlib is not installed, cannot animate the tree.")
             plt.ion()
         i = 0
         stop_iterating = False
@@ -755,7 +769,7 @@ class GeneralRDR(RippleDownRules):
         self.start_rules_dict: Dict[str, Union[SingleClassRDR, MultiClassRDR]] \
             = category_rdr_map if category_rdr_map else {}
         super(GeneralRDR, self).__init__(**kwargs)
-        self.all_figs: List[plt.Figure] = [sr.fig for sr in self.start_rules_dict.values()]
+        self.all_figs: List[Figure] = [sr.fig for sr in self.start_rules_dict.values()]
 
     def add_rdr(self, rdr: Union[SingleClassRDR, MultiClassRDR], case_query: Optional[CaseQuery] = None):
         """

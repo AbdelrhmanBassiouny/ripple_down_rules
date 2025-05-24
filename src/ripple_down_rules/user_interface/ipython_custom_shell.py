@@ -8,9 +8,8 @@ from traitlets.config import Config
 
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import PromptFor
-from .gui import encapsulate_code_lines_into_a_function
 from .template_file_creator import TemplateFileCreator
-from ..utils import contains_return_statement, extract_dependencies
+from ..utils import contains_return_statement, extract_dependencies, encapsulate_code_lines_into_a_function
 
 
 @magics_class

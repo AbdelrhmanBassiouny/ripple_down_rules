@@ -4,8 +4,10 @@ from _ast import AST
 
 try:
     from PyQt6.QtWidgets import QApplication
+    from .gui import RDRCaseViewer
 except ImportError:
     QApplication = None
+    RDRCaseViewer = None
 
 from colorama import Fore, Style
 from pygments import highlight
@@ -16,7 +18,6 @@ from typing_extensions import Optional, Tuple
 from ..datastructures.callable_expression import CallableExpression, parse_string_to_expression
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import PromptFor
-from .gui import RDRCaseViewer
 from .ipython_custom_shell import IPythonShell
 from ..utils import make_list
 

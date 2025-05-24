@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from abc import ABC, abstractmethod
 
 from typing_extensions import Optional, TYPE_CHECKING, List
@@ -9,7 +10,10 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.enums import PromptFor
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.case import show_current_and_corner_cases
-from .user_interface.gui import RDRCaseViewer
+try:
+    from .user_interface.gui import RDRCaseViewer
+except ImportError as e:
+    RDRCaseViewer = None
 from .user_interface.prompt import UserPrompt
 
 if TYPE_CHECKING:

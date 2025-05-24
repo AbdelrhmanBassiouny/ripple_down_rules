@@ -16,13 +16,27 @@ from dataclasses import is_dataclass, fields
 from enum import Enum
 from textwrap import dedent
 from types import NoneType
+from typing import List
 
-import matplotlib
-import networkx as nx
+try:
+    import matplotlib
+    from matplotlib import pyplot as plt
+    Figure = plt.Figure
+except ImportError as e:
+    matplotlib = None
+    plt = None
+    Figure = None
+    logging.debug(f"{e}: matplotlib is not installed")
+
+try:
+    import networkx as nx
+except ImportError as e:
+    nx = None
+    logging.debug(f"{e}: networkx is not installed")
+
 import requests
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
-from matplotlib import pyplot as plt
 from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
@@ -1350,7 +1364,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
         de.to_picture(f"{filename}{'.png'}")
 
 
-def draw_tree(root: Node, fig: plt.Figure):
+def draw_tree(root: Node, fig: Figure):
     """
     Draw the tree using matplotlib and networkx.
     """
@@ -1374,3 +1388,25 @@ def draw_tree(root: Node, fig: plt.Figure):
     nx.draw_networkx_edge_labels(graph, pos, edge_labels=nx.get_edge_attributes(graph, 'weight'),
                                  ax=fig.gca(), rotate=False, clip_on=False)
     plt.pause(0.1)
+
+
+def encapsulate_code_lines_into_a_function(code_lines: List[str], function_name: str, function_signature: str,
+                                           func_doc: str, case_query: CaseQuery) -> str:
+    """
+    Encapsulate the given code lines into a function with the specified name, signature, and docstring.
+
+    :param code_lines: The lines of code to include in the user input.
+    :param function_name: The name of the function to include in the user input.
+    :param function_signature: The function signature to include in the user input.
+    :param func_doc: The function docstring to include in the user input.
+    :param case_query: The case query object.
+    """
+    code = '\n'.join(code_lines)
+    code = encapsulate_user_input(code, function_signature, func_doc)
+    if case_query.is_function:
+        args = "**case"
+    else:
+        args = "case"
+    if f"return {function_name}({args})" not in code:
+        code = code.strip() + f"\nreturn {function_name}({args})"
+    return code
