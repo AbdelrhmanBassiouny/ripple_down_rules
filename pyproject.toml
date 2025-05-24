@@ -29,7 +29,7 @@ gui = [
     "pyqt6",
     "qtconsole",
 ]
-visualization = [
+viz = [
     "matplotlib",
     "networkx",
 ]
