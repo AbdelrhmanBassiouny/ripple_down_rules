@@ -8,3 +8,5 @@ ipython
 requests
 colorama
 pygments
+sqlalchemy
+pandas

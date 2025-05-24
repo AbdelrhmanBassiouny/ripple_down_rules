@@ -20,7 +20,7 @@ class MyMagics(Magics):
                  prompt_for: Optional[PromptFor] = None,
                  case_query: Optional[CaseQuery] = None):
         super().__init__(shell)
-        self.rule_editor = TemplateFileCreator(shell, case_query, prompt_for=prompt_for, code_to_modify=code_to_modify)
+        self.rule_editor = TemplateFileCreator(case_query, prompt_for=prompt_for, code_to_modify=code_to_modify)
         self.all_code_lines: Optional[List[str]] = None
 
     @line_magic

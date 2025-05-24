@@ -2,7 +2,7 @@ import os
 import sys
 from unittest import TestCase
 
-from typing_extensions import List
+from typing_extensions import List, Optional
 
 from ripple_down_rules.datasets import Habitat, Species
 from ripple_down_rules.datasets import load_zoo_dataset
@@ -10,12 +10,16 @@ from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import MCRDRMode
 from ripple_down_rules.experts import Human
-from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR, RDRWithCodeWriter
 from ripple_down_rules.utils import render_tree, make_set, extract_function_source
 from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
 
-from PyQt6.QtWidgets import QApplication
+try:
+    from PyQt6.QtWidgets import QApplication
+    from ripple_down_rules.user_interface.gui import RDRCaseViewer
+except ImportError as e:
+    RDRCaseViewer = None
+    QApplication = None
 
 
 class TestRDR(TestCase):
@@ -26,8 +30,8 @@ class TestRDR(TestCase):
     expert_answers_dir: str = "./test_expert_answers"
     generated_rdrs_dir: str = "./test_generated_rdrs"
     cache_file: str = f"{test_results_dir}/zoo_dataset.pkl"
-    app: QApplication
-    viewer: RDRCaseViewer
+    app: Optional[QApplication] = None
+    viewer: Optional[RDRCaseViewer] = None
 
     @classmethod
     def setUpClass(cls):
@@ -38,8 +42,9 @@ class TestRDR(TestCase):
         for test_dir in [cls.test_results_dir, cls.expert_answers_dir, cls.generated_rdrs_dir]:
             if not os.path.exists(test_dir):
                 os.makedirs(test_dir)
-        cls.app = QApplication(sys.argv)
-        cls.viewer = RDRCaseViewer()
+        if RDRCaseViewer is not None:
+            cls.app = QApplication(sys.argv)
+            cls.viewer = RDRCaseViewer()
 
     def test_classify_scrdr(self):
         use_loaded_answers = True

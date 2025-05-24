@@ -39,6 +39,5 @@ dev = [
     "matplotlib",
     "networkx",
     "pytest",
-    "sqlalchemy",
     "ucimlrepo>=0.0.7",
     "pdbpp"]

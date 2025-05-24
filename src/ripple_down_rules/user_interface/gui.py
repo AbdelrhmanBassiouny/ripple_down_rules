@@ -473,8 +473,7 @@ class RDRCaseViewer(QMainWindow):
         self.close()
 
     def _edit(self):
-        self.template_file_creator = TemplateFileCreator(self.ipython_console.kernel.shell,
-                                                         self.case_query, self.prompt_for, self.code_to_modify,
+        self.template_file_creator = TemplateFileCreator(self.case_query, self.prompt_for, self.code_to_modify,
                                                          self.print)
         self.template_file_creator.edit()
 

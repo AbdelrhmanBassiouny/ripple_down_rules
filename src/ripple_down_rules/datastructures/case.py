@@ -7,7 +7,7 @@ from enum import Enum
 
 from pandas import DataFrame
 from sqlalchemy import MetaData
-from sqlalchemy.orm import DeclarativeBase as SQLTable, MappedColumn as SQLColumn, registry
+from sqlalchemy.orm import DeclarativeBase as SQLTable, registry
 from typing_extensions import Any, Optional, Dict, Type, Set, Hashable, Union, List, TYPE_CHECKING
 
 from ..utils import make_set, row_to_dict, table_rows_as_str, get_value_type_from_type_hint, SubclassJSONSerializer, \

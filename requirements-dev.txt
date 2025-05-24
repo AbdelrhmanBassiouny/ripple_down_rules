@@ -1,7 +1,6 @@
 -r requirements.txt
 -r requirements-gui.txt
 -r requirements-viz.txt
-sqlalchemy
 ucimlrepo>=0.0.7
 pdbpp
 pytest

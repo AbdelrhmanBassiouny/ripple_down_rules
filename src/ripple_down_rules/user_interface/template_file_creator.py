@@ -8,7 +8,6 @@ from functools import cached_property
 from textwrap import indent, dedent
 
 from colorama import Fore, Style
-from ipykernel.inprocess.ipkernel import InProcessInteractiveShell
 from typing_extensions import Optional, Type, List, Callable, Tuple, Dict
 
 from ..datastructures.case import Case
@@ -73,10 +72,9 @@ class TemplateFileCreator:
     The list of all code lines in the function in the temporary file.
     """
 
-    def __init__(self, shell: InProcessInteractiveShell, case_query: CaseQuery, prompt_for: PromptFor,
+    def __init__(self, case_query: CaseQuery, prompt_for: PromptFor,
                  code_to_modify: Optional[str] = None, print_func: Callable[[str], None] = print):
         self.print_func = print_func
-        self.shell = shell
         self.code_to_modify = code_to_modify
         self.prompt_for = prompt_for
         self.case_query = case_query
