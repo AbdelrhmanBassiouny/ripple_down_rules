@@ -12,8 +12,8 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "List": "typing.List",
                         "Robot": "ripple_down_rules.datasets.Robot",
+                        "List": "typing.List",
                         "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
                     },
                     "conclusion": {
@@ -31,8 +31,8 @@
                         "builtins.list"
                     ],
                     "scope": {
-                        "List": "typing.List",
                         "Robot": "ripple_down_rules.datasets.Robot",
+                        "List": "typing.List",
                         "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
                     },
                     "conclusion": {

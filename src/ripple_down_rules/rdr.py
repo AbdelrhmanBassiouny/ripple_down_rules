@@ -360,15 +360,13 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         return importlib.import_module(name).classify
 
     @property
-    def _default_generated_python_file_name(self) -> str:
+    def _default_generated_python_file_name(self) -> Optional[str]:
         """
         :return: The default generated python file name.
         """
-        if isinstance(self.start_rule.corner_case, Case):
-            name = self.start_rule.corner_case._name
-        else:
-            name = self.start_rule.corner_case.__class__.__name__
-        return f"{name.lower()}_{self.attribute_name}_{self.acronym.lower()}"
+        if self.start_rule is None or self.start_rule.conclusion is None:
+            return None
+        return f"{self.case_type.__name__.lower()}_{self.attribute_name}_{self.acronym.lower()}"
 
     @property
     def generated_python_defs_file_name(self) -> str:
@@ -958,11 +956,7 @@ class GeneralRDR(RippleDownRules):
         """
         if self.start_rule is None or self.start_rule.conclusion is None:
             return None
-        if isinstance(self.start_rule.corner_case, Case):
-            name = self.start_rule.corner_case._name
-        else:
-            name = self.start_rule.corner_case.__class__.__name__
-        return f"{name}_rdr".lower()
+        return f"{self.case_type.__name__.lower()}_rdr".lower()
 
     @property
     def conclusion_type_hint(self) -> str:
