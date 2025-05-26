@@ -186,7 +186,7 @@ def extract_function_source(file_path: str,
                 func_lines = func_lines[1:]
             line_numbers.append((node.lineno, node.end_lineno))
             functions_source[node.name] = dedent("\n".join(func_lines)) if join_lines else func_lines
-            if len(functions_source) >= len(function_names):
+            if (len(functions_source) >= len(function_names)) and (not len(function_names) == 0):
                 break
     if len(functions_source) < len(function_names):
         raise ValueError(f"Could not find all functions in {file_path}: {function_names} not found,"

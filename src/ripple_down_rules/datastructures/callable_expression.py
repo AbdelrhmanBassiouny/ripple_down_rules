@@ -92,7 +92,8 @@ class CallableExpression(SubclassJSONSerializer):
     """
     A callable that is constructed from a string statement written by an expert.
     """
-    encapsulating_function: str = "def _get_value(case):"
+    encapsulating_function_name: str = "_get_value"
+    encapsulating_function: str = f"def {encapsulating_function_name}(case):"
 
     def __init__(self, user_input: Optional[str] = None,
                  conclusion_type: Optional[Tuple[Type]] = None,

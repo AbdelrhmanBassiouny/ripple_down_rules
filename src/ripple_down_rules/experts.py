@@ -4,6 +4,7 @@ import ast
 import json
 import logging
 import os
+import uuid
 from abc import ABC, abstractmethod
 
 from typing_extensions import Optional, TYPE_CHECKING, List
@@ -145,7 +146,8 @@ class Expert(ABC):
                 else:
                     imports = ''
                 if func_source is not None:
-                    func_source = encapsulate_user_input(func_source, CallableExpression.encapsulating_function)
+                    uid = uuid.uuid4().hex
+                    func_source = encapsulate_user_input(func_source, CallableExpression.encapsulating_function + f'_{uid}')
                 else:
                     func_source = 'pass  # No user input provided for this case.\n'
                 f.write(imports + func_source + '\n' + '\n\n\n\'===New Answer===\'\n\n\n')
@@ -185,14 +187,17 @@ class Expert(ABC):
         """
         file_path = path + '.py'
         with open(file_path, "r") as f:
-            all_answers = f.read().split('\n\n\n\'===New Answer===\'\n\n\n')
-        for answer in all_answers:
+            all_answers = f.read().split('\n\n\n\'===New Answer===\'\n\n\n')[:-1]
+        all_function_sources = list(extract_function_source(file_path, []).values())
+        all_function_sources_names = list(extract_function_source(file_path, []).keys())
+        for i, answer in enumerate(all_answers):
             answer = answer.strip('\n').strip()
             if 'def ' not in answer and 'pass' in answer:
                 self.all_expert_answers.append(({}, None))
             scope = extract_imports(tree=ast.parse(answer))
-            func_source = list(extract_function_source(file_path, []).values())[0]
-            self.all_expert_answers.append((scope, func_source))
+            function_source = all_function_sources[i].replace(all_function_sources_names[i],
+                                                              CallableExpression.encapsulating_function_name)
+            self.all_expert_answers.append((scope, function_source))
 
 
 class Human(Expert):
@@ -212,7 +217,7 @@ class Human(Expert):
     def ask_for_conditions(self, case_query: CaseQuery,
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
-        if not self.use_loaded_answers and self.user_prompt.viewer is None:
+        if (not self.use_loaded_answers or len(self.all_expert_answers) == 0) and self.user_prompt.viewer is None:
             show_current_and_corner_cases(case_query.case, {case_query.attribute_name: case_query.target_value},
                                           last_evaluated_rule=last_evaluated_rule)
         return self._get_conditions(case_query)

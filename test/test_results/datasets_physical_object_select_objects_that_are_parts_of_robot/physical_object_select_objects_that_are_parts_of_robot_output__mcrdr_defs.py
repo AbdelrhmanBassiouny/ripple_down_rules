@@ -1,8 +1,8 @@
-from typing import Dict
-from typing import Union
-from datasets import PhysicalObject
 from datasets import Robot
+from typing import Dict
+from datasets import PhysicalObject
 from typing import List
+from typing import Union
 from typing_extensions import Union
 
 

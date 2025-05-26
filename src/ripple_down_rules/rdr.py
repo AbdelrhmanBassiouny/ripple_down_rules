@@ -191,8 +191,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                 match = is_matching(self.classify, case_query, pred_cat)
                 if not match:
                     print(f"Predicted: {pred_cat} but expected: {target}")
-                if animate_tree and self.start_rule.size > num_rules:
-                    num_rules = self.start_rule.size
+                if animate_tree and len(self.start_rule.descendants) > num_rules:
+                    num_rules = len(self.start_rule.descendants)
                     self.update_figures()
             i += 1
             all_predictions = [1 if is_matching(self.classify, case_query) else 0 for case_query in case_queries
@@ -240,6 +240,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.name = case_query.attribute_name if self.name is None else self.name
         self.case_type = case_query.case_type if self.case_type is None else self.case_type
         self.case_name = case_query.case_name if self.case_name is None else self.case_name
+
+        expert = expert or Human(answers_save_path=self.save_dir + '/expert_answers' if self.save_dir else None)
 
         if case_query.target is None:
             case_query_cp = copy(case_query)
