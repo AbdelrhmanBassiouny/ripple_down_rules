@@ -1,9 +1,11 @@
 import os.path
 import unittest
 
-from PyQt6.QtWidgets import (
-    QApplication
-)
+try:
+    from PyQt6.QtWidgets import QApplication
+except ImportError as e:
+    print(f"Skipping GUI tests due to missing PyQt6: {e}")
+    QApplication = None
 from typing_extensions import List
 
 from ripple_down_rules.datasets import load_zoo_dataset, Species
@@ -14,7 +16,8 @@ from test_helpers.helpers import get_fit_grdr
 from test_object_diagram import Person, Address
 
 
-# @unittest.skip("GUI tests need visual inspection and cannot be run automatically.")
+@unittest.skipIf(QApplication is None, "GUI tests need PyQt6,"
+                                       "and they need visual inspection by a user and cannot be run automatically.")
 class GUITestCase(unittest.TestCase):
     """Test case for the GUI components of the ripple down rules package."""
     app: QApplication
