@@ -65,12 +65,12 @@ class TestRDR(TestCase):
             expert.save_answers(file)
 
     def test_fit_scrdr(self):
-        scrdr, _ = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False,
+        scrdr, _ = get_fit_scrdr(self.all_cases, self.targets, draw_tree=True,
                                  expert_answers_dir=self.expert_answers_dir,
                                  expert_answers_file="scrdr_expert_answers_fit",
                                  load_answers=True)
-        # render_tree(scrdr.start_rule, use_dot_exporter=True,
-        #             filename=self.test_results_dir + f"/scrdr")
+        render_tree(scrdr.start_rule, use_dot_exporter=True,
+                    filename=self.test_results_dir + f"/scrdr")
 
     def test_save_load_scrdr(self):
 

@@ -95,6 +95,19 @@ cat = grdr.classify(all_cases[50])['species']
 assert cat == targets[50]
 ```
 
+When prompted to write a rule, I wrote the following inside the template function that the Ripple Down Rules created:
+```python
+return case.milk == 1
+```
+then
+```python
+return case.aquatic == 1
+```
+
+The rule tree generated from that will look like this:
+![species_rdr](https://raw.githubusercontent.com/AbdelrhmanBassiouny/ripple_down_rules/images/scrdr.png)
+
+
 ### Relational Example
 
 By relational, I mean that each rule conclusion is not a constant value, but is related to the case being classified,
