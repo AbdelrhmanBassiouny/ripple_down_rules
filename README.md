@@ -21,6 +21,10 @@ For GUI support, also install:
 sudo apt-get install libxcb-cursor-dev
 ```
 
+## Documentation
+
+Read the documentation [here](https://abdelrhmanbassiouny.github.io/ripple_down_rules/).
+
 ## Example Usage
 
 ### Propositional Example
@@ -183,6 +187,6 @@ try that yourself and see if it works!
 author = {Bassiouny, Abdelrhman},
 title = {Ripple-Down-Rules},
 url = {https://github.com/AbdelrhmanBassiouny/ripple_down_rules},
-version = {0.5.2},
+version = {0.5.4},
 }
 ```

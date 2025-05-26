@@ -51,7 +51,7 @@ performance, so stay tuned for updates! and feel free to contribute, give feedba
 author = {Bassiouny, Abdelrhman},
 title = {Ripple-Down-Rules},
 url = {https://github.com/AbdelrhmanBassiouny/ripple_down_rules},
-version = {0.5.2},
+version = {0.5.4},
 }
 ```
 
