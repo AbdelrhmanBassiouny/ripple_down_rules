@@ -13,27 +13,39 @@ SCRDR, MCRDR, and GRDR logic were inspired from the book:
 ["Ripple Down Rules: An Alternative to Machine Learning"](https://www.taylorfrancis.com/books/mono/10.1201/9781003126157/ripple-rules-paul-compton-byeong-ho-kang) by Paul Compton, Byeong Ho Kang.
 
 
-Additionally, to the main ripple down rules benefits, this package also features:
+## 🚀 Enhanced Ripple-Down Rules Engine – Key Features
 
-- Ontology and Rule base as one entity
-    - Both use same python data structures.
-    - Update in data structures reflects in Rule base.
-    - Both are under one versioning system, the rule base is generated as a python module that becomes part of your
-    project.
-- First, second, and higher order logic is achieved by freely writing python code.
-    - Rule conditions and conclusions are python functions that can do anything that python can do.
-- Automatic maintenance of rule base.
-    - When rules are added contradictions are detected and prompted to the user to add a refinement rule for
-  to resolve the contradiction.
-- Transparent Editable rule base
-    - Rules are understandable python code that can be manually edited and reloaded.
-- Interface that makes coders feel at home by using their favorite IDE.
-- Uses latest technologies like LLMs to help in writing the rules (Inherited feature from IDEs).
-    - Auto completions and suggestions in the IDE.
-    - Ask AI available with the press of a button to help in writing the rule.
-- Rules can be for instances on very specific scenarios and can be very general on super class relations.
-- Accompanied by a GUI with an object explorer panel and an expandable/retractable object diagram to help in
-writing the rules about the object at hand.
+### 🧠 Ontology + Rule Base as One Entity
+- 🧬 Unified data structure: Ontology and rules use the same Python data structures. 
+- 🔄 Automatic sync: Updates to the ontology instantly reflect in the rule base. 
+- 📦 Version controlled: The rule base is a Python module, versioned with your project.
+
+### 🔁 Supports First, Second & Higher-Order Logic
+- 🧩 Unlimited expressiveness: Rule conditions and conclusions are plain Python functions — anything Python can do, your rules can too!
+
+### 🛡️ Automatic Rule Base Maintenance 
+- ⚠️ Contradiction detection: New rules are auto-checked for logical conflicts. 
+- 🔧 Prompted refinements: If a contradiction arises, you're guided to add a refinement rule. 
+
+### 📝 Transparent & Editable Rule Base
+- 📖 Readable rules: Rules are clean, understandable Python code. 
+- 🔄 Reload-friendly: Easily edit and reload rules manually as needed.
+
+### 💻 Developer-Centric Interface
+- 👨‍💻 Feels like home: Seamless integration with your favorite IDE.
+- ✨ Modern coding experience: Auto-completion and suggestions supported via IDE plugins.
+
+### 🤖 LLM-Powered Rule Writing
+- 💡 AI-assisted authoring: Ask AI for help or suggestions directly within the IDE.
+- ⚡ Smart completion: Context-aware completions streamline rule writing.
+
+### 🎯 Flexible Rule Specificity
+- 🧪 Instance-level precision: Write rules for highly specific object scenarios.
+- 🏛️ Generalization-ready: Create broad rules for superclass relationships.
+
+### 🖼️ GUI for Rule Exploration
+- 🧭 Object Explorer Panel: Navigate and inspect objects easily.
+- 🧯 Interactive Diagram: Expandable/collapsible object diagram to guide rule creation visually.
 
 This work aims to provide a flexible and powerful rule-based system that can be used in various applications,
 from simple classification tasks to complex decision-making systems. Furthermore, one of the main goals is to
