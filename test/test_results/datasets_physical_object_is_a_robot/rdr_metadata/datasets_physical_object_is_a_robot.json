@@ -7,12 +7,14 @@
                 "_type": "ripple_down_rules.rules.SingleClassRule",
                 "conditions": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n    def conditions_for_physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n        \"\"\"Get conditions on whether it's possible to conclude a value for PhysicalObject_is_a_robot.output_\"\"\"\n        return True\n    return conditions_for_physical_object_is_a_robot(**case)\n    ",
+                    "user_input": "def _get_value(case):\n    def conditions_for_physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n        \"\"\"Get conditions on whether it's possible to conclude a value for PhysicalObject_is_a_robot.output_  of type .\"\"\"\n        return True\n    return conditions_for_physical_object_is_a_robot(**case)\n    ",
                     "conclusion_type": [
                         "builtins.bool"
                     ],
                     "scope": {
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject"
+                        "Dict": "typing.Dict",
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
+                        "Robot": "ripple_down_rules.datasets.Robot"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -22,11 +24,12 @@
                 },
                 "conclusion": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n    def physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n        \"\"\"Get possible value(s) for PhysicalObject_is_a_robot.output_\"\"\"\n        return isinstance(self_, Robot)\n    return physical_object_is_a_robot(**case)\n    ",
+                    "user_input": "def _get_value(case):\n    def physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n        \"\"\"Get possible value(s) for PhysicalObject_is_a_robot.output_  of type .\"\"\"\n        return isinstance(self_, Robot)\n    return physical_object_is_a_robot(**case)\n    ",
                     "conclusion_type": [
                         "builtins.bool"
                     ],
                     "scope": {
+                        "Dict": "typing.Dict",
                         "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
                         "Robot": "ripple_down_rules.datasets.Robot"
                     },
@@ -41,22 +44,24 @@
                     "_type": "ripple_down_rules.datastructures.case.Case",
                     "self_": null,
                     "output_": null,
-                    "_id": 139839213965440,
+                    "_id": 140375680622464,
                     "_obj_type": "builtins.dict",
                     "_name": "PhysicalObject_is_a_robot"
                 },
                 "conclusion_name": "output_",
                 "weight": null,
-                "uid": "300233995736769722077967002350628871999",
+                "uid": "226969243620390858682731042391766665817",
                 "refinement": null,
                 "alternative": null
             },
-            "generated_python_file_name": "physicalobject_is_a_robot_output__scrdr",
-            "name": "is_a_robot",
-            "case_type": "builtins.dict"
+            "generated_python_file_name": "physical_object_is_a_robot_output__scrdr",
+            "name": "output_",
+            "case_type": "typing.Dict",
+            "case_name": "PhysicalObject_is_a_robot"
         }
     },
-    "generated_python_file_name": "physicalobject_is_a_robot_rdr",
-    "name": "is_a_robot",
-    "case_type": "builtins.dict"
+    "generated_python_file_name": "physical_object_is_a_robot_rdr",
+    "name": "output_",
+    "case_type": "typing.Dict",
+    "case_name": "PhysicalObject_is_a_robot"
 }

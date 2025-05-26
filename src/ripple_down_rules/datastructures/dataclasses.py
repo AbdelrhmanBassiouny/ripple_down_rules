@@ -78,7 +78,15 @@ class CaseQuery:
         """
         :return: The type of the case that the attribute belongs to.
         """
-        return self.original_case._obj_type if isinstance(self.original_case, Case) else type(self.original_case)
+        if self.is_function:
+            if self.function_args_type_hints is not None:
+                func_args = [arg for name, arg in self.function_args_type_hints.items() if name != 'return']
+                case_type_args = Union[tuple(func_args)]
+            else:
+                case_type_args = Any
+            return Dict[str, case_type_args]
+        else:
+            return self.original_case._obj_type if isinstance(self.original_case, Case) else type(self.original_case)
 
     @property
     def case(self) -> Any:

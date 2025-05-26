@@ -116,7 +116,7 @@ class TestRDRWorld(TestCase):
         cls.drawer_case_queries = [CaseQuery(possible_drawer, "correct", (bool,), True, default_value=False)
                                    for possible_drawer in all_possible_drawers]
         cls.app = QApplication(sys.argv)
-        cls.viewer = RDRCaseViewer()
+        cls.viewer = RDRCaseViewer(save_file="./test_generated_rdrs")
 
     def test_view_rdr(self):
         self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)
@@ -124,15 +124,16 @@ class TestRDRWorld(TestCase):
     def test_save_and_load_view_rdr(self):
         view_rdr = self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)
         filename = os.path.join(os.getcwd(), "test_results/world_views_rdr")
-        view_rdr.save(filename)
-        loaded_rdr = GeneralRDR.load(filename)
+        model_name = view_rdr.save(filename)
+        loaded_rdr = GeneralRDR.load(filename, model_name=model_name)
         self.assertEqual(view_rdr.classify(self.world), loaded_rdr.classify(self.world))
         self.assertEqual(self.world.bodies, loaded_rdr.start_rules[0].corner_case.bodies)
 
     def test_write_view_rdr_to_python_file(self):
-        rdrs_dir = "./test_generated_rdrs"
+        rdrs_dir = "./test_generated_rdrs/view_rdr"
+        os.makedirs(rdrs_dir, exist_ok=True)
         view_rdr = self.get_view_rdr()
-        view_rdr.write_to_python_file(rdrs_dir)
+        view_rdr._write_to_python(rdrs_dir)
         loaded_rdr_classifier = view_rdr.get_rdr_classifier_from_python_file(rdrs_dir)
         found_views = loaded_rdr_classifier(self.world)
         self.assertTrue(len([v for v in found_views["views"] if isinstance(v, Drawer)]) == 1)
@@ -162,9 +163,10 @@ class TestRDRWorld(TestCase):
         self.get_drawer_rdr(use_loaded_answers=True, save_answers=False)
 
     def test_write_drawer_rdr_to_python_file(self):
-        rdrs_dir = "./test_generated_rdrs"
+        rdrs_dir = "./test_generated_rdrs/drawer_rdr"
+        os.makedirs(rdrs_dir, exist_ok=True)
         drawer_rdr = self.get_drawer_rdr()
-        drawer_rdr.write_to_python_file(rdrs_dir)
+        drawer_rdr._write_to_python(rdrs_dir)
         loaded_rdr_classifier = drawer_rdr.get_rdr_classifier_from_python_file(rdrs_dir)
         for case_query in self.drawer_case_queries:
             self.assertTrue(is_matching(loaded_rdr_classifier, case_query))

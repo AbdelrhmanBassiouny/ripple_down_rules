@@ -258,12 +258,12 @@ class TemplateFileCreator:
             func_name = f"{prompt_for.value.lower()}_for_"
         case_name = case_query.name.replace(".", "_")
         if case_query.is_function:
-            # convert any CamelCase word into snake_case by adding _ before each capital letter
-            case_name = case_name.replace(f"_{case_query.attribute_name}", "")
-        func_name += case_name
-        attribute_types = TemplateFileCreator.get_core_attribute_types(case_query)
-        attribute_type_names = [t.__name__ for t in attribute_types]
-        func_name += f"_of_type_{'_or_'.join(attribute_type_names)}"
+            func_name += case_name.replace(f"_{case_query.attribute_name}", "")
+        else:
+            func_name += case_name
+            attribute_types = TemplateFileCreator.get_core_attribute_types(case_query)
+            attribute_type_names = [t.__name__ for t in attribute_types]
+            func_name += f"_of_type_{'_or_'.join(attribute_type_names)}"
         return str_to_snake_case(func_name)
 
     @cached_property

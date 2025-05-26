@@ -178,7 +178,7 @@ def extract_function_source(file_path: str,
     functions_source: Dict[str, Union[str, List[str]]] = {}
     line_numbers = []
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name in function_names:
+        if isinstance(node, ast.FunctionDef) and (node.name in function_names or len(function_names) == 0):
             # Get the line numbers of the function
             lines = source.splitlines()
             func_lines = lines[node.lineno - 1:node.end_lineno]
@@ -186,9 +186,9 @@ def extract_function_source(file_path: str,
                 func_lines = func_lines[1:]
             line_numbers.append((node.lineno, node.end_lineno))
             functions_source[node.name] = dedent("\n".join(func_lines)) if join_lines else func_lines
-            if len(functions_source) == len(function_names):
+            if len(functions_source) >= len(function_names):
                 break
-    if len(functions_source) != len(function_names):
+    if len(functions_source) < len(function_names):
         raise ValueError(f"Could not find all functions in {file_path}: {function_names} not found,"
                          f"functions not found: {set(function_names) - set(functions_source.keys())}")
     if return_line_numbers:
@@ -952,9 +952,6 @@ class SubclassJSONSerializer:
                 return subclass._from_json(subclass_data)
 
         raise ValueError("Unknown type {}".format(data["_type"]))
-
-    save = to_json_file
-    load = from_json_file
 
 
 def _pickle_thread(thread_obj) -> Any:

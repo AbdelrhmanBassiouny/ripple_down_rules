@@ -1,10 +1,14 @@
 import os
 from textwrap import dedent
 
+from typing_extensions import List
+
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import PromptFor
+from ripple_down_rules.rdr_decorators import RDRDecorator
 from ripple_down_rules.user_interface.template_file_creator import TemplateFileCreator
 from test_rdr_world import World, Handle, Container
+from ripple_down_rules.datasets import Part, PhysicalObject, Robot
 
 
 
@@ -40,6 +44,31 @@ def test_func_name_with_not_needed_types():
 
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conditions, case_query)
     assert func_name == "conditions_for_world_views_of_type_handle"
+
+def test_rdr_decorator_func_name():
+    class Example:
+        def is_a_robot(self) -> bool:
+            pass
+        def select_objects_that_are_parts_of_robot(self, objects: List[PhysicalObject], robot: Robot) -> List[PhysicalObject]:
+            pass
+    example = Example()
+    cq = RDRDecorator.create_case_query_from_method(example.is_a_robot, bool, True,
+                                               "output_")
+    func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, cq)
+    assert func_name == "example_is_a_robot"
+    func_name = TemplateFileCreator.get_func_name(PromptFor.Conditions, cq)
+    assert func_name == "conditions_for_example_is_a_robot"
+
+    objects = [Part("Object1"), Part("Object2"), Part("Object3")]
+    robot = Robot("Robot1", objects[:2])
+    cq = RDRDecorator.create_case_query_from_method(
+        example.select_objects_that_are_parts_of_robot, (List[PhysicalObject],),
+        False, "output_", *(objects, robot))
+
+    func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, cq)
+    assert func_name == "example_select_objects_that_are_parts_of_robot"
+    func_name = TemplateFileCreator.get_func_name(PromptFor.Conditions, cq)
+    assert func_name == "conditions_for_example_select_objects_that_are_parts_of_robot"
 
 def test_load():
     # Test the load function

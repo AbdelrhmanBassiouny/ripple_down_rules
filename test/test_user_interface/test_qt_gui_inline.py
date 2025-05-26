@@ -61,5 +61,6 @@ class GUITestCase(unittest.TestCase):
         self.viewer.title_label.setText(style("Press `Save` To Test", "o", 28, 'bold'))
         self.viewer.show()
         self.app.exec()
-        self.assertTrue(os.path.exists(f"{os.path.dirname(__file__)}/../test_results/grdr_viewer.json"))
+        self.assertTrue(os.path.exists(f"{os.path.dirname(__file__)}/../test_results/grdr_viewer/{
+        grdr.model_name}/rdr_metadata/{grdr.model_name}.json"))
 

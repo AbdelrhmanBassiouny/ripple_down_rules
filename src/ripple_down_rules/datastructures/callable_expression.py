@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import logging
+import os
 from _ast import AST
 from enum import Enum
 
@@ -10,7 +11,7 @@ from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 from .case import create_case, Case
 from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json, is_iterable, \
     build_user_input_from_conclusion, encapsulate_user_input, extract_function_source, are_results_subclass_of_types, \
-    make_list
+    make_list, get_imports_from_scope
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -174,6 +175,24 @@ class CallableExpression(SubclassJSONSerializer):
         if new_function_body is None:
             return
         self.user_input = self.encapsulating_function + '\n' + new_function_body
+
+    def write_to_python_file(self, file_path: str, append: bool = False):
+        """
+        Write the callable expression to a python file.
+
+        :param file_path: The path to the file where the callable expression will be written.
+        :param append: If True, the callable expression will be appended to the file. If False,
+         the file will be overwritten.
+        """
+        imports = '\n'.join(get_imports_from_scope(self.scope))
+        if append and os.path.exists(file_path):
+            with open(file_path, 'a') as f:
+                f.write('\n\n\n' + imports + '\n\n\n')
+                f.write(self.user_input)
+        else:
+            with open(file_path, 'w') as f:
+                f.write(imports + '\n\n\n')
+                f.write(self.user_input)
 
     @property
     def user_input(self):
