@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 from unittest import TestCase
 
-from PyQt6.QtWidgets import QApplication
+try:
+    from PyQt6.QtWidgets import QApplication
+except ImportError as e:
+    QApplication = None
 
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
@@ -88,8 +91,8 @@ class Cabinet(View):
 class TestRDRWorld(TestCase):
     drawer_case_queries: List[CaseQuery]
     world: World
-    app: QApplication
-    viewer: RDRCaseViewer
+    app: Optional[QApplication] = None
+    viewer: Optional[RDRCaseViewer] = None
 
     @classmethod
     def setUpClass(cls):
@@ -115,8 +118,10 @@ class TestRDRWorld(TestCase):
         # print(all_possible_drawers)
         cls.drawer_case_queries = [CaseQuery(possible_drawer, "correct", (bool,), True, default_value=False)
                                    for possible_drawer in all_possible_drawers]
-        cls.app = QApplication(sys.argv)
-        cls.viewer = RDRCaseViewer(save_file="./test_generated_rdrs")
+
+        if RDRCaseViewer is not None and QApplication is not None:
+            cls.app = QApplication(sys.argv)
+            cls.viewer = RDRCaseViewer(save_file="./test_generated_rdrs")
 
     def test_view_rdr(self):
         self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)
