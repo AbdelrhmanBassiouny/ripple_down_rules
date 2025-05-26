@@ -10,4 +10,4 @@ colorama
 pygments
 sqlalchemy
 pandas
-pyparsing
+pyparsing>=3.2.3
