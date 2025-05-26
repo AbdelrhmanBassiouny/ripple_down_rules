@@ -207,7 +207,7 @@ then
 return case.aquatic == 1
 ```
 
-The rule tree generated from that will look like this:
+The rule tree generated from fitting all the dataset will look like this:
 ![species_rdr](https://raw.githubusercontent.com/AbdelrhmanBassiouny/ripple_down_rules/main/images/scrdr.png)
 
 
