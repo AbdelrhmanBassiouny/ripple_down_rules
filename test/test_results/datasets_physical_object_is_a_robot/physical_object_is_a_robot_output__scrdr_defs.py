@@ -1,6 +1,6 @@
-from typing import Dict
-from ripple_down_rules.datasets import PhysicalObject
 from ripple_down_rules.datasets import Robot
+from ripple_down_rules.datasets import PhysicalObject
+from typing import Dict
 
 
 def conditions_226969243620390858682731042391766665817(case):
