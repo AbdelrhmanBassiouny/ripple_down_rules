@@ -1,8 +1,8 @@
-from typing import Union
-from typing import Dict
 from ripple_down_rules.datasets import Robot
-from ripple_down_rules.datasets import PhysicalObject
 from typing import List
+from typing import Union
+from ripple_down_rules.datasets import PhysicalObject
+from typing import Dict
 from typing_extensions import Union
 
 

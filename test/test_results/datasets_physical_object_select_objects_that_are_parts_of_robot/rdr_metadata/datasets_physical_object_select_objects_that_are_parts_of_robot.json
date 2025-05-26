@@ -13,10 +13,10 @@
                     ],
                     "scope": {
                         "Union": "typing.Union",
-                        "List": "typing.List",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
                         "Dict": "typing.Dict",
-                        "Robot": "ripple_down_rules.datasets.Robot"
+                        "Robot": "ripple_down_rules.datasets.Robot",
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
+                        "List": "typing.List"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -34,10 +34,10 @@
                     ],
                     "scope": {
                         "Union": "typing.Union",
-                        "List": "typing.List",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
                         "Dict": "typing.Dict",
-                        "Robot": "ripple_down_rules.datasets.Robot"
+                        "Robot": "ripple_down_rules.datasets.Robot",
+                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
+                        "List": "typing.List"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
