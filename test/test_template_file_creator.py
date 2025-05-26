@@ -8,7 +8,7 @@ from ripple_down_rules.datastructures.enums import PromptFor
 from ripple_down_rules.rdr_decorators import RDRDecorator
 from ripple_down_rules.user_interface.template_file_creator import TemplateFileCreator
 from test_rdr_world import World, Handle, Container
-from ripple_down_rules.datasets import Part, PhysicalObject, Robot
+from datasets import Part, PhysicalObject, Robot
 
 
 

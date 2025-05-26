@@ -4,8 +4,8 @@ from unittest import TestCase
 
 from typing_extensions import List, Optional
 
-from ripple_down_rules.datasets import Habitat, Species
-from ripple_down_rules.datasets import load_zoo_dataset
+from datasets import Habitat, Species
+from datasets import load_zoo_dataset
 from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import MCRDRMode

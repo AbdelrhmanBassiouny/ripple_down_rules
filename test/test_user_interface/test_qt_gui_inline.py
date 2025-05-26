@@ -3,15 +3,17 @@ import unittest
 
 try:
     from PyQt6.QtWidgets import QApplication
+    from ripple_down_rules.user_interface.gui import RDRCaseViewer, style
 except ImportError as e:
     print(f"Skipping GUI tests due to missing PyQt6: {e}")
     QApplication = None
+    RDRCaseViewer = None
+    style = None
 from typing_extensions import List
 
-from ripple_down_rules.datasets import load_zoo_dataset, Species
+from datasets import load_zoo_dataset, Species
 from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from ripple_down_rules.user_interface.gui import RDRCaseViewer, style
 from test_helpers.helpers import get_fit_grdr
 from test_object_diagram import Person, Address
 

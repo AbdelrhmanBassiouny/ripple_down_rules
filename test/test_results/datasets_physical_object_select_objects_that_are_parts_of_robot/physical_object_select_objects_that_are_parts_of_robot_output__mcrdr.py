@@ -6,7 +6,7 @@ from ripple_down_rules.rdr import MultiClassRDR
 
 
 attribute_name = 'output_'
-conclusion_type = (PhysicalObject, set, list,)
+conclusion_type = (set, PhysicalObject, list,)
 type_ = MultiClassRDR
 
 

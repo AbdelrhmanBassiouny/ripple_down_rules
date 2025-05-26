@@ -32,7 +32,7 @@ and render the tree to a file:
 ```python
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.rdr import SingleClassRDR
-from ripple_down_rules.datasets import load_zoo_dataset
+from datasets import load_zoo_dataset
 from ripple_down_rules.utils import render_tree
 
 all_cases, targets = load_zoo_dataset()

@@ -37,4 +37,5 @@ jobs:
     - name: Run tests
       run: |
         source venv/bin/activate
-        pytest test/
+        cd test
+        pytest

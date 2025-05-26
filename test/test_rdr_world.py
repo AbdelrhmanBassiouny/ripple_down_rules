@@ -8,12 +8,13 @@ from unittest import TestCase
 
 try:
     from PyQt6.QtWidgets import QApplication
+    from ripple_down_rules.user_interface.gui import RDRCaseViewer
 except ImportError as e:
     QApplication = None
+    RDRCaseViewer = None
 
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
-from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.helpers import is_matching
 from ripple_down_rules.rdr import GeneralRDR
 

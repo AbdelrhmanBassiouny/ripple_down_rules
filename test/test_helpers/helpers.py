@@ -2,13 +2,13 @@ import os
 
 from typing_extensions import List, Any, Tuple, Type
 
-from ripple_down_rules.datasets import Species, Habitat
+from datasets import Species, Habitat
 from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import Category
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import MultiClassRDR, SingleClassRDR, GeneralRDR
-from ripple_down_rules.utils import make_set, is_iterable, flatten_list
+from ripple_down_rules.utils import make_set
 
 
 def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "species",

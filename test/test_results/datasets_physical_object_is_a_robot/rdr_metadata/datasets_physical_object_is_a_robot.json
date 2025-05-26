@@ -12,9 +12,9 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Dict": "typing.Dict",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
-                        "Robot": "ripple_down_rules.datasets.Robot"
+                        "PhysicalObject": "datasets.PhysicalObject",
+                        "Robot": "datasets.Robot",
+                        "Dict": "typing.Dict"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -29,9 +29,9 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Dict": "typing.Dict",
-                        "PhysicalObject": "ripple_down_rules.datasets.PhysicalObject",
-                        "Robot": "ripple_down_rules.datasets.Robot"
+                        "PhysicalObject": "datasets.PhysicalObject",
+                        "Robot": "datasets.Robot",
+                        "Dict": "typing.Dict"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",

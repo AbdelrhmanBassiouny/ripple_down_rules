@@ -1,5 +1,5 @@
-from ripple_down_rules.datasets import Robot
-from ripple_down_rules.datasets import PhysicalObject
+from datasets import Robot
+from datasets import PhysicalObject
 from typing import Dict
 
 
