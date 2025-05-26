@@ -5,5 +5,4 @@ format: jb-book
 root: intro
 chapters:
 - file: bibliography
-- file: kinematic_world
 - file: autoapi/index
