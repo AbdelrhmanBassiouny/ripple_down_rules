@@ -259,7 +259,8 @@ class CallableExpression(SubclassJSONSerializer):
                 "conclusion_type": [get_full_class_name(t) for t in self.conclusion_type]
                 if self.conclusion_type is not None else None,
                 "scope": {k: get_full_class_name(v) for k, v in self.scope.items()
-                          if hasattr(v, '__module__') and hasattr(v, '__name__')},
+                          if hasattr(v, '__module__') and hasattr(v, '__name__')
+                          and v.__module__ is not None and v.__name__ is not None},
                 "conclusion": conclusion_to_json(self.conclusion),
                 "mutually_exclusive": self.mutually_exclusive,
                 }

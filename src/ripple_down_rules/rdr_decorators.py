@@ -24,7 +24,6 @@ class RDRDecorator:
     def __init__(self, models_dir: str,
                  output_type: Tuple[Type],
                  mutual_exclusive: bool,
-                 python_dir: Optional[str] = None,
                  output_name: str = "output_",
                  fit: bool = True,
                  expert: Optional[Expert] = None):
@@ -32,7 +31,6 @@ class RDRDecorator:
         :param models_dir: The directory to save/load the RDR models.
         :param output_type: The type of the output. This is used to create the RDR model.
         :param mutual_exclusive: If True, the output types are mutually exclusive.
-        :param python_dir: The directory to save the RDR model as a python file.
          If None, the RDR model will not be saved as a python file.
         :param output_name: The name of the output. This is used to create the RDR model.
         :param fit: If True, the function will be in fit mode. This means that the RDR will prompt the user for the
@@ -47,7 +45,6 @@ class RDRDecorator:
         self.output_type = output_type
         self.parsed_output_type: List[Type] = []
         self.mutual_exclusive = mutual_exclusive
-        self.rdr_python_path: Optional[str] = python_dir
         self.output_name = output_name
         self.fit: bool = fit
         self.expert: Optional[Expert] = expert
@@ -64,8 +61,6 @@ class RDRDecorator:
                 self.initialize_rdr_model_name_and_load(func)
 
             if self.fit:
-                expert_answers_path = os.path.join(self.rdr_models_dir, self.model_name, "expert_answers")
-                self.expert = self.expert or Human(answers_save_path=expert_answers_path)
                 case_query = self.create_case_query_from_method(func, self.parsed_output_type,
                                                                 self.mutual_exclusive, self.output_name,
                                                                 *args, **kwargs)
@@ -148,9 +143,12 @@ class RDRDecorator:
         """
         Load the RDR model from the specified directory.
         """
-        if self.model_name is not None and os.path.exists(os.path.join(self.rdr_models_dir, self.model_name)):
-            self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name)
-        else:
+        self.rdr = None
+        if self.model_name is not None:
+            model_path = os.path.join(self.rdr_models_dir, self.model_name + f"/rdr_metadata/{self.model_name}.json")
+            if os.path.exists(os.path.join(self.rdr_models_dir, model_path)):
+                self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name)
+        if self.rdr is None:
             self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name)
 
     def update_from_python(self):

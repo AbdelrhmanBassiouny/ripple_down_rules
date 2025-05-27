@@ -17,14 +17,15 @@ def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
                   expert_answers_file: str = "scrdr_expert_answers_fit",
                   draw_tree: bool = False,
                   load_answers: bool = True,
-                  save_answers: bool = False) -> Tuple[SingleClassRDR, List[CaseQuery]]:
+                  save_answers: bool = False,
+                  ask_always: bool = False) -> Tuple[SingleClassRDR, List[CaseQuery]]:
     filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
     expert = Human(use_loaded_answers=load_answers)
     if load_answers:
         expert.load_answers(filename)
 
     targets = [None for _ in cases] if targets is None or len(targets) == 0 else targets
-    scrdr = SingleClassRDR()
+    scrdr = SingleClassRDR(ask_always=ask_always)
     case_queries = [CaseQuery(case, attribute_name, (attribute_type,), True, _target=target)
                     for case, target in zip(cases, targets)]
     scrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
@@ -43,13 +44,14 @@ def get_fit_mcrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
                   expert_answers_file: str = "mcrdr_expert_answers_stop_only_fit",
                   draw_tree: bool = False,
                   load_answers: bool = True,
-                  save_answers: bool = False) -> MultiClassRDR:
+                  save_answers: bool = False,
+                  ask_always: bool = False) -> MultiClassRDR:
     filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
     expert = Human(use_loaded_answers=load_answers)
     if load_answers:
         expert.load_answers(filename)
     targets = [None for _ in cases] if targets is None or len(targets) == 0 else targets
-    mcrdr = MultiClassRDR()
+    mcrdr = MultiClassRDR(ask_always=ask_always)
     case_queries = [CaseQuery(case, attribute_name, (attribute_type,), mutually_exclusive, _target=target)
                     for case, target in zip(cases, targets)]
     mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
@@ -66,7 +68,8 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
                  load_answers: bool = True,
                  save_answers: bool = False,
                  append: bool = False,
-                 no_targets: bool = False) -> Tuple[GeneralRDR, List[dict]]:
+                 no_targets: bool = False,
+                 ask_always: bool = False) -> Tuple[GeneralRDR, List[dict]]:
     filename = os.path.join(os.path.dirname(__file__), '..', expert_answers_dir, expert_answers_file)
     expert = Human(use_loaded_answers=load_answers, append=append)
     if load_answers:
@@ -74,7 +77,7 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
 
     fit_scrdr, _ = get_fit_scrdr(cases, targets, draw_tree=False)
 
-    grdr = GeneralRDR()
+    grdr = GeneralRDR(ask_always=ask_always)
     grdr.add_rdr(fit_scrdr)
 
     n = 20

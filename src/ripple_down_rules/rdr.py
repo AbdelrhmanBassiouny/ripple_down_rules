@@ -78,7 +78,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     """
 
     def __init__(self, start_rule: Optional[Rule] = None, viewer: Optional[RDRCaseViewer] = None,
-                 save_dir: Optional[str] = None, ask_always: bool = True, model_name: Optional[str] = None):
+                 save_dir: Optional[str] = None, ask_always: bool = False, model_name: Optional[str] = None):
         """
         :param start_rule: The starting rule for the classifier.
         :param viewer: The viewer gui to use for the classifier. If None, no viewer is used.
@@ -241,12 +241,18 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.case_type = case_query.case_type if self.case_type is None else self.case_type
         self.case_name = case_query.case_name if self.case_name is None else self.case_name
 
-        expert = expert or Human(answers_save_path=self.save_dir + '/expert_answers' if self.save_dir else None)
+        expert = expert or Human(viewer=self.viewer,
+                                 answers_save_path=self.save_dir + '/expert_answers'
+                                 if self.save_dir else None)
 
         if case_query.target is None:
             case_query_cp = copy(case_query)
             conclusions = self.classify(case_query_cp.case, modify_case=True)
-            if self.ask_always or conclusions is None or is_iterable(conclusions) and len(conclusions) == 0:
+            if (self.ask_always or conclusions is None
+                or is_iterable(conclusions) and len(conclusions) == 0
+                or (isinstance(conclusions, dict) and (case_query_cp.attribute_name not in conclusions
+                    or not any(type(c) in case_query_cp.core_attribute_type
+                               for c in make_list(conclusions[case_query_cp.attribute_name]))))):
                 expert.ask_for_conclusion(case_query_cp)
                 case_query.target = case_query_cp.target
             if case_query.target is None:
@@ -646,12 +652,12 @@ class MultiClassRDR(RDRWithCodeWriter):
     """
 
     def __init__(self, start_rule: Optional[MultiClassTopRule] = None,
-                 mode: MCRDRMode = MCRDRMode.StopOnly):
+                 mode: MCRDRMode = MCRDRMode.StopOnly, **kwargs):
         """
         :param start_rule: The starting rules for the classifier.
         :param mode: The mode of the classifier, either StopOnly or StopPlusRule, or StopPlusRuleCombined.
         """
-        super(MultiClassRDR, self).__init__(start_rule)
+        super(MultiClassRDR, self).__init__(start_rule, **kwargs)
         self.mode: MCRDRMode = mode
 
     def classify(self, case: Union[Case, SQLTable], modify_case: bool = False) -> Set[Any]:
