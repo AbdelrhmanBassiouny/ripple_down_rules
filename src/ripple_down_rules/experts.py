@@ -147,7 +147,7 @@ class Expert(ABC):
                     imports = ''
                 if func_source is not None:
                     uid = uuid.uuid4().hex
-                    func_source = encapsulate_user_input(func_source, CallableExpression.encapsulating_function + f'_{uid}')
+                    func_source = encapsulate_user_input(func_source, CallableExpression.get_encapsulating_function(f'_{uid}'))
                 else:
                     func_source = 'pass  # No user input provided for this case.\n'
                 f.write(imports + func_source + '\n' + '\n\n\n\'===New Answer===\'\n\n\n')
@@ -241,6 +241,7 @@ class Human(Expert):
             except IndexError:
                 self.use_loaded_answers = False
         if user_input is not None:
+            case_query.scope.update(loaded_scope)
             condition = CallableExpression(user_input, bool, scope=case_query.scope)
         else:
             user_input, condition = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conditions)
@@ -266,6 +267,7 @@ class Human(Expert):
             try:
                 loaded_scope, expert_input = self.all_expert_answers.pop(0)
                 if expert_input is not None:
+                    case_query.scope.update(loaded_scope)
                     expression = CallableExpression(expert_input, case_query.attribute_type,
                                                     scope=case_query.scope,
                                                     mutually_exclusive=case_query.mutually_exclusive)

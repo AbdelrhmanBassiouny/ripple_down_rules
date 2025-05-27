@@ -93,7 +93,6 @@ class CallableExpression(SubclassJSONSerializer):
     A callable that is constructed from a string statement written by an expert.
     """
     encapsulating_function_name: str = "_get_value"
-    encapsulating_function: str = f"def {encapsulating_function_name}(case):"
 
     def __init__(self, user_input: Optional[str] = None,
                  conclusion_type: Optional[Tuple[Type]] = None,
@@ -117,7 +116,7 @@ class CallableExpression(SubclassJSONSerializer):
         if user_input is None:
             user_input = build_user_input_from_conclusion(conclusion)
         self.conclusion: Optional[Any] = conclusion
-        self._user_input: str = encapsulate_user_input(user_input, self.encapsulating_function)
+        self._user_input: str = encapsulate_user_input(user_input, self.get_encapsulating_function())
         if conclusion_type is not None:
             if is_iterable(conclusion_type):
                 conclusion_type = tuple(conclusion_type)
@@ -131,6 +130,13 @@ class CallableExpression(SubclassJSONSerializer):
         self.visitor = VariableVisitor()
         self.visitor.visit(self.expression_tree)
         self.mutually_exclusive: bool = mutually_exclusive
+
+    @classmethod
+    def get_encapsulating_function(cls, postfix: str = '') -> str:
+        """
+        Get the encapsulating function that is used to wrap the user input.
+        """
+        return f"def {cls.encapsulating_function_name}{postfix}(case):"
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
@@ -161,8 +167,8 @@ class CallableExpression(SubclassJSONSerializer):
         """
         Combine this callable expression with another callable expression using the 'and' operator.
         """
-        cond1_user_input = self.user_input.replace(self.encapsulating_function, "def _cond1(case):")
-        cond2_user_input = other.user_input.replace(self.encapsulating_function, "def _cond2(case):")
+        cond1_user_input = self.user_input.replace(self.get_encapsulating_function(), "def _cond1(case):")
+        cond2_user_input = other.user_input.replace(self.get_encapsulating_function(), "def _cond2(case):")
         new_user_input = (f"{cond1_user_input}\n"
                           f"{cond2_user_input}\n"
                           f"return _cond1(case) and _cond2(case)")
@@ -175,7 +181,7 @@ class CallableExpression(SubclassJSONSerializer):
         new_function_body = extract_function_source(file_path, [function_name])[function_name]
         if new_function_body is None:
             return
-        self.user_input = self.encapsulating_function + '\n' + new_function_body
+        self.user_input = self.get_encapsulating_function() + '\n' + new_function_body
 
     def write_to_python_file(self, file_path: str, append: bool = False):
         """
@@ -208,7 +214,7 @@ class CallableExpression(SubclassJSONSerializer):
         Set the user input.
         """
         if value is not None:
-            self._user_input = encapsulate_user_input(value, self.encapsulating_function)
+            self._user_input = encapsulate_user_input(value, self.get_encapsulating_function())
             self.scope = get_used_scope(self.user_input, self.scope)
             self.expression_tree = parse_string_to_expression(self.user_input)
             self.code = compile_expression_to_code(self.expression_tree)
@@ -286,8 +292,8 @@ def parse_string_to_expression(expression_str: str) -> AST:
     :param expression_str: The string which will be parsed.
     :return: The parsed expression.
     """
-    if not expression_str.startswith(CallableExpression.encapsulating_function):
-        expression_str = encapsulate_user_input(expression_str, CallableExpression.encapsulating_function)
+    if not expression_str.startswith(CallableExpression.get_encapsulating_function()):
+        expression_str = encapsulate_user_input(expression_str, CallableExpression.get_encapsulating_function())
     mode = 'exec' if expression_str.startswith('def') else 'eval'
     tree = ast.parse(expression_str, mode=mode)
     logging.debug(f"AST parsed successfully: {ast.dump(tree)}")
