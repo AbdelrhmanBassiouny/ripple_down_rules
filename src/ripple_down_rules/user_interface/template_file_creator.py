@@ -300,6 +300,7 @@ class TemplateFileCreator:
             if isinstance(node, ast.FunctionDef) and node.name == func_name:
                 exec_globals = {}
                 scope = extract_imports(tree=tree)
+                updates.update(scope)
                 exec(source, scope, exec_globals)
                 user_function = exec_globals[func_name]
                 updates[func_name] = user_function
