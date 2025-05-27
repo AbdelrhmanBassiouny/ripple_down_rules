@@ -138,7 +138,12 @@ class Expert(ABC):
             os.makedirs(dir_name, exist_ok=True)
             with open(dir_name + '/__init__.py', 'w') as f:
                 f.write('# This is an empty init file to make the directory a package.\n')
-        action = 'w' if not self.append else 'a'
+        # Current file data
+        current_file_data = None
+        if os.path.exists(path + '.py'):
+            with open(path + '.py', 'r') as f:
+                current_file_data = f.read()
+        action = 'a' if self.append and current_file_data is not None else 'w'
         with open(path + '.py', action) as f:
             for scope, func_source in self.all_expert_answers:
                 if len(scope) > 0:
@@ -150,6 +155,8 @@ class Expert(ABC):
                     func_source = encapsulate_user_input(func_source, CallableExpression.get_encapsulating_function(f'_{uid}'))
                 else:
                     func_source = 'pass  # No user input provided for this case.\n'
+                if func_source[1:] in current_file_data:
+                    continue
                 f.write(imports + func_source + '\n' + '\n\n\n\'===New Answer===\'\n\n\n')
 
     def load_answers(self, path: Optional[str] = None):
