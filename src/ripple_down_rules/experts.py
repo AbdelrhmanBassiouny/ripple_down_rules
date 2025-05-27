@@ -194,6 +194,7 @@ class Expert(ABC):
             answer = answer.strip('\n').strip()
             if 'def ' not in answer and 'pass' in answer:
                 self.all_expert_answers.append(({}, None))
+                continue
             scope = extract_imports(tree=ast.parse(answer))
             function_source = all_function_sources[i].replace(all_function_sources_names[i],
                                                               CallableExpression.encapsulating_function_name)
