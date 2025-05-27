@@ -18,7 +18,6 @@ from textwrap import dedent
 from types import NoneType
 from typing import List
 
-from casadi import conic_n_out
 
 try:
     import matplotlib
