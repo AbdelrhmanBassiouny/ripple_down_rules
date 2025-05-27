@@ -116,7 +116,7 @@ def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     """
     imports = []
     for k, v in scope.items():
-        if not hasattr(v, "__module__") or not hasattr(v, "__name__"):
+        if not hasattr(v, "__module__") or not hasattr(v, "__name__") or v.__module__ is None:
             continue
         imports.append(f"from {v.__module__} import {v.__name__}")
     return imports
