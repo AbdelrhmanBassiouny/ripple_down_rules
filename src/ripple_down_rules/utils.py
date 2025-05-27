@@ -503,7 +503,7 @@ def serialize_dataclass(obj: Any, seen=None) -> Any:
     elif isinstance(obj, dict):
         serialized_dict = {}
         for k, v in obj.items():
-            if not isinstance(k, (str, int, bool, float, None)):
+            if not isinstance(k, (str, int, bool, float, type(None))):
                 continue
             serialized_dict[k] = serialize_dataclass(v, seen)
         return serialized_dict
