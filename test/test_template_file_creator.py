@@ -7,6 +7,7 @@ from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import PromptFor
 from ripple_down_rules.rdr_decorators import RDRDecorator
 from ripple_down_rules.user_interface.template_file_creator import TemplateFileCreator
+from ripple_down_rules.utils import make_set
 from test_rdr_world import World, Handle, Container
 from datasets import Part, PhysicalObject, Robot
 
@@ -81,6 +82,6 @@ def test_load():
         f.write(source_code)
     code_lines, updates = TemplateFileCreator.load("test.py", "test_func")
     assert code_lines == func_code.splitlines()
-    assert list(updates.keys()) == ["test_func"]
+    assert make_set(updates.keys()) == {"test_func", "World"}
     assert updates["test_func"](world) == world
     os.remove("test.py")
