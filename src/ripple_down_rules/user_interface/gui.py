@@ -489,6 +489,7 @@ class RDRCaseViewer(QMainWindow):
                 self.code_lines, self.template_file_creator.func_name,
                 self.template_file_creator.function_signature,
                 self.template_file_creator.func_doc, self.case_query)
+            self.case_query.scope.update(updates)
         self.template_file_creator = None
 
     def update_attribute_layout(self, obj, name: str):
