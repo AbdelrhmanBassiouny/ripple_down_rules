@@ -1,6 +1,6 @@
-from datasets import PhysicalObject
-from datasets import Robot
 from typing import Dict
+from datasets import Robot
+from datasets import PhysicalObject
 
 
 def conditions_226969243620390858682731042391766665817(case):

@@ -493,7 +493,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         return self.start_rule.conclusion_name
 
     def _to_json(self) -> Dict[str, Any]:
-        return {"start_rule": self.start_rule.to_json(),  "generated_python_file_name": self.generated_python_file_name,
+        return {"start_rule": self.start_rule.to_json(),
+                "generated_python_file_name": self.generated_python_file_name,
                 "name": self.name,
                 "case_type": get_full_class_name(self.case_type) if self.case_type is not None else None,
                 "case_name": self.case_name}

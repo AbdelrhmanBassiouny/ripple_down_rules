@@ -497,21 +497,8 @@ def serialize_dataclass(obj: Any, seen=None) -> Any:
             value = getattr(obj, f.name)
             result['fields'][f.name] = serialize_dataclass(value, seen)
         return result
-    elif isinstance(obj, list):
-        return [serialize_dataclass(v, seen) for v in obj]
-    elif isinstance(obj, dict):
-        serialized_dict = {}
-        for k, v in obj.items():
-            if not isinstance(k, (str, int, bool, float, type(None))):
-                continue
-            serialized_dict[k] = serialize_dataclass(v, seen)
-        return serialized_dict
     else:
-        try:
-            json.dumps(obj)  # Check if the object is JSON serializable
-            return obj
-        except TypeError:
-            return None
+        return SubclassJSONSerializer.to_json_static(obj, seen)
 
 
 def deserialize_dataclass(data: Any, refs: Optional[Dict[str, Any]] = None) -> Any:
@@ -875,10 +862,26 @@ class SubclassJSONSerializer:
         return data
 
     @staticmethod
-    def to_json_static(obj) -> Dict[str, Any]:
-        if is_dataclass(obj):
-            return serialize_dataclass(obj)
-        return {"_type": get_full_class_name(obj.__class__), **obj._to_json()}
+    def to_json_static(obj, seen=None) -> Any:
+        if isinstance(obj, SubclassJSONSerializer):
+            return {"_type": get_full_class_name(obj.__class__), **obj._to_json()}
+        elif is_dataclass(obj):
+            return serialize_dataclass(obj, seen)
+        elif isinstance(obj, list):
+            return [SubclassJSONSerializer.to_json_static(v, seen) for v in obj]
+        elif isinstance(obj, dict):
+            serialized_dict = {}
+            for k, v in obj.items():
+                if not isinstance(k, (str, int, bool, float, type(None))):
+                    continue
+                serialized_dict[k] = SubclassJSONSerializer.to_json_static(v, seen)
+            return serialized_dict
+        else:
+            try:
+                json.dumps(obj)  # Check if the object is JSON serializable
+                return obj
+            except TypeError:
+                return None
 
     def to_json(self) -> Dict[str, Any]:
         return self.to_json_static(self)
