@@ -18,6 +18,8 @@ from textwrap import dedent
 from types import NoneType
 from typing import List
 
+from casadi import conic_n_out
+
 try:
     import matplotlib
     from matplotlib import pyplot as plt
@@ -499,7 +501,12 @@ def serialize_dataclass(obj: Any, seen=None) -> Any:
     elif isinstance(obj, list):
         return [serialize_dataclass(v, seen) for v in obj]
     elif isinstance(obj, dict):
-        return {k: serialize_dataclass(v, seen) for k, v in obj.items()}
+        serialized_dict = {}
+        for k, v in obj.items():
+            if not isinstance(k, (str, int, bool, float, None)):
+                continue
+            serialized_dict[k] = serialize_dataclass(v, seen)
+        return serialized_dict
     else:
         try:
             json.dumps(obj)  # Check if the object is JSON serializable
