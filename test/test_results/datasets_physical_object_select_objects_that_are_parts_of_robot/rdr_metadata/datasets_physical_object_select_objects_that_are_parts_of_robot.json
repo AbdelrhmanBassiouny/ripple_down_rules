@@ -12,11 +12,11 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Robot": "datasets.Robot",
-                        "List": "typing.List",
-                        "Union": "typing.Union",
+                        "PhysicalObject": "datasets.PhysicalObject",
                         "Dict": "typing.Dict",
-                        "PhysicalObject": "datasets.PhysicalObject"
+                        "Robot": "datasets.Robot",
+                        "Union": "typing.Union",
+                        "List": "typing.List"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -33,11 +33,11 @@
                         "builtins.list"
                     ],
                     "scope": {
-                        "Robot": "datasets.Robot",
-                        "List": "typing.List",
-                        "Union": "typing.Union",
+                        "PhysicalObject": "datasets.PhysicalObject",
                         "Dict": "typing.Dict",
-                        "PhysicalObject": "datasets.PhysicalObject"
+                        "Robot": "datasets.Robot",
+                        "Union": "typing.Union",
+                        "List": "typing.List"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",

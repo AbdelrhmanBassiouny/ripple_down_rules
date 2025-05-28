@@ -84,6 +84,7 @@ class TemplateFileCreator:
         self.func_doc: str = self.get_func_doc()
         self.function_signature: str = self.get_function_signature()
         self.editor: Optional[Editor] = detect_available_editor()
+        self.editor_cmd: Optional[str] = os.environ.get("RDR_EDITOR_CMD")
         self.workspace: str = os.environ.get("RDR_EDITOR_WORKSPACE", os.path.dirname(self.case_query.scope['__file__']))
         self.temp_file_path: str = os.path.join(self.workspace, "edit_code_here.py")
 
@@ -98,7 +99,7 @@ class TemplateFileCreator:
         return make_list(output_type) if output_type is not None else None
 
     def edit(self):
-        if self.editor is None:
+        if self.editor is None and self.editor_cmd is None:
             self.print_func(
                 f"{Fore.RED}ERROR:: No editor found. Please install PyCharm, VSCode or code-server.{Style.RESET_ALL}")
             return
@@ -112,7 +113,11 @@ class TemplateFileCreator:
         """
         Open the file in the available editor.
         """
-        if self.editor == Editor.Pycharm:
+        if self.editor_cmd is not None:
+            subprocess.Popen([self.editor_cmd, self.temp_file_path],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        elif self.editor == Editor.Pycharm:
             subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
                              stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL)
