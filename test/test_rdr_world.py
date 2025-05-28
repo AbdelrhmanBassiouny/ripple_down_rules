@@ -122,7 +122,7 @@ class TestRDRWorld(TestCase):
 
         if RDRCaseViewer is not None and QApplication is not None:
             cls.app = QApplication(sys.argv)
-            cls.viewer = RDRCaseViewer(save_file="./test_generated_rdrs")
+            cls.viewer = RDRCaseViewer(save_dir="./test_generated_rdrs")
 
     def test_view_rdr(self):
         self.get_view_rdr(use_loaded_answers=True, save_answers=False, append=False)

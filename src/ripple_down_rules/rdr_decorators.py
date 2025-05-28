@@ -14,6 +14,7 @@ from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import Category
 from ripple_down_rules.experts import Expert, Human
 from ripple_down_rules.rdr import GeneralRDR, RippleDownRules
+from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.utils import get_method_args_as_dict, get_func_rdr_model_name, make_set, \
     get_method_class_if_exists, get_method_name, str_to_snake_case
 
@@ -26,7 +27,10 @@ class RDRDecorator:
                  mutual_exclusive: bool,
                  output_name: str = "output_",
                  fit: bool = True,
-                 expert: Optional[Expert] = None):
+                 expert: Optional[Expert] = None,
+                 ask_always: bool = False,
+                 update_existing_rules: bool = True,
+                 viewer: Optional[RDRCaseViewer] = None):
         """
         :param models_dir: The directory to save/load the RDR models.
         :param output_type: The type of the output. This is used to create the RDR model.
@@ -38,6 +42,9 @@ class RDRDecorator:
             classification mode. This means that the RDR will classify the function's output based on the RDR model.
         :param expert: The expert that will be used to prompt the user for the correct output. If None, a Human
             expert will be used.
+        :param ask_always: If True, the function will ask the user for a target if it doesn't exist.
+        :param update_existing_rules: If True, the function will update the existing RDR rules
+         even if they gave an output.
         :return: A decorator to use a GeneralRDR as a classifier that monitors and modifies the function's output.
         """
         self.rdr_models_dir = models_dir
@@ -48,6 +55,9 @@ class RDRDecorator:
         self.output_name = output_name
         self.fit: bool = fit
         self.expert: Optional[Expert] = expert
+        self.ask_always = ask_always
+        self.update_existing_rules = update_existing_rules
+        self.viewer = viewer
         self.load()
 
     def decorator(self, func: Callable) -> Callable:
@@ -59,26 +69,42 @@ class RDRDecorator:
                 self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
             if self.model_name is None:
                 self.initialize_rdr_model_name_and_load(func)
+            if self.expert is None:
+                self.expert = Human(viewer=self.viewer,
+                                    answers_save_path=self.rdr_models_dir + f'/expert_answers')
+
+            func_output = {self.output_name: func(*args, **kwargs)}
 
             if self.fit:
-                case_query = self.create_case_query_from_method(func, self.parsed_output_type,
+                case_query = self.create_case_query_from_method(func, func_output,
+                                                                self.parsed_output_type,
                                                                 self.mutual_exclusive, self.output_name,
                                                                 *args, **kwargs)
-                output = self.rdr.fit_case(case_query, expert=self.expert)
+                output = self.rdr.fit_case(case_query, expert=self.expert,
+                                           ask_always_for_target=self.ask_always,
+                                           update_existing_rules=self.update_existing_rules,
+                                           viewer=self.viewer)
+            else:
+                case, case_dict = self.create_case_from_method(func, func_output, *args, **kwargs)
+                output = self.rdr.classify(case)
+
+            if self.output_name in output:
                 return output[self.output_name]
             else:
-                case, case_dict = self.create_case_from_method(func, self.output_name, *args, **kwargs)
-                return self.rdr.classify(case)[self.output_name]
+                return func_output[self.output_name]
 
         return wrapper
 
     @staticmethod
-    def create_case_query_from_method(func: Callable, output_type, mutual_exclusive: bool,
-                                output_name: str = 'output_', *args, **kwargs) -> CaseQuery:
+    def create_case_query_from_method(func: Callable,
+                                      func_output: Dict[str, Any],
+                                      output_type, mutual_exclusive: bool,
+                                      output_name: str = 'output_', *args, **kwargs) -> CaseQuery:
         """
         Create a CaseQuery from the function and its arguments.
 
         :param func: The function to create a case from.
+        :param func_output: The output of the function as a dictionary, where the key is the output name.
         :param output_type: The type of the output.
         :param mutual_exclusive: If True, the output types are mutually exclusive.
         :param output_name: The name of the output in the case. Defaults to 'output_'.
@@ -87,7 +113,7 @@ class RDRDecorator:
         :return: A CaseQuery object representing the case.
         """
         output_type = make_set(output_type)
-        case, case_dict = RDRDecorator.create_case_from_method(func, output_name, *args, **kwargs)
+        case, case_dict = RDRDecorator.create_case_from_method(func, func_output, *args, **kwargs)
         scope = func.__globals__
         scope.update(case_dict)
         func_args_type_hints = get_type_hints(func)
@@ -97,19 +123,20 @@ class RDRDecorator:
                          is_function=True, function_args_type_hints=func_args_type_hints)
 
     @staticmethod
-    def create_case_from_method(func: Callable, output_name: str = "output_", *args, **kwargs) -> Tuple[Case, Dict[str, Any]]:
+    def create_case_from_method(func: Callable,
+                                func_output: Dict[str, Any],
+                                *args, **kwargs) -> Tuple[Case, Dict[str, Any]]:
         """
         Create a Case from the function and its arguments.
 
         :param func: The function to create a case from.
-        :param output_name: The name of the output in the case. Defaults to 'output_'.
+        :param func_output: A dictionary containing the output of the function, where the key is the output name.
         :param args: The positional arguments of the function.
         :param kwargs: The keyword arguments of the function.
         :return: A Case object representing the case.
         """
         case_dict = get_method_args_as_dict(func, *args, **kwargs)
-        func_output = func(*args, **kwargs)
-        case_dict.update({output_name: func_output})
+        case_dict.update(func_output)
         case_name = get_func_rdr_model_name(func)
         return create_case(case_dict, obj_name=case_name, max_recursion_idx=3), case_dict
 
@@ -148,8 +175,10 @@ class RDRDecorator:
             model_path = os.path.join(self.rdr_models_dir, self.model_name + f"/rdr_metadata/{self.model_name}.json")
             if os.path.exists(os.path.join(self.rdr_models_dir, model_path)):
                 self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name)
+                self.rdr.set_viewer(self.viewer)
         if self.rdr is None:
-            self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name)
+            self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name,
+                                  viewer=self.viewer)
 
     def update_from_python(self):
         """

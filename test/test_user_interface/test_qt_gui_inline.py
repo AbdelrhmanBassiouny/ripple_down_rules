@@ -34,7 +34,7 @@ class GUITestCase(unittest.TestCase):
         cls.app = QApplication([])
         cls.cases, cls.targets = load_zoo_dataset(cache_file=f"{os.path.dirname(__file__)}/../test_results/zoo")
         cls.cq = CaseQuery(cls.cases[0], "species", (Species,), True, _target=cls.targets[0])
-        cls.viewer = RDRCaseViewer(save_file=f"{os.path.dirname(__file__)}/../test_results/grdr_viewer")
+        cls.viewer = RDRCaseViewer(save_dir=f"{os.path.dirname(__file__)}/../test_results/grdr_viewer")
         cls.person = Person("Ahmed", Address("Cairo"))
 
     def test_change_title_text(self):

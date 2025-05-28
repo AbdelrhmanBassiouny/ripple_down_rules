@@ -1049,7 +1049,17 @@ def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
     :param attr_name: The name of the attribute.
     :param obj: The object to get the attributes from.
     """
-    hint, origin, args = get_hint_for_attribute(attr_name, obj)
+    # check first if obj is a function object
+    if hasattr(obj, '__code__'):
+        func_type_hints = get_type_hints(obj)
+        if attr_name in func_type_hints:
+            hint = func_type_hints[attr_name]
+            origin = get_origin(hint)
+            args = get_args(hint)
+        else:
+            raise ValueError(f"Unknown type hint: {attr_name}")
+    else:
+        hint, origin, args = get_hint_for_attribute(attr_name, obj)
     if not origin and not hint:
         if hasattr(obj, attr_name):
             attr_value = getattr(obj, attr_name)

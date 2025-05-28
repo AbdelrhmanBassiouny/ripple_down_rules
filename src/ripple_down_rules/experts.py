@@ -155,7 +155,7 @@ class Expert(ABC):
                     func_source = encapsulate_user_input(func_source, CallableExpression.get_encapsulating_function(f'_{uid}'))
                 else:
                     func_source = 'pass  # No user input provided for this case.\n'
-                if func_source[1:] in current_file_data:
+                if current_file_data is not None and func_source[1:] in current_file_data:
                     continue
                 f.write(imports + func_source + '\n' + '\n\n\n\'===New Answer===\'\n\n\n')
 

@@ -28,7 +28,7 @@ from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode
 from .experts import Expert, Human
-from .helpers import is_matching
+from .helpers import is_matching, general_rdr_classify
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
 try:
     from .user_interface.gui import RDRCaseViewer
@@ -36,7 +36,7 @@ except ImportError as e:
     RDRCaseViewer = None
 from .utils import draw_tree, make_set, copy_case, \
     SubclassJSONSerializer, make_list, get_type_from_string, \
-    is_conflicting, update_case, get_imports_from_scope, extract_function_source, extract_imports, get_full_class_name, \
+    is_conflicting, get_imports_from_scope, extract_function_source, extract_imports, get_full_class_name, \
     is_iterable, str_to_snake_case
 
 
@@ -75,6 +75,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     model_name: Optional[str] = None
     """
     The name of the model. If None, the model name will be the generated python file name.
+    """
+    mutually_exclusive: Optional[bool] = None
+    """
+    Whether the output of the classification of this rdr allows only one possible conclusion or not.
     """
 
     def __init__(self, start_rule: Optional[Rule] = None, viewer: Optional[RDRCaseViewer] = None,
@@ -224,7 +228,11 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         pass
 
-    def fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
+    def fit_case(self, case_query: CaseQuery,
+                 expert: Optional[Expert] = None,
+                 ask_always_for_target: bool = False,
+                 update_existing_rules: bool = True,
+                 **kwargs) \
             -> Union[CallableExpression, Dict[str, CallableExpression]]:
         """
         Fit the classifier to a case and ask the expert for refinements or alternatives if the classification is
@@ -232,6 +240,9 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
 
         :param case_query: The query containing the case to classify and the target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
+        :param ask_always_for_target: Whether to always ask the expert for targets for a case query.
+        :param update_existing_rules: Whether to update the existing same conclusion type rules that already gave
+        some conclusions with the type required by the case query.
         :return: The category that the case belongs to.
         """
         if case_query is None:
@@ -248,11 +259,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if case_query.target is None:
             case_query_cp = copy(case_query)
             conclusions = self.classify(case_query_cp.case, modify_case=True)
-            if (self.ask_always or conclusions is None
-                or is_iterable(conclusions) and len(conclusions) == 0
-                or (isinstance(conclusions, dict) and (case_query_cp.attribute_name not in conclusions
-                    or not any(type(c) in case_query_cp.core_attribute_type
-                               for c in make_list(conclusions[case_query_cp.attribute_name]))))):
+            if self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp,
+                                                         ask_always_for_target, update_existing_rules):
                 expert.ask_for_conclusion(case_query_cp)
                 case_query.target = case_query_cp.target
             if case_query.target is None:
@@ -267,6 +275,38 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             expert.clear_answers()
 
         return fit_case_result
+
+    @staticmethod
+    def should_i_ask_the_expert_for_a_target(conclusions: Union[Any, Dict[str, Any]],
+                                             case_query: CaseQuery,
+                                             ask_always: bool,
+                                             update_existing: bool) -> bool:
+        """
+        Determine if the rdr should ask the expert for the target of a given case query.
+
+        :param conclusions: The conclusions of the case.
+        :param case_query: The query containing the case to classify.
+        :param ask_always: Whether to ask the expert always.
+        :param update_existing: Whether to update rules that gave the required type of conclusions.
+        :return: True if the rdr should ask the expert, False otherwise.
+        """
+        if ask_always:
+            return True
+        elif conclusions is None:
+            return True
+        elif is_iterable(conclusions) and len(conclusions) == 0:
+            return True
+        elif isinstance(conclusions, dict):
+            if case_query.attribute_name not in conclusions:
+                return True
+            conclusions = conclusions[case_query.attribute_name]
+        conclusion_types = map(type, make_list(conclusions))
+        if not any(ct in case_query.core_attribute_type for ct in conclusion_types):
+            return True
+        elif update_existing:
+            return True
+        else:
+            return False
 
     @abstractmethod
     def _fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
@@ -427,7 +467,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             f.write(imports + "\n\n")
             f.write(f"attribute_name = '{self.attribute_name}'\n")
             f.write(f"conclusion_type = ({', '.join([ct.__name__ for ct in self.conclusion_type])},)\n")
-            f.write(f"type_ = {self.__class__.__name__}\n")
+            f.write(f"mutually_exclusive = {self.mutually_exclusive}\n")
             f.write(f"\n\n{func_def}")
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
@@ -532,6 +572,11 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
 
 
 class SingleClassRDR(RDRWithCodeWriter):
+
+    mutually_exclusive: bool = True
+    """
+    The output of the classification of this rdr negates all other possible outputs, there can only be one true value.
+    """
 
     def __init__(self, default_conclusion: Optional[Any] = None, **kwargs):
         """
@@ -649,6 +694,10 @@ class MultiClassRDR(RDRWithCodeWriter):
     stop_rule_conditions: Optional[CallableExpression] = None
     """
     The conditions of the stopping rule if needed.
+    """
+    mutually_exclusive: bool = False
+    """
+    The output of the classification of this rdr allows for more than one true value as conclusion.
     """
 
     def __init__(self, start_rule: Optional[MultiClassTopRule] = None,
@@ -903,50 +952,7 @@ class GeneralRDR(RippleDownRules):
         :param modify_case: Whether to modify the original case or create a copy and modify it.
         :return: The categories that the case belongs to.
         """
-        return self._classify(self.start_rules_dict, case, modify_original_case=modify_case)
-
-    @staticmethod
-    def _classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDownRules]],
-                  case: Any, modify_original_case: bool = False) -> Dict[str, Any]:
-        """
-        Classify a case by going through all classifiers and adding the categories that are classified,
-         and then restarting the classification until no more categories can be added.
-
-        :param classifiers_dict: A dictionary mapping conclusion types to the classifiers that produce them.
-        :param case: The case to classify.
-        :param modify_original_case: Whether to modify the original case or create a copy and modify it.
-        :return: The categories that the case belongs to.
-        """
-        conclusions = {}
-        case = case if isinstance(case, (Case, SQLTable)) else create_case(case)
-        case_cp = copy_case(case) if not modify_original_case else case
-        while True:
-            new_conclusions = {}
-            for attribute_name, rdr in classifiers_dict.items():
-                pred_atts = rdr.classify(case_cp)
-                if pred_atts is None:
-                    continue
-                if rdr.type_ is SingleClassRDR:
-                    if attribute_name not in conclusions or \
-                            (attribute_name in conclusions and conclusions[attribute_name] != pred_atts):
-                        conclusions[attribute_name] = pred_atts
-                        new_conclusions[attribute_name] = pred_atts
-                else:
-                    pred_atts = make_set(pred_atts)
-                    if attribute_name in conclusions:
-                        pred_atts = {p for p in pred_atts if p not in conclusions[attribute_name]}
-                    if len(pred_atts) > 0:
-                        new_conclusions[attribute_name] = pred_atts
-                        if attribute_name not in conclusions:
-                            conclusions[attribute_name] = set()
-                        conclusions[attribute_name].update(pred_atts)
-                if attribute_name in new_conclusions:
-                    mutually_exclusive = True if rdr.type_ is SingleClassRDR else False
-                    case_query = CaseQuery(case_cp, attribute_name, rdr.conclusion_type, mutually_exclusive)
-                    update_case(case_query, new_conclusions)
-            if len(new_conclusions) == 0:
-                break
-        return conclusions
+        return general_rdr_classify(self.start_rules_dict, case, modify_original_case=modify_case)
 
     def _fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
             -> Dict[str, Any]:
@@ -1043,7 +1049,7 @@ class GeneralRDR(RippleDownRules):
             f.write(func_def)
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
-            f.write(f"{' ' * 4}return GeneralRDR._classify(classifiers_dict, case)\n")
+            f.write(f"{' ' * 4}return general_rdr_classify(classifiers_dict, case)\n")
 
     @property
     def _default_generated_python_file_name(self) -> Optional[str]:
@@ -1068,7 +1074,7 @@ class GeneralRDR(RippleDownRules):
         # add type hints
         imports += f"from typing_extensions import Dict, Any\n"
         # import rdr type
-        imports += f"from ripple_down_rules.rdr import GeneralRDR\n"
+        imports += f"from ripple_down_rules.helpers import general_rdr_classify\n"
         # add case type
         imports += f"from ripple_down_rules.datastructures.case import Case, create_case\n"
         imports += f"from {self.case_type.__module__} import {self.case_type.__name__}\n"
