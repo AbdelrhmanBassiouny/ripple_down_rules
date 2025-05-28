@@ -1,5 +1,9 @@
 import logging
 
+from ripple_down_rules.datastructures.case import Case
+from ripple_down_rules.datastructures.dataclasses import CaseQuery
+from ripple_down_rules.utils import SubclassJSONSerializer
+
 try:
     import graphviz
 except ImportError:
@@ -77,7 +81,11 @@ def generate_object_graph(obj, name='root', seen=None, graph=None, current_depth
         for attr in dir(obj):
             if attr.startswith('_'):
                 continue
-            if attr == 'scope':
+            if isinstance(obj, CaseQuery) and attr == 'scope':
+                continue
+            if isinstance(obj, Case) and attr in ['data']:
+                continue
+            if isinstance(obj, SubclassJSONSerializer) and attr == 'data_class_refs':
                 continue
             value = getattr(obj, attr)
             if callable(value):

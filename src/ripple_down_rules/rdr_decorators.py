@@ -7,7 +7,7 @@ import os.path
 from functools import wraps
 
 from pyparsing.tools.cvt_pyparsing_pep8_names import camel_to_snake
-from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any, Self, get_type_hints, List, Union
+from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any, Self, get_type_hints, List, Union, Sequence
 
 from ripple_down_rules.datastructures.case import create_case, Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
@@ -78,7 +78,7 @@ class RDRDecorator:
             if self.fit:
                 case_query = self.create_case_query_from_method(func, func_output,
                                                                 self.parsed_output_type,
-                                                                self.mutual_exclusive, self.output_name,
+                                                                self.mutual_exclusive,
                                                                 *args, **kwargs)
                 output = self.rdr.fit_case(case_query, expert=self.expert,
                                            ask_always_for_target=self.ask_always,
@@ -98,16 +98,16 @@ class RDRDecorator:
     @staticmethod
     def create_case_query_from_method(func: Callable,
                                       func_output: Dict[str, Any],
-                                      output_type, mutual_exclusive: bool,
-                                      output_name: str = 'output_', *args, **kwargs) -> CaseQuery:
+                                      output_type: Sequence[Type],
+                                      mutual_exclusive: bool,
+                                      *args, **kwargs) -> CaseQuery:
         """
         Create a CaseQuery from the function and its arguments.
 
         :param func: The function to create a case from.
         :param func_output: The output of the function as a dictionary, where the key is the output name.
-        :param output_type: The type of the output.
+        :param output_type: The type of the output as a sequence of types.
         :param mutual_exclusive: If True, the output types are mutually exclusive.
-        :param output_name: The name of the output in the case. Defaults to 'output_'.
         :param args: The positional arguments of the function.
         :param kwargs: The keyword arguments of the function.
         :return: A CaseQuery object representing the case.
@@ -117,6 +117,7 @@ class RDRDecorator:
         scope = func.__globals__
         scope.update(case_dict)
         func_args_type_hints = get_type_hints(func)
+        output_name = list(func_output.keys())[0]
         func_args_type_hints.update({output_name: Union[tuple(output_type)]})
         return CaseQuery(case, output_name, Union[tuple(output_type)],
                          mutual_exclusive, scope=scope,

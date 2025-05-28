@@ -281,7 +281,7 @@ class RDRCaseViewer(QMainWindow):
     main_obj: Optional[Dict[str, Any]] = None
     user_input: Optional[str] = None
     attributes_widget: Optional[QWidget] = None
-    save_function: Optional[Callable[str], None] = None
+    save_function: Optional[Callable[str, str], None] = None
 
     def __init__(self, parent=None,
                  save_dir: Optional[str] = None,
@@ -325,17 +325,17 @@ class RDRCaseViewer(QMainWindow):
 
         # Add both to main layout
         main_layout.addWidget(self.attributes_widget, stretch=1)
-        main_layout.addWidget(middle_widget, stretch=2)
-        main_layout.addWidget(self.obj_diagram_viewer, stretch=3)
+        main_layout.addWidget(middle_widget, stretch=1)
+        main_layout.addWidget(self.obj_diagram_viewer, stretch=2)
 
-    def set_save_function(self, save_function: Callable[[str], None]) -> None:
+    def set_save_function(self, save_function: Callable[[str, str], None]) -> None:
         """
         Set the function to save the file.
 
         :param save_function: The function to save the file.
         """
         self.save_function = save_function
-        self.save_btn.clicked.connect(lambda: self.save_function(self.save_dir, self.save_model_file))
+        self.save_btn.clicked.connect(lambda: self.save_function(self.save_dir, self.save_model_name))
 
     def print(self, msg):
         """
