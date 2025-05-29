@@ -1,4 +1,4 @@
-from ripple_down_rules.datasets import World, Handle, Container, FixedConnection, PrismaticConnection
+from datasets import World, Handle, Container, FixedConnection, PrismaticConnection
 from conf.world.base_config import WorldConf, HandleConf, ContainerConf, FixedConnectionConf, PrismaticConnectionConf
 
 

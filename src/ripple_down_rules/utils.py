@@ -14,10 +14,12 @@ from collections import UserDict, defaultdict
 from copy import deepcopy, copy
 from dataclasses import is_dataclass, fields
 from enum import Enum
+from os.path import dirname
 from textwrap import dedent
 from types import NoneType
 
 from sqlalchemy.exc import NoInspectionAvailable
+
 
 try:
     import matplotlib
@@ -157,7 +159,7 @@ def extract_function_source(file_path: str,
                             return_line_numbers: bool = False,
                             include_signature: bool = True) \
         -> Union[Dict[str, Union[str, List[str]]],
-        Tuple[Dict[str, Union[str, List[str]]], List[Tuple[int, int]]]]:
+        Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]]]:
     """
     Extract the source code of a function from a file.
 
@@ -176,7 +178,7 @@ def extract_function_source(file_path: str,
     tree = ast.parse(source)
     function_names = make_list(function_names)
     functions_source: Dict[str, Union[str, List[str]]] = {}
-    line_numbers = []
+    line_numbers: Dict[str, Tuple[int, int]] = {}
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and (node.name in function_names or len(function_names) == 0):
             # Get the line numbers of the function
@@ -184,7 +186,7 @@ def extract_function_source(file_path: str,
             func_lines = lines[node.lineno - 1:node.end_lineno]
             if not include_signature:
                 func_lines = func_lines[1:]
-            line_numbers.append((node.lineno, node.end_lineno))
+            line_numbers[node.name] = (node.lineno, node.end_lineno)
             functions_source[node.name] = dedent("\n".join(func_lines)) if join_lines else func_lines
             if (len(functions_source) >= len(function_names)) and (not len(function_names) == 0):
                 break
@@ -773,6 +775,52 @@ def get_types_to_import_from_type_hints(hints: List[Type]) -> Set[Type]:
     return to_import
 
 
+def get_import_path_from_path(path: str) -> Optional[str]:
+    """
+    Convert a file system path to a Python import path.
+
+    :param path: The file system path to convert.
+    :return: The Python import path.
+    """
+    package_name = os.path.abspath(path)
+    formated_package_name = package_name.strip('./').replace('/', '.')
+    parent_package_idx = 0
+    packages = formated_package_name.split('.')
+    for i, possible_pacakge in enumerate(reversed(packages)):
+        if i == 0:
+            current_path = package_name
+        else:
+            current_path = '/' + '/'.join(packages[:-i])
+        if os.path.exists(os.path.join(current_path, '__init__.py')):
+            parent_package_idx -= 1
+        else:
+            break
+    package_name = '.'.join(packages[parent_package_idx:]) if parent_package_idx < 0 else None
+    return package_name
+
+
+def get_function_import_path_and_representation(func: Callable) -> Tuple[str, str]:
+    """
+    Get the import path of a function.
+
+    :param func: The function to get the import path for.
+    :return: The import path of the function.
+    """
+    func_name = get_method_name(func)
+    func_class_name = get_method_class_name_if_exists(func)
+    func_file_path = get_method_file_name(func)
+    func_file_name = func_file_path.split('/')[-1].split('.')[0]  # Get the file name without extension
+    func_import_path = get_import_path_from_path(dirname(func_file_path))
+    func_import_path = f"{func_import_path}.{func_file_name}" if func_import_path else func_file_name
+    if func_class_name and func_class_name != func_name:
+        import_path = f"from {func_import_path} import {func_class_name}"
+        func_representation = f"{func_class_name}.{func_name}"
+    else:
+        import_path = f"from {func_import_path} import {func_name}"
+        func_representation = func_name
+    return import_path, func_representation
+
+
 def get_imports_from_types(type_objs: List[Type]) -> List[str]:
     """
     Format import lines from type objects.
@@ -781,11 +829,17 @@ def get_imports_from_types(type_objs: List[Type]) -> List[str]:
     """
 
     module_to_types = defaultdict(list)
+    other_imports = []
     for tp in type_objs:
         try:
             if isinstance(tp, type) or is_typing_type(tp):
                 module = tp.__module__
                 name = tp.__qualname__
+            elif callable(tp):
+                import_, _ = get_function_import_path_and_representation(tp)
+                if import_ is not None:
+                    other_imports.append(import_)
+                module = None
             elif hasattr(type(tp), "__module__"):
                 module = type(tp).__module__
                 name = type(tp).__qualname__
@@ -801,6 +855,8 @@ def get_imports_from_types(type_objs: List[Type]) -> List[str]:
     for module, names in module_to_types.items():
         joined = ", ".join(sorted(set(names)))
         lines.append(f"from {module} import {joined}")
+    if other_imports:
+        lines.extend(other_imports)
     return sorted(lines)
 
 

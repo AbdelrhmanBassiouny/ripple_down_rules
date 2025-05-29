@@ -9,6 +9,7 @@ from omegaconf import MISSING
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, get_origin, Set, Callable
 
+from build.lib.ripple_down_rules.utils import get_method_name, get_function_import_path_and_representation
 from .callable_expression import CallableExpression
 from .case import create_case, Case
 from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, get_value_type_from_type_hint, \
@@ -38,10 +39,23 @@ class CaseQuery:
     """
     Whether the attribute can only take one value (i.e. True) or multiple values (i.e. False).
     """
+    case_factory: Optional[Callable[[], Any]] = None
+    """
+    The factory method that can be used to recreate the original case.
+    """
+    case_factory_idx: Optional[int] = None
+    """
+    This is used when the case factory is a list of cases, this index is used to select the case from the list.
+    """
     case_conf: Optional[CaseConf] = None
     """
     The case configuration that is used to (re)create the original case, recommended to be used when you want to 
     the case to persist in the rule base, this would allow it to be used for merging with other similar conclusion RDRs.
+    """
+    scenario: Optional[Callable] = None
+    """
+    The executable scenario is the root callable that recreates the situation that the case is 
+    created in, for example, when the case is created from a test function, this would be the test function itself.
     """
     _target: Optional[CallableExpression] = None
     """
@@ -231,7 +245,9 @@ class CaseQuery:
                          self.mutually_exclusive, _target=self.target, default_value=self.default_value,
                          scope=self.scope, _case=copy_case(self.case), _target_value=self.target_value,
                          conditions=self.conditions, is_function=self.is_function,
-                         function_args_type_hints=self.function_args_type_hints)
+                         function_args_type_hints=self.function_args_type_hints,
+                         case_factory=self.case_factory, case_factory_idx=self.case_factory_idx,
+                         case_conf=self.case_conf, scenario=self.scenario)
 
 
 @dataclass
@@ -240,3 +256,32 @@ class CaseConf:
 
     def create(self) -> Any:
         return self.factory_method()
+
+
+@dataclass
+class CaseFactoryMetaData:
+    factory_method: Optional[Callable[[Optional[CaseConf]], Any]] = None
+    factory_idx: Optional[int] = None
+    case_conf: Optional[CaseConf] = None
+    scenario: Optional[Callable] = None
+
+    @classmethod
+    def from_case_query(cls, case_query: CaseQuery) -> CaseFactoryMetaData:
+        return cls(factory_method=case_query.case_factory, factory_idx=case_query.case_factory_idx,
+                   case_conf=case_query.case_conf, scenario=case_query.scenario)
+
+    def __repr__(self):
+        factory_method_repr = None
+        scenario_repr = None
+        if self.factory_method is not None:
+            _, factory_method_repr = get_function_import_path_and_representation(self.factory_method)
+        if self.scenario is not None:
+            _, scenario_repr = get_function_import_path_and_representation(self.scenario)
+        return (f"CaseFactoryMetaData("
+                f"factory_method={factory_method_repr}, "
+                f"factory_idx={self.factory_idx}, "
+                f"case_conf={self.case_conf},"
+                f" scenario={scenario_repr})")
+
+    def __str__(self):
+        return self.__repr__()

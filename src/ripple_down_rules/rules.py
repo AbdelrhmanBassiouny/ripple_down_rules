@@ -3,16 +3,18 @@ from __future__ import annotations
 import logging
 import re
 from abc import ABC, abstractmethod
+from pathlib import Path
 from uuid import uuid4
 
 from anytree import NodeMixin
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple
+from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple, Callable
 
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
+from .datastructures.dataclasses import CaseFactoryMetaData, CaseConf, CaseQuery
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name
+from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_imports_from_types
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
@@ -27,7 +29,8 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
                  corner_case: Optional[Union[Case, SQLTable]] = None,
                  weight: Optional[str] = None,
                  conclusion_name: Optional[str] = None,
-                 uid: Optional[str] = None):
+                 uid: Optional[str] = None,
+                 corner_case_metadata: Optional[CaseFactoryMetaData] = None):
         """
         A rule in the ripple down rules classifier.
 
@@ -38,10 +41,13 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         :param weight: The weight of the rule, which is the type of edge connecting the rule to its parent.
         :param conclusion_name: The name of the conclusion of the rule.
         :param uid: The unique id of the rule.
+        :param corner_case_metadata: Metadata about the corner case, such as the factory that created it or the
+         scenario it is based on.
         """
         super(Rule, self).__init__()
         self.conclusion = conclusion
         self.corner_case = corner_case
+        self.corner_case_metadata: Optional[CaseFactoryMetaData] = corner_case_metadata
         self.parent = parent
         self.weight: Optional[str] = weight
         self.conditions = conditions if conditions else None
@@ -50,6 +56,20 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self._name: Optional[str] = None
         # generate a unique id for the rule using uuid4
         self.uid: str = uid if uid else str(uuid4().int)
+
+    @classmethod
+    def from_case_query(cls, case_query: CaseQuery) -> Rule:
+        """
+        Create a SingleClassRule from a CaseQuery.
+
+        :param case_query: The CaseQuery to create the rule from.
+        :return: A SingleClassRule instance.
+        """
+        corner_case_metadata = CaseFactoryMetaData.from_case_query(case_query)
+        return cls(conditions=case_query.conditions, conclusion=case_query.target,
+                   corner_case=case_query.case, parent=None,
+                   corner_case_metadata=corner_case_metadata,
+                   conclusion_name=case_query.attribute_name)
 
     def _post_detach(self, parent):
         """
@@ -81,6 +101,27 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         Evaluate the next rule after this rule is evaluated.
         """
         pass
+
+    def write_corner_case_as_source_code(self, cases_file: Path) -> None:
+        """
+        Write the source code representation of the corner case of the rule to a file.
+
+        :param cases_file: The file to write the corner case to if it is a definition.
+        """
+        if self.corner_case_metadata is None:
+            return
+        types_to_import = set()
+        if self.corner_case_metadata.factory_method is not None:
+            types_to_import.add(self.corner_case_metadata.factory_method)
+        if self.corner_case_metadata.scenario is not None:
+            types_to_import.add(self.corner_case_metadata.scenario)
+        if self.corner_case_metadata.case_conf is not None:
+            types_to_import.add(self.corner_case_metadata.case_conf)
+        types_to_import.add(CaseFactoryMetaData)
+        imports = get_imports_from_types(list(types_to_import))
+        with open(cases_file, 'a') as f:
+            f.write("\n".join(imports) + "\n\n\n")
+            f.write(f"corner_case_{self.uid} = {self.corner_case_metadata}" + "\n\n\n")
 
     def write_conclusion_as_source_code(self, parent_indent: str = "", defs_file: Optional[str] = None) -> str:
         """
@@ -282,9 +323,12 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
             returned_rule = self.alternative(x) if self.alternative else self
         return returned_rule if returned_rule.fired else self
 
-    def fit_rule(self, x: Case, target: CallableExpression, conditions: CallableExpression):
-        new_rule = SingleClassRule(conditions, target,
-                                   corner_case=x, parent=self)
+    def fit_rule(self, case_query: CaseQuery):
+        corner_case_metadata = CaseFactoryMetaData.from_case_query(case_query)
+        new_rule = SingleClassRule(case_query.conditions, case_query.target,
+                                   corner_case=case_query.case, parent=self,
+                                   corner_case_metadata=corner_case_metadata,
+                                   )
         if self.fired:
             self.refinement = new_rule
         else:
@@ -368,11 +412,12 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         elif self.alternative:  # Here alternative refers to next rule in MultiClassRDR
             return self.alternative
 
-    def fit_rule(self, x: Case, target: CallableExpression, conditions: CallableExpression):
-        if self.fired and target != self.conclusion:
-            self.refinement = MultiClassStopRule(conditions, corner_case=x, parent=self)
+    def fit_rule(self, case_query: CaseQuery):
+        if self.fired and case_query.target != self.conclusion:
+            self.refinement = MultiClassStopRule(case_query.conditions, corner_case=case_query.case, parent=self)
         elif not self.fired:
-            self.alternative = MultiClassTopRule(conditions, target, corner_case=x, parent=self)
+            self.alternative = MultiClassTopRule(case_query.conditions, case_query.target,
+                                                 corner_case=case_query.case, parent=self)
 
     def _to_json(self) -> Dict[str, Any]:
         self.json_serialization = {**Rule._to_json(self),

@@ -37,7 +37,7 @@ except ImportError as e:
 from .utils import draw_tree, make_set, copy_case, \
     SubclassJSONSerializer, make_list, get_type_from_string, \
     is_conflicting, get_imports_from_scope, extract_function_source, extract_imports, get_full_class_name, \
-    is_iterable, str_to_snake_case
+    is_iterable, str_to_snake_case, get_import_path_from_path
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -112,7 +112,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if not os.path.exists(save_dir + '/__init__.py'):
             os.makedirs(save_dir, exist_ok=True)
             with open(save_dir + '/__init__.py', 'w') as f:
-                f.write("# This is an empty __init__.py file to make the directory a package.\n")
+                f.write("from . import *\n")
         if model_name is not None:
             self.model_name = model_name
         elif self.model_name is None:
@@ -229,6 +229,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     def fit_case(self, case_query: CaseQuery,
                  expert: Optional[Expert] = None,
                  update_existing_rules: bool = True,
+                 scenario: Optional[Callable] = None,
                  **kwargs) \
             -> Union[CallableExpression, Dict[str, CallableExpression]]:
         """
@@ -239,6 +240,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param update_existing_rules: Whether to update the existing same conclusion type rules that already gave
         some conclusions with the type required by the case query.
+        :param scenario: The scenario at which the case was created, this is used to recreate the case if needed.
         :return: The category that the case belongs to.
         """
         if case_query is None:
@@ -247,6 +249,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.name = case_query.attribute_name if self.name is None else self.name
         self.case_type = case_query.case_type if self.case_type is None else self.case_type
         self.case_name = case_query.case_name if self.case_name is None else self.case_name
+        case_query.scenario = scenario if case_query.scenario is None else case_query.scenario
 
         expert = expert or Human(viewer=self.viewer,
                                  answers_save_path=self.save_dir + '/expert_answers'
@@ -389,7 +392,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :return: The module that contains the rdr classifier function.
         """
         # remove from imports if exists first
-        name = f"{package_name.strip('./').replace('/', '.')}.{self.generated_python_file_name}"
+        package_name = get_import_path_from_path(package_name)
+        name = f"{package_name}.{self.generated_python_file_name}" if package_name else self.generated_python_file_name
         try:
             module = importlib.import_module(name)
             del sys.modules[name]
@@ -411,6 +415,10 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         conclusion_func_names = [f'conclusion_{rid}' for rid in rules_dict.keys() if not isinstance(rules_dict[rid], MultiClassStopRule)]
         all_func_names = condition_func_names + conclusion_func_names
         filepath = f"{model_dir}/{self.generated_python_defs_file_name}.py"
+        cases_path = f"{model_dir}/{self.generated_python_cases_file_name}.py"
+        cases_import_path = get_import_path_from_path(model_dir)
+        cases_import_path = f"{cases_import_path}.{self.generated_python_cases_file_name}" if cases_import_path\
+            else self.generated_python_cases_file_name
         functions_source = extract_function_source(filepath, all_func_names, include_signature=False)
         # get the scope from the imports in the file
         scope = extract_imports(filepath)
@@ -418,13 +426,15 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             if rule.conditions is not None:
                 rule.conditions.user_input = functions_source[f"conditions_{rule.uid}"]
                 rule.conditions.scope = scope
+                if os.path.exists(cases_path):
+                    rule.corner_case_metadata = importlib.import_module(cases_import_path).__dict__.get(f"corner_case_{rule.uid}", None)
             if rule.conclusion is not None and not isinstance(rule, MultiClassStopRule):
                 rule.conclusion.user_input = functions_source[f"conclusion_{rule.uid}"]
                 rule.conclusion.scope = scope
 
     @abstractmethod
     def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = "",
-                                           defs_file: Optional[str] = None):
+                                           defs_file: Optional[str] = None, cases_file: Optional[str] = None):
         """
         Write the rules as source code to a file.
 
@@ -432,6 +442,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :param file: The file to write the source code to.
         :param parent_indent: The indentation of the parent rule.
         :param defs_file: The file to write the definitions to.
+        :param cases_file: The file to write the cases to.
         """
         pass
 
@@ -444,14 +455,18 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         os.makedirs(model_dir, exist_ok=True)
         if not os.path.exists(model_dir + '/__init__.py'):
             with open(model_dir + '/__init__.py', 'w') as f:
-                f.write("# This is an empty __init__.py file to make the directory a package.\n")
+                f.write("from . import *\n")
         func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
         file_name = model_dir + f"/{self.generated_python_file_name}.py"
         defs_file_name = model_dir + f"/{self.generated_python_defs_file_name}.py"
+        cases_file_name = model_dir + f"/{self.generated_python_cases_file_name}.py"
         imports, defs_imports = self._get_imports()
         # clear the files first
         with open(defs_file_name, "w") as f:
             f.write(defs_imports + "\n\n")
+        if os.path.exists(cases_file_name):
+            with open(cases_file_name, "w") as cases_f:
+                cases_f.write("# This file contains the corner cases for the rules.\n")
         with open(file_name, "w") as f:
             imports += f"from .{self.generated_python_defs_file_name} import *\n"
             f.write(imports + "\n\n")
@@ -461,7 +476,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             f.write(f"\n\n{func_def}")
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
-            self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4, defs_file=defs_file_name)
+            self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4, defs_file=defs_file_name,
+                                                    cases_file=cases_file_name)
 
     @property
     @abstractmethod
@@ -509,6 +525,10 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
     @property
     def generated_python_defs_file_name(self) -> str:
         return f"{self.generated_python_file_name}_defs"
+
+    @property
+    def generated_python_cases_file_name(self) -> str:
+        return f"{self.generated_python_file_name}_cases"
 
 
     @property
@@ -592,7 +612,7 @@ class SingleClassRDR(RDRWithCodeWriter):
         pred = self.evaluate(case_query.case)
         if pred.conclusion(case_query.case) != case_query.target_value:
             expert.ask_for_conditions(case_query, pred)
-            pred.fit_rule(case_query.case, case_query.target, conditions=case_query.conditions)
+            pred.fit_rule(case_query)
 
         return self.classify(case_query.case)
 
@@ -605,8 +625,7 @@ class SingleClassRDR(RDRWithCodeWriter):
         """
         if not self.start_rule:
             expert.ask_for_conditions(case_query)
-            self.start_rule = SingleClassRule(case_query.conditions, case_query.target, corner_case=case_query.case,
-                                              conclusion_name=case_query.attribute_name)
+            self.start_rule = SingleClassRule.from_case_query(case_query)
 
     def classify(self, case: Case, modify_case: bool = False) -> Optional[Any]:
         """
@@ -632,22 +651,24 @@ class SingleClassRDR(RDRWithCodeWriter):
                 f.write(f"{' ' * 4}else:\n{' ' * 8}return {self.default_conclusion}\n")
 
     def write_rules_as_source_code_to_file(self, rule: SingleClassRule, file: TextIOWrapper, parent_indent: str = "",
-                                           defs_file: Optional[str] = None):
+                                           defs_file: Optional[str] = None, cases_file: Optional[str] = None):
         """
         Write the rules as source code to a file.
         """
         if rule.conditions:
+            rule.write_corner_case_as_source_code(cases_file)
             if_clause = rule.write_condition_as_source_code(parent_indent, defs_file)
             file.write(if_clause)
             if rule.refinement:
                 self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ",
-                                                        defs_file=defs_file)
+                                                        defs_file=defs_file, cases_file=cases_file)
 
             conclusion_call = rule.write_conclusion_as_source_code(parent_indent, defs_file)
             file.write(conclusion_call)
 
             if rule.alternative:
-                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file)
+                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file,
+                                                        cases_file=cases_file)
 
     @property
     def conclusion_type_hint(self) -> str:
@@ -745,16 +766,18 @@ class MultiClassRDR(RDRWithCodeWriter):
         return self.conclusions
 
     def write_rules_as_source_code_to_file(self, rule: Union[MultiClassTopRule, MultiClassStopRule],
-                                           file, parent_indent: str = "", defs_file: Optional[str] = None):
+                                           file, parent_indent: str = "", defs_file: Optional[str] = None,
+                                           cases_file: Optional[str] = None):
         if rule == self.start_rule:
             file.write(f"{parent_indent}conclusions = set()\n")
         if rule.conditions:
+            rule.write_corner_case_as_source_code(cases_file)
             if_clause = rule.write_condition_as_source_code(parent_indent, defs_file)
             file.write(if_clause)
             conclusion_indent = parent_indent
             if hasattr(rule, "refinement") and rule.refinement:
                 self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ",
-                                                        defs_file=defs_file)
+                                                        defs_file=defs_file, cases_file=cases_file)
                 conclusion_indent = parent_indent + " " * 4
                 file.write(f"{conclusion_indent}else:\n")
 
@@ -762,7 +785,8 @@ class MultiClassRDR(RDRWithCodeWriter):
             file.write(conclusion_call)
 
             if rule.alternative:
-                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file)
+                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file,
+                                                        cases_file=cases_file)
 
     @property
     def conclusion_type_hint(self) -> str:
@@ -788,8 +812,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         """
         if not self.start_rule:
             conditions = expert.ask_for_conditions(case_query)
-            self.start_rule = MultiClassTopRule(conditions, case_query.target, corner_case=case_query.case,
-                                                conclusion_name=case_query.attribute_name)
+            self.start_rule = MultiClassTopRule.from_case_query(case_query)
 
     @property
     def last_top_rule(self) -> Optional[MultiClassTopRule]:
@@ -822,12 +845,13 @@ class MultiClassRDR(RDRWithCodeWriter):
         :param evaluated_rule: The evaluated rule to ask the expert about.
         """
         conditions = expert.ask_for_conditions(case_query, evaluated_rule)
-        evaluated_rule.fit_rule(case_query.case, case_query.target, conditions=conditions)
+        evaluated_rule.fit_rule(case_query)
         if self.mode == MCRDRMode.StopPlusRule:
             self.stop_rule_conditions = conditions
         if self.mode == MCRDRMode.StopPlusRuleCombined:
             new_top_rule_conditions = conditions.combine_with(evaluated_rule.conditions)
-            self.add_top_rule(new_top_rule_conditions, case_query.target, case_query.case)
+            case_query.conditions = new_top_rule_conditions
+            self.add_top_rule(case_query)
 
     def add_rule_for_case(self, case_query: CaseQuery, expert: Expert):
         """
@@ -839,9 +863,10 @@ class MultiClassRDR(RDRWithCodeWriter):
         if self.stop_rule_conditions and self.mode == MCRDRMode.StopPlusRule:
             conditions = self.stop_rule_conditions
             self.stop_rule_conditions = None
+            case_query.conditions = conditions
         else:
             conditions = expert.ask_for_conditions(case_query)
-        self.add_top_rule(conditions, case_query.target, case_query.case)
+        self.add_top_rule(case_query)
 
     def add_conclusion(self, evaluated_rule: Rule, case: Case) -> None:
         """
@@ -864,15 +889,13 @@ class MultiClassRDR(RDRWithCodeWriter):
                 self.conclusions.remove(c)
             self.conclusions.extend(make_list(combined_conclusion))
 
-    def add_top_rule(self, conditions: CallableExpression, conclusion: Any, corner_case: Union[Case, SQLTable]):
+    def add_top_rule(self, case_query: CaseQuery):
         """
         Add a top rule to the classifier, which is a rule that is always checked and is part of the start_rules list.
 
-        :param conditions: The conditions of the rule.
-        :param conclusion: The conclusion of the rule.
-        :param corner_case: The corner case of the rule.
+        :param case_query: The case query to add the top rule for.
         """
-        self.start_rule.alternative = MultiClassTopRule(conditions, conclusion, corner_case=corner_case)
+        self.start_rule.alternative = MultiClassTopRule.from_case_query(case_query)
 
     @staticmethod
     def start_rule_type() -> Type[Rule]:

@@ -94,6 +94,17 @@ def load_zoo_dataset(cache_file: Optional[str] = None) -> Tuple[List[Case], List
     return all_cases, targets
 
 
+def load_zoo_cases(cache_file: Optional[str] = None) -> List[Case]:
+    """
+    Load the zoo dataset cases.
+
+    :param cache_file: the cache file to store the dataset or load it from.
+    :return: all cases.
+    """
+    all_cases, _ = load_zoo_dataset(cache_file)
+    return all_cases
+
+
 class Species(Category):
     mammal = "mammal"
     bird = "bird"

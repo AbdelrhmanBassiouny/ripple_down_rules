@@ -8,7 +8,7 @@ from ripple_down_rules.datastructures.enums import PromptFor
 from ripple_down_rules.rdr_decorators import RDRDecorator
 from ripple_down_rules.user_interface.template_file_creator import TemplateFileCreator
 from ripple_down_rules.utils import make_set
-from test_rdr_world import World, Handle, Container
+from datasets import World, Handle, Container
 from datasets import Part, PhysicalObject, Robot
 
 
@@ -73,7 +73,7 @@ def test_rdr_decorator_func_name():
 def test_load():
     # Test the load function
     world = World()
-    imports = "from test_rdr_world import World\n\n\n"
+    imports = "from datasets import World\n\n\n"
     func_code = "def test_func(case):\n    return case"
     source_code = f"{imports}{func_code}\n"
     source_code = dedent(source_code)

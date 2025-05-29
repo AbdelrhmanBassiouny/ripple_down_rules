@@ -1,8 +1,9 @@
+import inspect
 import os
 
-from typing_extensions import List, Any, Tuple, Type
+from typing_extensions import List, Any, Tuple, Type, Callable, Optional
 
-from datasets import Species, Habitat
+from datasets import Species, Habitat, load_zoo_cases
 from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import Category
@@ -18,7 +19,9 @@ def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
                   draw_tree: bool = False,
                   load_answers: bool = True,
                   save_answers: bool = False,
-                  update_existing_rules: bool = True) -> Tuple[SingleClassRDR, List[CaseQuery]]:
+                  update_existing_rules: bool = True,
+                  case_factory: Callable = load_zoo_cases,
+                  scenario: Optional[Callable] = None) -> Tuple[SingleClassRDR, List[CaseQuery]]:
     filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
     expert = Human(use_loaded_answers=load_answers)
     if load_answers:
@@ -26,8 +29,9 @@ def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
 
     targets = [None for _ in cases] if targets is None or len(targets) == 0 else targets
     scrdr = SingleClassRDR()
-    case_queries = [CaseQuery(case, attribute_name, (attribute_type,), True, _target=target)
-                    for case, target in zip(cases, targets)]
+    case_queries = [CaseQuery(case, attribute_name, (attribute_type,), True, _target=target, case_factory=case_factory,
+                              case_factory_idx=i, scenario=scenario)
+                    for i, (case, target) in enumerate(zip(cases, targets))]
     scrdr.fit(case_queries, expert=expert, animate_tree=draw_tree, update_existing_rules=update_existing_rules)
     if save_answers:
         expert.save_answers(filename)
@@ -45,15 +49,18 @@ def get_fit_mcrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
                   draw_tree: bool = False,
                   load_answers: bool = True,
                   save_answers: bool = False,
-                  update_existing_rules: bool = True) -> MultiClassRDR:
+                  update_existing_rules: bool = True,
+                  case_factory: Callable = load_zoo_cases,
+                  scenario: Optional[Callable] = None) -> MultiClassRDR:
     filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
     expert = Human(use_loaded_answers=load_answers)
     if load_answers:
         expert.load_answers(filename)
     targets = [None for _ in cases] if targets is None or len(targets) == 0 else targets
     mcrdr = MultiClassRDR()
-    case_queries = [CaseQuery(case, attribute_name, (attribute_type,), mutually_exclusive, _target=target)
-                    for case, target in zip(cases, targets)]
+    case_queries = [CaseQuery(case, attribute_name, (attribute_type,), mutually_exclusive, _target=target,
+                              case_factory=case_factory, case_factory_idx=i, scenario=scenario)
+                    for i, (case, target) in enumerate(zip(cases, targets))]
     mcrdr.fit(case_queries, expert=expert, animate_tree=draw_tree, update_existing_rules=update_existing_rules)
     if save_answers:
         expert.save_answers(filename)
@@ -69,7 +76,9 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
                  save_answers: bool = False,
                  append: bool = False,
                  no_targets: bool = False,
-                 update_existing_rules: bool = True) -> Tuple[GeneralRDR, List[dict]]:
+                 update_existing_rules: bool = True,
+                 case_factory: Callable = load_zoo_cases,
+                 scenario: Optional[Callable] = None) -> Tuple[GeneralRDR, List[dict]]:
     filename = os.path.join(os.path.dirname(__file__), '..', expert_answers_dir, expert_answers_file)
     expert = Human(use_loaded_answers=load_answers, append=append)
     if load_answers:
@@ -87,8 +96,9 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
     else:
         all_targets = true_targets
     case_queries = [CaseQuery(case, name, (Species,) if name == "species" else (Habitat,),
-                              True if name == "species" else False, _target=target)
-                    for case, targets in zip(cases[:n], all_targets)
+                              True if name == "species" else False, _target=target, case_factory=case_factory,
+                              case_factory_idx=i, scenario=scenario)
+                    for i, (case, targets) in enumerate(zip(cases[:n], all_targets))
                     for name, target in targets.items()]
     grdr.fit(case_queries, expert=expert,
              animate_tree=draw_tree, update_existing_rules=update_existing_rules)

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 from unittest import skip
 
-from typing_extensions import List
+from typing_extensions import List, Callable, Optional
 
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
@@ -155,18 +155,21 @@ def make_molecule_2() -> Molecule:
 
 
 def get_two_molecules_model(draw_tree=False, load_answers=True, save_answers=False,
-                            filename="./test_expert_answers/mutagenic_expert_answers"):
+                            filename="./test_expert_answers/mutagenic_expert_answers",
+                            scenario: Optional[Callable] = None) -> SingleClassRDR:
     expert = Human(use_loaded_answers=load_answers)
     if load_answers:
         expert.load_answers(filename)
 
     molecule_1 = make_molecule_1()
     molecule_2 = make_molecule_2()
-    case_queries = [CaseQuery(molecule_1, "mutagenic", bool, True, _target=molecule_1.mutagenic),
-                    CaseQuery(molecule_2, "mutagenic", bool, True, _target=molecule_2.mutagenic), ]
+    case_queries = [CaseQuery(molecule_1, "mutagenic", bool, True, _target=molecule_1.mutagenic,
+                              case_factory=make_molecule_1),
+                    CaseQuery(molecule_2, "mutagenic", bool, True, _target=molecule_2.mutagenic,
+                              case_factory=make_molecule_2), ]
 
     rdr = SingleClassRDR()
-    rdr.fit(case_queries, expert=expert, animate_tree=draw_tree)
+    rdr.fit(case_queries, expert=expert, animate_tree=draw_tree, scenario=scenario)
 
     for case_query in case_queries:
         r = rdr.classify(case_query.case)
@@ -184,11 +187,12 @@ def get_two_molecules_model(draw_tree=False, load_answers=True, save_answers=Fal
 
 
 def test_two_molecules():
-    rdr = get_two_molecules_model(draw_tree=False, load_answers=True, save_answers=False)
+    rdr = get_two_molecules_model(draw_tree=False, load_answers=True, save_answers=False,
+                                  scenario=test_two_molecules)
 
 
 def test_serialize_two_molecules_model():
-    rdr = get_two_molecules_model()
+    rdr = get_two_molecules_model(scenario=test_serialize_two_molecules_model)
     filename = "./test_results/two_molecules_model"
     rdr.to_json_file(filename)
     loaded_rdr = type(rdr).from_json_file(filename)
@@ -197,7 +201,7 @@ def test_serialize_two_molecules_model():
 
 
 def test_write_two_molecules_model_to_python():
-    rdr = get_two_molecules_model()
+    rdr = get_two_molecules_model(scenario=test_write_two_molecules_model_to_python)
     filename = "./test_generated_rdrs/two_molecules"
     rdr._write_to_python(filename)
     loaded_rdr = rdr.get_rdr_classifier_from_python_file(filename)
