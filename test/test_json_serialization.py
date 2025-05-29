@@ -3,7 +3,7 @@ from unittest import TestCase
 
 from typing_extensions import List
 
-from ripple_down_rules.datasets import load_zoo_dataset
+from datasets import load_zoo_dataset
 from ripple_down_rules.datastructures.dataclasses import Case
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import make_set, flatten_list, serialize_dataclass, deserialize_dataclass
@@ -35,8 +35,8 @@ class TestJSONSerialization(TestCase):
     def test_scrdr_json_serialization(self):
         scrdr, _ = get_fit_scrdr(self.all_cases, self.targets)
         filename = f"{self.cache_dir}/scrdr.json"
-        scrdr.save(filename)
-        scrdr = SingleClassRDR.load(filename)
+        scrdr.to_json_file(filename)
+        scrdr = SingleClassRDR.from_json_file(filename)
         for case, target in zip(self.all_cases, self.targets):
             cat = scrdr.classify(case)
             self.assertEqual(cat, target)
@@ -44,8 +44,8 @@ class TestJSONSerialization(TestCase):
     def test_mcrdr_json_serialization(self):
         mcrdr = get_fit_mcrdr(self.all_cases, self.targets)
         filename = f"{self.cache_dir}/mcrdr.json"
-        mcrdr.save(filename)
-        mcrdr = MultiClassRDR.load(filename)
+        mcrdr.to_json_file(filename)
+        mcrdr = MultiClassRDR.from_json_file(filename)
         for case, target in zip(self.all_cases, self.targets):
             cat = mcrdr.classify(case)
             self.assertEqual(make_set(cat), make_set(target))
@@ -53,8 +53,8 @@ class TestJSONSerialization(TestCase):
     def test_grdr_json_serialization(self):
         grdr, all_targets = get_fit_grdr(self.all_cases, self.targets)
         filename = f"{self.cache_dir}/grdr.json"
-        grdr.save(filename)
-        grdr = GeneralRDR.load(filename)
+        grdr.to_json_file(filename)
+        grdr = GeneralRDR.from_json_file(filename)
         for case, case_targets in zip(self.all_cases[:len(all_targets)], all_targets):
             cat = grdr.classify(case)
             cat = flatten_list(cat)

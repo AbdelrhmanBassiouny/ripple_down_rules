@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ripple_down_rules"
-dynamic = ["version", "dependencies"]
+dynamic = ["version", "dependencies", "optional-dependencies"]
 description = "Implements the various versions of Ripple Down Rules (RDR) for knowledge representation and reasoning."
 readme = "README.md"
 authors = [{ name = "Abdelrhman Bassiouny", email = "abassiou@uni-bremen.de" }]
@@ -22,28 +22,5 @@ include = ["ripple_down_rules*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "ripple_down_rules.__version__"}
-dependencies = [
-    "anytree>=2.8.0",
-    "ordered_set>=4",
-    "pygraphviz>=1.7",
-    "typing-extensions>=4.12.2",
-    "graphviz",
-    "tabulate",
-    "ipython",
-    "requests",
-    "colorama",
-    "pygments",
-    "sqlalchemy",
-]
-viz = [
-    "matplotlib",
-    "networkx",
-]
-dev = [
-    "pyqt6",
-    "qtconsole",
-    "matplotlib",
-    "networkx",
-    "pytest",
-    "ucimlrepo>=0.0.7",
-    "pdbpp"]
+dependencies = { file = ["requirements.txt"] }
+optional-dependencies = { viz = {file = ["requirements-viz.txt"]}, gui = {file = ["requirements-gui.txt"]}}

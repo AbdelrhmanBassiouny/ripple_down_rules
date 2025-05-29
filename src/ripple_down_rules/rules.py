@@ -12,7 +12,7 @@ from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer, conclusion_to_json
+from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
@@ -118,7 +118,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             func_call = f"{parent_indent}    return {new_function_name.replace('def ', '')}(case)\n"
             return "\n".join(conclusion_lines).strip(' '), func_call
         else:
-            raise ValueError(f"Conclusion is format is not valid, it should be contain a function definition."
+            raise ValueError(f"Conclusion format is not valid, it should contain a function definition."
                              f" Instead got:\n{conclusion}\n")
 
     def write_condition_as_source_code(self, parent_indent: str = "", defs_file: Optional[str] = None) -> str:
@@ -129,9 +129,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         :param defs_file: The file to write the conditions to if they are a definition.
         """
         if_clause = self._if_statement_source_code_clause()
-        if '\n' not in self.conditions.user_input:
-            return f"{parent_indent}{if_clause} {self.conditions.user_input}:\n"
-        elif "def " in self.conditions.user_input:
+        if "def " in self.conditions.user_input:
             if defs_file is None:
                 raise ValueError("Cannot write conditions to source code as definitions python file was not given.")
             # This means the conditions are a definition that should be written and then called
@@ -143,17 +141,25 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             with open(defs_file, 'a') as f:
                 f.write(def_code.strip() + "\n\n\n")
             return f"\n{parent_indent}{if_clause} {new_function_name.replace('def ', '')}(case):\n"
+        else:
+            raise ValueError(f"Conditions format is not valid, it should contain a function definition"
+                             f" Instead got:\n{self.conditions.user_input}\n")
 
     @abstractmethod
     def _if_statement_source_code_clause(self) -> str:
         pass
 
     def _to_json(self) -> Dict[str, Any]:
-        json_serialization = {"conditions": self.conditions.to_json(),
+        try:
+            corner_case = SubclassJSONSerializer.to_json_static(self.corner_case) if self.corner_case else None
+        except Exception as e:
+            logging.debug("Failed to serialize corner case to json, setting it to None. Error: %s", e)
+            corner_case = None
+        json_serialization = {"_type": get_full_class_name(type(self)),
+                              "conditions": self.conditions.to_json(),
                               "conclusion": conclusion_to_json(self.conclusion),
                               "parent": self.parent.json_serialization if self.parent else None,
-                              "corner_case": SubclassJSONSerializer.to_json_static(self.corner_case)
-                              if self.corner_case else None,
+                              "corner_case": corner_case,
                               "conclusion_name": self.conclusion_name,
                               "weight": self.weight,
                               "uid": self.uid}

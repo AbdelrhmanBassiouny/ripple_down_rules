@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import builtins
 import copyreg
 import importlib
@@ -9,13 +10,14 @@ import os
 import re
 import threading
 import uuid
-from collections import UserDict
+from collections import UserDict, defaultdict
 from copy import deepcopy, copy
 from dataclasses import is_dataclass, fields
 from enum import Enum
 from textwrap import dedent
 from types import NoneType
-from typing import List
+
+from sqlalchemy.exc import NoInspectionAvailable
 
 try:
     import matplotlib
@@ -40,7 +42,7 @@ from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
-    get_origin, get_args, Tuple, Optional, List, Union, Self
+    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
@@ -79,7 +81,7 @@ def are_results_subclass_of_types(result_types: List[Any], types_: List[Type]) -
     return True
 
 
-def get_imports_from_types(types: List[Type]) -> List[str]:
+def _get_imports_from_types(types: List[Type]) -> List[str]:
     """
     Get the import statements for a list of types.
 
@@ -112,7 +114,7 @@ def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     """
     imports = []
     for k, v in scope.items():
-        if not hasattr(v, "__module__") or not hasattr(v, "__name__"):
+        if not hasattr(v, "__module__") or not hasattr(v, "__name__") or v.__module__ is None:
             continue
         imports.append(f"from {v.__module__} import {v.__name__}")
     return imports
@@ -150,95 +152,48 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
     return scope
 
 
-def extract_function_or_class_source(file_path: str,
-                                     func_and_cls_names: List[str], join_lines: bool = True,
-                                     return_line_numbers: bool = False,
-                                     include_signature: bool = True,
-                                     until_line_number: Optional[int] = None) \
+def extract_function_source(file_path: str,
+                            function_names: List[str], join_lines: bool = True,
+                            return_line_numbers: bool = False,
+                            include_signature: bool = True) \
         -> Union[Dict[str, Union[str, List[str]]],
-        Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]]]:
+        Tuple[Dict[str, Union[str, List[str]]], List[Tuple[int, int]]]]:
     """
     Extract the source code of a function from a file.
 
     :param file_path: The path to the file.
-    :param func_and_cls_names: The names of the functions and/or classes to extract.
+    :param function_names: The names of the functions to extract.
     :param join_lines: Whether to join the lines of the function.
     :param return_line_numbers: Whether to return the line numbers of the function.
-    :param include_signature: Whether to include the function signature / class definition in the source code.
-    :param until_line_number: The line number to stop reading the file at.
-    :return: A dictionary mapping function/class names to their source code as a string if join_lines is True,
+    :param include_signature: Whether to include the function signature in the source code.
+    :return: A dictionary mapping function names to their source code as a string if join_lines is True,
      otherwise as a list of strings.
     """
     with open(file_path, "r") as f:
-        if until_line_number is not None:
-            # Read only until the specified line number
-            lines = f.readlines()
-            source = "".join(lines[:until_line_number])
-        else:
-            # Read the entire file
-            source = f.read()
+        source = f.read()
 
     # Parse the source code into an AST
     tree = ast.parse(source)
-    func_and_cls_names = make_list(func_and_cls_names)
+    function_names = make_list(function_names)
     functions_source: Dict[str, Union[str, List[str]]] = {}
-    line_numbers: Dict[str, Tuple[int, int]] = {}
-    found_functions_and_classes = []
+    line_numbers = []
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-            found_functions_and_classes.append(node)
-            if node.name not in func_and_cls_names:
-                continue
-            # Get the line numbers of the function/class
+        if isinstance(node, ast.FunctionDef) and (node.name in function_names or len(function_names) == 0):
+            # Get the line numbers of the function
             lines = source.splitlines()
             func_lines = lines[node.lineno - 1:node.end_lineno]
             if not include_signature:
                 func_lines = func_lines[1:]
-            line_numbers[node.name] = (node.lineno, node.end_lineno)
+            line_numbers.append((node.lineno, node.end_lineno))
             functions_source[node.name] = dedent("\n".join(func_lines)) if join_lines else func_lines
-            if len(functions_source) == len(func_and_cls_names):
+            if (len(functions_source) >= len(function_names)) and (not len(function_names) == 0):
                 break
-    if len(functions_source) != len(func_and_cls_names):
-        raise ValueError(f"Could not find all functions in {file_path}: {func_and_cls_names} not found,"
-                         f"functions not found: {set(func_and_cls_names) - set(functions_source.keys())}")
+    if len(functions_source) < len(function_names):
+        raise ValueError(f"Could not find all functions in {file_path}: {function_names} not found,"
+                         f"functions not found: {set(function_names) - set(functions_source.keys())}")
     if return_line_numbers:
         return functions_source, line_numbers
     return functions_source
-
-
-def get_node_from_source(tree: Union[ast.FunctionDef, ast.ClassDef], func_and_cls_names: List[str],
-                         source: str, include_signature: bool = True, join_lines: bool = True) -> Tuple[
-    Optional[str, List[str]],
-    Optional[Dict[str, Tuple[int, int]]]]:
-    # Get the line numbers of the function/class
-    found_functions_and_classes = set()
-    line_numbers = {}
-    functions_source: Dict[str, Union[str, List[str], None]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-            found_functions_and_classes.add(node)
-            if node.name not in func_and_cls_names:
-                continue
-            # Get the line numbers of the function/class
-            lines = source.splitlines()
-            func_lines = lines[node.lineno - 1:node.end_lineno]
-            if not include_signature:
-                func_lines = func_lines[1:]
-            line_numbers[node.name] = (node.lineno, node.end_lineno)
-            functions_source[node.name] = "\n".join(func_lines) if join_lines else func_lines
-            if len(functions_source) == len(func_and_cls_names):
-                break
-    missing = list(set(func_and_cls_names) - set(functions_source.keys()))
-    if len(missing) > 0:
-        for found in found_functions_and_classes:
-            missing = list(set(func_and_cls_names) - set(functions_source.keys()))
-            functions_source_, line_numbers = get_node_from_source(found, missing, source, include_signature,
-                                                                   join_lines)
-            functions_source.update(functions_source_)
-            line_numbers.update(line_numbers)
-            if len(functions_source) == len(func_and_cls_names):
-                break
-    return functions_source, line_numbers
 
 
 def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optional[str] = None) -> str:
@@ -455,7 +410,7 @@ def get_names_used(node):
     return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
 
 
-def extract_dependencies(code_lines: List['str']):
+def extract_dependencies(code_lines):
     full_code = '\n'.join(code_lines)
     tree = ast.parse(full_code)
     final_stmt = tree.body[-1]
@@ -541,50 +496,27 @@ def serialize_dataclass(obj: Any, seen=None) -> Any:
             value = getattr(obj, f.name)
             result['fields'][f.name] = serialize_dataclass(value, seen)
         return result
-    elif isinstance(obj, list):
-        return [serialize_dataclass(v, seen) for v in obj]
-    elif isinstance(obj, dict):
-        return {k: serialize_dataclass(v, seen) for k, v in obj.items()}
     else:
-        try:
-            json.dumps(obj)  # Check if the object is JSON serializable
-            return obj
-        except TypeError:
-            return None
+        return SubclassJSONSerializer.to_json_static(obj, seen)
 
 
 def deserialize_dataclass(data: Any, refs: Optional[Dict[str, Any]] = None) -> Any:
     refs = {} if refs is None else refs
-    preloaded, var_names, vars_to_construct = preload_serialized_objects(data, refs)
+    preloaded = preload_serialized_objects(data, refs)
     return resolve_refs(preloaded, refs)
 
 
-def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None,
-                               vars_to_construct: Optional[Dict[str, str]] = None) -> Any:
+def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None) -> Any:
     """
     Recursively deserialize a dataclass from a dictionary, if the dictionary contains a key "__dataclass__" (Most likely
     created by the serialize_dataclass function), it will be treated as a dataclass and deserialized accordingly,
     otherwise it will be returned as is.
 
     :param data: The dictionary to deserialize.
-    :param refs: A dictionary to keep track of references to avoid circular references.
-    :param vars_to_construct: A dictionary to keep track of variables to construct.
     :return: The deserialized dataclass.
     """
     if refs is None:
         refs = {}
-    vars_to_construct = vars_to_construct or {}
-    var_names = []
-
-    def deserialize_dict(data_, refs_, vars_to_construct_) -> Tuple[Dict, List[str], Optional[Dict[str, str]]]:
-        var_instance_ = {}
-        var_names_ = []
-        for k, v in data_.items():
-            var_instance_k_val_, var_names__, vars_to_construct_ = preload_serialized_objects(v, refs_,
-                                                                                              vars_to_construct_)
-            var_instance_[k] = var_instance_k_val_
-            var_names_.extend(var_names__)
-        return var_instance_, var_names_, vars_to_construct_
 
     if isinstance(data, dict):
 
@@ -592,7 +524,7 @@ def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None,
             ref_id = data['$ref']
             if ref_id not in refs:
                 return {'$ref': data['$ref']}
-            return refs[ref_id], var_names, vars_to_construct
+            return refs[ref_id]
 
         elif '$id' in data and '__dataclass__' in data and 'fields' in data:
             cls_path = data['__dataclass__']
@@ -600,40 +532,24 @@ def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None,
             cls = getattr(importlib.import_module(module_name), class_name)
 
             dummy_instance = cls.__new__(cls)  # Don't call __init__ yet
-            dummy_instance_varname = f"var_{data['$id']}"
-            dummy_instance_str = f"{dummy_instance_varname} = {cls.__module__}.{cls.__name__}("
-            dummy_instance_setter_str = ""
             refs[data['$id']] = dummy_instance
 
             for f in fields(cls):
                 raw_value = data['fields'].get(f.name)
-                value, var_names_, vars_to_construct = preload_serialized_objects(raw_value, refs, vars_to_construct)
-                var_names.extend(var_names_)
+                value = preload_serialized_objects(raw_value, refs)
                 setattr(dummy_instance, f.name, value)
-                if f.init:
-                    var_name = var_names_[-1] if len(var_names_) > 0 else None
-                    dummy_instance_str += f"{f.name}={var_name}, "
-                else:
-                    dummy_instance_setter_str += f"setattr({dummy_instance_varname}, '{f.name}', {value})"
-            dummy_instance_str = dummy_instance_str[:-2] + ")"
-            vars_to_construct[dummy_instance_varname] = '\n'.join(dummy_instance_str)
 
-            return dummy_instance, var_names, vars_to_construct
+            return dummy_instance
 
         else:
-            return deserialize_dict(data, refs, vars_to_construct)
+            return {k: preload_serialized_objects(v, refs) for k, v in data.items()}
 
     elif isinstance(data, list):
-        var_instance = []
-        for item in data:
-            val, var_names_, vars_to_construct = preload_serialized_objects(item, refs, vars_to_construct)
-            var_instance.append(val)
-            var_names.extend(var_names_)
-        return var_instance, var_names, vars_to_construct
+        return [preload_serialized_objects(item, refs) for item in data]
     elif isinstance(data, dict):
-        return deserialize_dict(data, refs, vars_to_construct)
+        return {k: preload_serialized_objects(v, refs) for k, v in data.items()}
 
-    return data, var_names, vars_to_construct  # Primitive
+    return data  # Primitive
 
 
 def resolve_refs(obj, refs, seen=None):
@@ -743,56 +659,149 @@ def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> 
     return model_name
 
 
-def extract_bracket_arguments(val: str) -> List[str]:
-    """
-    Extract arguments inside brackets into a list.
+def stringify_hint(tp):
+    """Recursively convert a type hint to a string."""
+    if isinstance(tp, str):
+        return tp
 
-    :param val: The string containing brackets.
-    :return: List of arguments inside brackets.
-    """
-    if '[' not in val:
-        return [val]
-    args_start = val.find('[')
-    args_end = val.rfind(']')
-    if args_end == -1:
-        return [val]
-    base_type = val[:args_start]
-    args = val[args_start + 1:args_end].split(',')
-    args = [arg.strip() for arg in args]
-    return [base_type] + args
+    # Handle ForwardRef (string annotations not yet evaluated)
+    if isinstance(tp, ForwardRef):
+        return tp.__forward_arg__
+
+    # Handle typing generics like List[int], Dict[str, List[int]], etc.
+    origin = get_origin(tp)
+    args = get_args(tp)
+
+    if origin is not None:
+        origin_str = getattr(origin, '__name__', str(origin)).capitalize()
+        args_str = ", ".join(stringify_hint(arg) for arg in args)
+        return f"{origin_str}[{args_str}]"
+
+    # Handle built-in types like int, str, etc.
+    if isinstance(tp, type):
+        if tp.__module__ == 'builtins':
+            return tp.__name__
+        return f"{tp.__qualname__}"
+
+    return str(tp)
 
 
-def typing_hint_to_str(type_hint: Any) -> Tuple[str, List[str]]:
-    """
-    Convert a typing hint to a string.
+def is_builtin_type(tp):
+    return isinstance(tp, type) and tp.__module__ == "builtins"
 
-    :param type_hint: The typing hint to convert.
-    :return: The string representation of the typing hint.
+
+def is_typing_type(tp):
+    return tp.__module__ == "typing"
+
+origin_type_to_hint = {
+    list: List,
+    set: Set,
+    dict: Dict,
+    tuple: Tuple,
+}
+
+def extract_types(tp, seen: Set = None) -> Set[type]:
+    """Recursively extract all base types from a type hint."""
+    if seen is None:
+        seen = set()
+
+    if tp in seen or isinstance(tp, str):
+        return seen
+
+    # seen.add(tp)
+
+    if isinstance(tp, ForwardRef):
+        # Can't resolve until evaluated
+        return seen
+
+    origin = get_origin(tp)
+    args = get_args(tp)
+
+    if origin:
+        if origin in origin_type_to_hint:
+            seen.add(origin_type_to_hint[origin])
+        else:
+            seen.add(origin)
+        for arg in args:
+            extract_types(arg, seen)
+
+    elif isinstance(tp, type):
+        seen.add(tp)
+
+    return seen
+
+
+def get_types_to_import_from_func_type_hints(func: Callable) -> Set[Type]:
     """
-    val = (str(type_hint).strip("<>")
-           .replace("class ", "")
-           # .replace("typing.", "")
-           .replace("'", ""))
-    all_args = []
-    if '[' in val:
-        args = extract_bracket_arguments(val)
-        args_with_brackets = [arg for arg in args if '[' in arg]
-        all_args.extend([arg for arg in args if '[' not in arg])
-        while args_with_brackets:
-            for arg in args:
-                if '[' in arg:
-                    sub_args = extract_bracket_arguments(arg)
-                    args_with_brackets.remove(arg)
-                    all_args.extend([sarg for sarg in sub_args if '[' not in sarg])
-                    args_with_brackets.extend([sarg for sarg in sub_args if '[' in sarg])
-                elif arg not in all_args:
-                    all_args.append(arg)
-            args = args_with_brackets
-        for arg in all_args:
-            val = val.replace(arg, arg.split('.')[-1])
-    else:
-        val = val.split('.')[-1]
-    return val, all_args
+    Extract importable types from a function's annotations.
+
+    :param func: The function to extract type hints from.
+    """
+    hints = get_type_hints(func)
+
+    sig = inspect.signature(func)
+    all_hints = list(hints.values())
+    if sig.return_annotation != inspect.Signature.empty:
+        all_hints.append(sig.return_annotation)
+
+    for param in sig.parameters.values():
+        if param.annotation != inspect.Parameter.empty:
+            all_hints.append(param.annotation)
+
+    return get_types_to_import_from_type_hints(all_hints)
+
+
+def get_types_to_import_from_type_hints(hints: List[Type]) -> Set[Type]:
+    """
+    Extract importable types from a list of type hints.
+
+    :param hints: A list of type hints to extract types from.
+    :return: A set of types that need to be imported.
+    """
+    seen_types = set()
+    for hint in hints:
+        extract_types(hint, seen_types)
+
+    # Filter out built-in and internal types
+    to_import = set()
+    for tp in seen_types:
+        if isinstance(tp, ForwardRef) or isinstance(tp, str):
+            continue
+        if not is_builtin_type(tp):
+            to_import.add(tp)
+
+    return to_import
+
+
+def get_imports_from_types(type_objs: List[Type]) -> List[str]:
+    """
+    Format import lines from type objects.
+
+    :param type_objs: A list of type objects to format.
+    """
+
+    module_to_types = defaultdict(list)
+    for tp in type_objs:
+        try:
+            if isinstance(tp, type) or is_typing_type(tp):
+                module = tp.__module__
+                name = tp.__qualname__
+            elif hasattr(type(tp), "__module__"):
+                module = type(tp).__module__
+                name = type(tp).__qualname__
+            else:
+                continue
+            if module is None or module == 'builtins' or module.startswith('_'):
+                continue
+            module_to_types[module].append(name)
+        except AttributeError:
+            continue
+
+    lines = []
+    for module, names in module_to_types.items():
+        joined = ", ".join(sorted(set(names)))
+        lines.append(f"from {module} import {joined}")
+    return sorted(lines)
 
 
 def get_method_args_as_dict(method: Callable, *args, **kwargs) -> Dict[str, Any]:
@@ -945,10 +954,28 @@ class SubclassJSONSerializer:
         return data
 
     @staticmethod
-    def to_json_static(obj) -> Dict[str, Any]:
-        if is_dataclass(obj):
-            return serialize_dataclass(obj)
-        return {"_type": get_full_class_name(obj.__class__), **obj._to_json()}
+    def to_json_static(obj, seen=None) -> Any:
+        if isinstance(obj, SubclassJSONSerializer):
+            return {"_type": get_full_class_name(obj.__class__), **obj._to_json()}
+        elif isinstance(obj, type):
+            return {"_type": get_full_class_name(obj)}
+        elif is_dataclass(obj):
+            return serialize_dataclass(obj, seen)
+        elif isinstance(obj, list):
+            return [SubclassJSONSerializer.to_json_static(v, seen) for v in obj]
+        elif isinstance(obj, dict):
+            serialized_dict = {}
+            for k, v in obj.items():
+                if not isinstance(k, (str, int, bool, float, type(None))):
+                    continue
+                serialized_dict[k] = SubclassJSONSerializer.to_json_static(v, seen)
+            return serialized_dict
+        else:
+            try:
+                json.dumps(obj)  # Check if the object is JSON serializable
+                return obj
+            except TypeError:
+                return None
 
     def to_json(self) -> Dict[str, Any]:
         return self.to_json_static(self)
@@ -1029,9 +1056,6 @@ class SubclassJSONSerializer:
 
         raise ValueError("Unknown type {}".format(data["_type"]))
 
-    save = to_json_file
-    load = from_json_file
-
 
 def _pickle_thread(thread_obj) -> Any:
     """Return a plain object with user-defined attributes but no thread behavior."""
@@ -1087,13 +1111,20 @@ def copy_orm_instance(instance: SQLTable) -> SQLTable:
     :param instance: The instance to copy.
     :return: The copied instance.
     """
-    session: Session = inspect(instance).session
+    try:
+        session: Session = inspect(instance).session
+    except NoInspectionAvailable:
+        session = None
     if session is not None:
         session.expunge(instance)
         new_instance = deepcopy(instance)
         session.add(instance)
     else:
-        new_instance = instance
+        try:
+            new_instance = deepcopy(instance)
+        except Exception as e:
+            logging.debug(e)
+            new_instance = instance
     return new_instance
 
 
@@ -1107,8 +1138,12 @@ def copy_orm_instance_with_relationships(instance: SQLTable) -> SQLTable:
     instance_cp = copy_orm_instance(instance)
     for rel in class_mapper(instance.__class__).relationships:
         related_obj = getattr(instance, rel.key)
+        related_obj_cp = copy_orm_instance(related_obj)
         if related_obj is not None:
-            setattr(instance_cp, rel.key, related_obj)
+            try:
+                setattr(instance_cp, rel.key, related_obj_cp)
+            except Exception as e:
+                logging.debug(e)
     return instance_cp
 
 
@@ -1119,7 +1154,17 @@ def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
     :param attr_name: The name of the attribute.
     :param obj: The object to get the attributes from.
     """
-    hint, origin, args = get_hint_for_attribute(attr_name, obj)
+    # check first if obj is a function object
+    if hasattr(obj, '__code__'):
+        func_type_hints = get_type_hints(obj)
+        if attr_name in func_type_hints:
+            hint = func_type_hints[attr_name]
+            origin = get_origin(hint)
+            args = get_args(hint)
+        else:
+            raise ValueError(f"Unknown type hint: {attr_name}")
+    else:
+        hint, origin, args = get_hint_for_attribute(attr_name, obj)
     if not origin and not hint:
         if hasattr(obj, attr_name):
             attr_value = getattr(obj, attr_name)
@@ -1449,8 +1494,8 @@ def draw_tree(root: Node, fig: Figure):
     """
     Draw the tree using matplotlib and networkx.
     """
-    if matplotlib.get_backend().lower() not in ['qt5agg', 'qt4agg', 'qt6agg']:
-        matplotlib.use("Qt6Agg")  # or "Qt6Agg", depending on availability
+    # if matplotlib.get_backend().lower() not in ['qt5agg', 'qt4agg', 'qt6agg']:
+    #     matplotlib.use("Qt6Agg")  # or "Qt6Agg", depending on availability
 
     if root is None:
         return

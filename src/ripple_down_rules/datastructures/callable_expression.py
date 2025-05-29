@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import logging
+import os
 from _ast import AST
 from enum import Enum
 
@@ -9,8 +10,8 @@ from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
 
 from .case import create_case, Case
 from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json, is_iterable, \
-    build_user_input_from_conclusion, encapsulate_user_input, extract_function_or_class_source, are_results_subclass_of_types, \
-    make_list
+    build_user_input_from_conclusion, encapsulate_user_input, extract_function_source, are_results_subclass_of_types, \
+    make_list, get_imports_from_scope
 
 
 class VariableVisitor(ast.NodeVisitor):
@@ -91,7 +92,7 @@ class CallableExpression(SubclassJSONSerializer):
     """
     A callable that is constructed from a string statement written by an expert.
     """
-    encapsulating_function: str = "def _get_value(case):"
+    encapsulating_function_name: str = "_get_value"
 
     def __init__(self, user_input: Optional[str] = None,
                  conclusion_type: Optional[Tuple[Type]] = None,
@@ -115,7 +116,7 @@ class CallableExpression(SubclassJSONSerializer):
         if user_input is None:
             user_input = build_user_input_from_conclusion(conclusion)
         self.conclusion: Optional[Any] = conclusion
-        self._user_input: str = encapsulate_user_input(user_input, self.encapsulating_function)
+        self._user_input: str = encapsulate_user_input(user_input, self.get_encapsulating_function())
         if conclusion_type is not None:
             if is_iterable(conclusion_type):
                 conclusion_type = tuple(conclusion_type)
@@ -129,6 +130,13 @@ class CallableExpression(SubclassJSONSerializer):
         self.visitor = VariableVisitor()
         self.visitor.visit(self.expression_tree)
         self.mutually_exclusive: bool = mutually_exclusive
+
+    @classmethod
+    def get_encapsulating_function(cls, postfix: str = '') -> str:
+        """
+        Get the encapsulating function that is used to wrap the user input.
+        """
+        return f"def {cls.encapsulating_function_name}{postfix}(case):"
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
@@ -159,8 +167,8 @@ class CallableExpression(SubclassJSONSerializer):
         """
         Combine this callable expression with another callable expression using the 'and' operator.
         """
-        cond1_user_input = self.user_input.replace(self.encapsulating_function, "def _cond1(case):")
-        cond2_user_input = other.user_input.replace(self.encapsulating_function, "def _cond2(case):")
+        cond1_user_input = self.user_input.replace(self.get_encapsulating_function(), "def _cond1(case):")
+        cond2_user_input = other.user_input.replace(self.get_encapsulating_function(), "def _cond2(case):")
         new_user_input = (f"{cond1_user_input}\n"
                           f"{cond2_user_input}\n"
                           f"return _cond1(case) and _cond2(case)")
@@ -170,10 +178,28 @@ class CallableExpression(SubclassJSONSerializer):
         """
         Update the user input from a file.
         """
-        new_function_body = extract_function_or_class_source(file_path, function_name)
+        new_function_body = extract_function_source(file_path, [function_name])[function_name]
         if new_function_body is None:
             return
-        self.user_input = self.encapsulating_function + '\n' + new_function_body
+        self.user_input = self.get_encapsulating_function() + '\n' + new_function_body
+
+    def write_to_python_file(self, file_path: str, append: bool = False):
+        """
+        Write the callable expression to a python file.
+
+        :param file_path: The path to the file where the callable expression will be written.
+        :param append: If True, the callable expression will be appended to the file. If False,
+         the file will be overwritten.
+        """
+        imports = '\n'.join(get_imports_from_scope(self.scope))
+        if append and os.path.exists(file_path):
+            with open(file_path, 'a') as f:
+                f.write('\n\n\n' + imports + '\n\n\n')
+                f.write(self.user_input)
+        else:
+            with open(file_path, 'w') as f:
+                f.write(imports + '\n\n\n')
+                f.write(self.user_input)
 
     @property
     def user_input(self):
@@ -188,7 +214,7 @@ class CallableExpression(SubclassJSONSerializer):
         Set the user input.
         """
         if value is not None:
-            self._user_input = encapsulate_user_input(value, self.encapsulating_function)
+            self._user_input = encapsulate_user_input(value, self.get_encapsulating_function())
             self.scope = get_used_scope(self.user_input, self.scope)
             self.expression_tree = parse_string_to_expression(self.user_input)
             self.code = compile_expression_to_code(self.expression_tree)
@@ -233,7 +259,8 @@ class CallableExpression(SubclassJSONSerializer):
                 "conclusion_type": [get_full_class_name(t) for t in self.conclusion_type]
                 if self.conclusion_type is not None else None,
                 "scope": {k: get_full_class_name(v) for k, v in self.scope.items()
-                          if hasattr(v, '__module__') and hasattr(v, '__name__')},
+                          if hasattr(v, '__module__') and hasattr(v, '__name__')
+                          and v.__module__ is not None and v.__name__ is not None},
                 "conclusion": conclusion_to_json(self.conclusion),
                 "mutually_exclusive": self.mutually_exclusive,
                 }
@@ -266,8 +293,8 @@ def parse_string_to_expression(expression_str: str) -> AST:
     :param expression_str: The string which will be parsed.
     :return: The parsed expression.
     """
-    if not expression_str.startswith(CallableExpression.encapsulating_function):
-        expression_str = encapsulate_user_input(expression_str, CallableExpression.encapsulating_function)
+    if not expression_str.startswith(CallableExpression.get_encapsulating_function()):
+        expression_str = encapsulate_user_input(expression_str, CallableExpression.get_encapsulating_function())
     mode = 'exec' if expression_str.startswith('def') else 'eval'
     tree = ast.parse(expression_str, mode=mode)
     logging.debug(f"AST parsed successfully: {ast.dump(tree)}")

@@ -8,13 +8,13 @@ from functools import cached_property
 from textwrap import indent, dedent
 
 from colorama import Fore, Style
-from typing_extensions import Optional, Type, List, Callable, Tuple, Dict
+from typing_extensions import Optional, Type, List, Callable, Tuple, Dict, Any, Union
 
 from ..datastructures.case import Case
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import Editor, PromptFor
-from ..utils import str_to_snake_case, get_imports_from_scope, make_list, typing_hint_to_str, \
-    get_imports_from_types, extract_function_or_class_source, extract_imports
+from ..utils import str_to_snake_case, get_imports_from_scope, make_list, stringify_hint, \
+    get_imports_from_types, extract_function_source, extract_imports, get_types_to_import_from_type_hints
 
 
 def detect_available_editor() -> Optional[Editor]:
@@ -84,6 +84,7 @@ class TemplateFileCreator:
         self.func_doc: str = self.get_func_doc()
         self.function_signature: str = self.get_function_signature()
         self.editor: Optional[Editor] = detect_available_editor()
+        self.editor_cmd: Optional[str] = os.environ.get("RDR_EDITOR_CMD")
         self.workspace: str = os.environ.get("RDR_EDITOR_WORKSPACE", os.path.dirname(self.case_query.scope['__file__']))
         self.temp_file_path: str = os.path.join(self.workspace, "edit_code_here.py")
 
@@ -98,7 +99,7 @@ class TemplateFileCreator:
         return make_list(output_type) if output_type is not None else None
 
     def edit(self):
-        if self.editor is None:
+        if self.editor is None and self.editor_cmd is None:
             self.print_func(
                 f"{Fore.RED}ERROR:: No editor found. Please install PyCharm, VSCode or code-server.{Style.RESET_ALL}")
             return
@@ -112,7 +113,11 @@ class TemplateFileCreator:
         """
         Open the file in the available editor.
         """
-        if self.editor == Editor.Pycharm:
+        if self.editor_cmd is not None:
+            subprocess.Popen([self.editor_cmd, self.temp_file_path],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        elif self.editor == Editor.Pycharm:
             subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
                              stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL)
@@ -172,7 +177,7 @@ class TemplateFileCreator:
             for k, v in self.case_query.case.items():
                 if (self.case_query.function_args_type_hints is not None
                         and k in self.case_query.function_args_type_hints):
-                    func_args[k] = typing_hint_to_str(self.case_query.function_args_type_hints[k])[0]
+                    func_args[k] = stringify_hint(self.case_query.function_args_type_hints[k])
                 else:
                     func_args[k] = type(v).__name__ if not isinstance(v, type) else f"Type[{v.__name__}]"
             func_args = ', '.join([f"{k}: {v}" if str(v) not in ["NoneType", "None"] else str(k)
@@ -202,30 +207,25 @@ class TemplateFileCreator:
             for k, v in self.case_query.case.items():
                 if (self.case_query.function_args_type_hints is not None
                         and k in self.case_query.function_args_type_hints):
-                    hint_list = typing_hint_to_str(self.case_query.function_args_type_hints[k])[1]
-                    for hint in hint_list:
-                        hint_split = hint.split('.')
-                        if len(hint_split) > 1:
-                            case_type_imports.append(f"from {'.'.join(hint_split[:-1])} import {hint_split[-1]}")
+                    types_to_import = get_types_to_import_from_type_hints([self.case_query.function_args_type_hints[k]])
+                    case_type_imports.extend(list(types_to_import))
                 else:
-                    if isinstance(v, type):
-                        case_type_imports.append(f"from {v.__module__} import {v.__name__}")
-                    elif hasattr(v, "__module__") and not v.__module__.startswith("__"):
-                        case_type_imports.append(f"\nfrom {type(v).__module__} import {type(v).__name__}")
+                    case_type_imports.append(v)
         else:
-            case_type_imports.append(f"from {self.case_type.__module__} import {self.case_type.__name__}")
+            case_type_imports.append(self.case_type)
         if self.output_type is None:
-            output_type_imports = [f"from typing_extensions import Any"]
+            output_type_imports = [Any]
         else:
-            output_type_imports = get_imports_from_types(self.output_type)
+            output_type_imports = self.output_type
             if len(self.output_type) > 1:
-                output_type_imports.append("from typing_extensions import Union")
+                output_type_imports.append(Union)
             if list in self.output_type:
-                output_type_imports.append("from typing_extensions import List")
-        imports = get_imports_from_scope(self.case_query.scope)
-        imports = [i for i in imports if ("get_ipython" not in i)]
-        imports.extend(case_type_imports)
-        imports.extend([oti for oti in output_type_imports if oti not in imports])
+                output_type_imports.append(List)
+        import_types = list(self.case_query.scope.values())
+        # imports = [i for i in imports if ("get_ipython" not in i)]
+        import_types.extend(case_type_imports)
+        import_types.extend(output_type_imports)
+        imports = get_imports_from_types(import_types)
         imports = set(imports)
         return '\n'.join(imports)
 
@@ -258,12 +258,12 @@ class TemplateFileCreator:
             func_name = f"{prompt_for.value.lower()}_for_"
         case_name = case_query.name.replace(".", "_")
         if case_query.is_function:
-            # convert any CamelCase word into snake_case by adding _ before each capital letter
-            case_name = case_name.replace(f"_{case_query.attribute_name}", "")
-        func_name += case_name
-        attribute_types = TemplateFileCreator.get_core_attribute_types(case_query)
-        attribute_type_names = [t.__name__ for t in attribute_types]
-        func_name += f"_of_type_{'_or_'.join(attribute_type_names)}"
+            func_name += case_name.replace(f"_{case_query.attribute_name}", "")
+        else:
+            func_name += case_name
+            attribute_types = TemplateFileCreator.get_core_attribute_types(case_query)
+            attribute_type_names = [t.__name__ for t in attribute_types]
+            func_name += f"_of_type_{'_or_'.join(attribute_type_names)}"
         return str_to_snake_case(func_name)
 
     @cached_property
@@ -300,13 +300,14 @@ class TemplateFileCreator:
             if isinstance(node, ast.FunctionDef) and node.name == func_name:
                 exec_globals = {}
                 scope = extract_imports(tree=tree)
+                updates.update(scope)
                 exec(source, scope, exec_globals)
                 user_function = exec_globals[func_name]
                 updates[func_name] = user_function
                 print_func(f"{Fore.BLUE}Loaded `{func_name}` function into user namespace.{Style.RESET_ALL}")
                 break
         if updates:
-            all_code_lines = extract_function_or_class_source(file_path,
+            all_code_lines = extract_function_source(file_path,
                                                           [func_name],
                                                           join_lines=False)[func_name]
             return all_code_lines, updates

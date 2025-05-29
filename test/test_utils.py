@@ -1,7 +1,9 @@
 import os
 from unittest import TestCase
 
-from ripple_down_rules.utils import extract_imports, make_set
+from typing_extensions import List, Dict, Union, Tuple
+
+from ripple_down_rules.utils import extract_imports, make_set, stringify_hint
 
 
 class UtilsTestCase(TestCase):
@@ -21,3 +23,16 @@ class UtilsTestCase(TestCase):
 
         # Clean up
         os.remove(file_path)
+
+
+    def test_stringify_hint(self):
+
+        self.assertEqual(stringify_hint(int), "int")
+        self.assertEqual(stringify_hint(str), "str")
+        self.assertEqual(stringify_hint(List[int]), "List[int]")
+        self.assertEqual(stringify_hint(Dict[str, Union[int, str]]), "Dict[str, Union[int, str]]")
+        self.assertEqual(stringify_hint(None), "None")
+        self.assertEqual(stringify_hint("CustomType"), "CustomType")
+        self.assertEqual(stringify_hint(List[Dict[str, Union[int, str]]]), "List[Dict[str, Union[int, str]]]")
+        self.assertEqual(stringify_hint(List[Dict[str, Union[int, List[Tuple[str, float]]]]]),
+                                        "List[Dict[str, Union[int, List[Tuple[str, float]]]]]")

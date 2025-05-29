@@ -189,17 +189,17 @@ def test_two_molecules():
 
 def test_serialize_two_molecules_model():
     rdr = get_two_molecules_model()
-    filename = "./test_results/mutagenic_rdr.json"
-    rdr.save(filename)
-    loaded_rdr = type(rdr).load(filename)
+    filename = "./test_results/two_molecules_model"
+    rdr.to_json_file(filename)
+    loaded_rdr = type(rdr).from_json_file(filename)
     assert rdr.classify(make_molecule_1()) == loaded_rdr.classify(make_molecule_1())
     assert rdr.classify(make_molecule_2()) == loaded_rdr.classify(make_molecule_2())
 
 
 def test_write_two_molecules_model_to_python():
     rdr = get_two_molecules_model()
-    filename = "./test_generated_rdrs"
-    rdr.write_to_python_file(filename)
+    filename = "./test_generated_rdrs/two_molecules"
+    rdr._write_to_python(filename)
     loaded_rdr = rdr.get_rdr_classifier_from_python_file(filename)
     assert rdr.classify(make_molecule_1()) == loaded_rdr(make_molecule_1())
     assert rdr.classify(make_molecule_2()) == loaded_rdr(make_molecule_2())

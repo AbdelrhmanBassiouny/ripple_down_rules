@@ -117,21 +117,15 @@ class PhysicalObject:
     """
     A physical object is an object that can be contained in a container.
     """
-    _rdr_json_dir: str = os.path.join(os.path.dirname(__file__), "../../test/test_results")
+    _rdr_json_dir: str = os.path.join(os.path.dirname(__file__), "test_results")
     """
     The directory where the RDR serialized JSON files are stored.
     """
-    _rdr_python_dir: str = os.path.join(os.path.dirname(__file__), "../../test/test_generated_rdrs")
-    """
-    The directory where the RDR generated Python files are stored.
-    """
-    _is_a_robot_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (bool,), True,
-                                                 python_dir=_rdr_python_dir)
+    _is_a_robot_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (bool,), True)
     """
     The RDR decorator that is used to determine if the object is a robot or not.
     """
-    _select_parts_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (Self,), False,
-                                                   python_dir=_rdr_python_dir)
+    _select_parts_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (Self,), False)
     """
     The RDR decorator that is used to determine if the object is a robot or not.
     """

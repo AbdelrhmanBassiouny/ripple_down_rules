@@ -1,0 +1,127 @@
+digraph tree {
+    "def _get_value(case):
+    return case.milk == 1
+=> def _get_value(case):
+    return Species.mammal";
+    "def _get_value(case):
+    return case.aquatic == 1
+=> def _get_value(case):
+    return Species.fish";
+    "def _get_value(case):
+    return case.feathers == 1
+=> def _get_value(case):
+    return Species.bird";
+    "def _get_value(case):
+    return case.backbone == 0 and case.breathes == 0
+=> def _get_value(case):
+    return Species.molusc";
+    "def _get_value(case):
+    return case.eggs == 1 and case.backbone == 0
+=> def _get_value(case):
+    return Species.insect";
+    "def _get_value(case):
+    return case.backbone == 1 and case.tail == 1
+=> def _get_value(case):
+    return Species.reptile";
+    "def _get_value(case):
+    return case.backbone == 0 and case.eggs == 0
+=> def _get_value(case):
+    return Species.molusc";
+    "def _get_value(case):
+    return case.legs == 0
+=> def _get_value(case):
+    return Species.molusc";
+    "def _get_value(case):
+    return case.fins == 0
+=> def _get_value(case):
+    return Species.molusc";
+    "def _get_value(case):
+    return case.feathers == 1
+=> def _get_value(case):
+    return Species.bird_1";
+    "def _get_value(case):
+    return case.backbone == 1
+=> def _get_value(case):
+    return Species.amphibian";
+    "def _get_value(case):
+    return case.breathes == 0
+=> def _get_value(case):
+    return Species.reptile";
+    "def _get_value(case):
+    return case.milk == 1
+=> def _get_value(case):
+    return Species.mammal" -> "def _get_value(case):
+    return case.aquatic == 1
+=> def _get_value(case):
+    return Species.fish" [style="bold", label=" else if"];
+    "def _get_value(case):
+    return case.aquatic == 1
+=> def _get_value(case):
+    return Species.fish" -> "def _get_value(case):
+    return case.feathers == 1
+=> def _get_value(case):
+    return Species.bird" [style="bold", label=" else if"];
+    "def _get_value(case):
+    return case.aquatic == 1
+=> def _get_value(case):
+    return Species.fish" -> "def _get_value(case):
+    return case.fins == 0
+=> def _get_value(case):
+    return Species.molusc" [style="bold", label=" except if"];
+    "def _get_value(case):
+    return case.feathers == 1
+=> def _get_value(case):
+    return Species.bird" -> "def _get_value(case):
+    return case.backbone == 0 and case.breathes == 0
+=> def _get_value(case):
+    return Species.molusc" [style="bold", label=" else if"];
+    "def _get_value(case):
+    return case.backbone == 0 and case.breathes == 0
+=> def _get_value(case):
+    return Species.molusc" -> "def _get_value(case):
+    return case.eggs == 1 and case.backbone == 0
+=> def _get_value(case):
+    return Species.insect" [style="bold", label=" else if"];
+    "def _get_value(case):
+    return case.eggs == 1 and case.backbone == 0
+=> def _get_value(case):
+    return Species.insect" -> "def _get_value(case):
+    return case.backbone == 1 and case.tail == 1
+=> def _get_value(case):
+    return Species.reptile" [style="bold", label=" else if"];
+    "def _get_value(case):
+    return case.eggs == 1 and case.backbone == 0
+=> def _get_value(case):
+    return Species.insect" -> "def _get_value(case):
+    return case.legs == 0
+=> def _get_value(case):
+    return Species.molusc" [style="bold", label=" except if"];
+    "def _get_value(case):
+    return case.backbone == 1 and case.tail == 1
+=> def _get_value(case):
+    return Species.reptile" -> "def _get_value(case):
+    return case.backbone == 0 and case.eggs == 0
+=> def _get_value(case):
+    return Species.molusc" [style="bold", label=" else if"];
+    "def _get_value(case):
+    return case.fins == 0
+=> def _get_value(case):
+    return Species.molusc" -> "def _get_value(case):
+    return case.feathers == 1
+=> def _get_value(case):
+    return Species.bird_1" [style="bold", label=" except if"];
+    "def _get_value(case):
+    return case.feathers == 1
+=> def _get_value(case):
+    return Species.bird_1" -> "def _get_value(case):
+    return case.backbone == 1
+=> def _get_value(case):
+    return Species.amphibian" [style="bold", label=" else if"];
+    "def _get_value(case):
+    return case.backbone == 1
+=> def _get_value(case):
+    return Species.amphibian" -> "def _get_value(case):
+    return case.breathes == 0
+=> def _get_value(case):
+    return Species.reptile" [style="bold", label=" except if"];
+}

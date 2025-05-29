@@ -84,7 +84,7 @@ class Case(UserDict, SubclassJSONSerializer):
     def _to_json(self) -> Dict[str, Any]:
         serializable = {k: v for k, v in self.items() if not k.startswith("_")}
         serializable["_id"] = self._id
-        serializable["_obj_type"] = get_full_class_name(self._obj_type)
+        serializable["_obj_type"] = get_full_class_name(self._obj_type) if self._obj_type is not None else None
         serializable["_name"] = self._name
         for k, v in serializable.items():
             if isinstance(v, set):
@@ -96,7 +96,7 @@ class Case(UserDict, SubclassJSONSerializer):
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Case:
         id_ = data.pop("_id")
-        obj_type = get_type_from_string(data.pop("_obj_type"))
+        obj_type = get_type_from_string(data.pop("_obj_type")) if data["_obj_type"] is not None else None
         name = data.pop("_name")
         for k, v in data.items():
             data[k] = SubclassJSONSerializer.from_json(v)
@@ -308,7 +308,10 @@ def create_case_attribute_from_iterable_attribute(attr_value: Any, name: str, ob
     :return: A case attribute that represents the original iterable attribute.
     """
     values = list(attr_value.values()) if isinstance(attr_value, (dict, UserDict)) else attr_value
-    _type = type(list(values)[0]) if len(values) > 0 else get_value_type_from_type_hint(name, obj)
+    try:
+        _type = type(list(values)[0]) if len(values) > 0 else get_value_type_from_type_hint(name, obj)
+    except ValueError:
+        _type = None
     attr_case = Case(_type, _id=id(attr_value), _name=name, original_object=attr_value)
     case_attr = CaseAttribute(values)
     for idx, val in enumerate(values):
@@ -317,7 +320,10 @@ def create_case_attribute_from_iterable_attribute(attr_value: Any, name: str, ob
                                     obj_name=name, parent_is_iterable=True)
         attr_case.update(sub_attr_case)
     for sub_attr, val in attr_case.items():
-        setattr(case_attr, sub_attr, val)
+        try:
+            setattr(case_attr, sub_attr, val)
+        except AttributeError:
+            pass
     return case_attr
 
 

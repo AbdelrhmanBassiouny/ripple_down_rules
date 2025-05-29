@@ -281,12 +281,14 @@ class RDRCaseViewer(QMainWindow):
     main_obj: Optional[Dict[str, Any]] = None
     user_input: Optional[str] = None
     attributes_widget: Optional[QWidget] = None
-    save_function: Optional[Callable[str], None] = None
+    save_function: Optional[Callable[str, str], None] = None
 
-
-    def __init__(self, parent=None, save_file: Optional[str] = None):
+    def __init__(self, parent=None,
+                 save_dir: Optional[str] = None,
+                 save_model_name: Optional[str] = None):
         super().__init__(parent)
-        self.save_file = save_file
+        self.save_dir = save_dir
+        self.save_model_name = save_model_name
 
         self.setWindowTitle("RDR Case Viewer")
 
@@ -323,17 +325,17 @@ class RDRCaseViewer(QMainWindow):
 
         # Add both to main layout
         main_layout.addWidget(self.attributes_widget, stretch=1)
-        main_layout.addWidget(middle_widget, stretch=2)
+        main_layout.addWidget(middle_widget, stretch=1)
         main_layout.addWidget(self.obj_diagram_viewer, stretch=2)
 
-    def set_save_function(self, save_function: Callable[[str], None]) -> None:
+    def set_save_function(self, save_function: Callable[[str, str], None]) -> None:
         """
         Set the function to save the file.
 
         :param save_function: The function to save the file.
         """
         self.save_function = save_function
-        self.save_btn.clicked.connect(lambda: self.save_function(self.save_file))
+        self.save_btn.clicked.connect(lambda: self.save_function(self.save_dir, self.save_model_name))
 
     def print(self, msg):
         """
@@ -489,6 +491,7 @@ class RDRCaseViewer(QMainWindow):
                 self.code_lines, self.template_file_creator.func_name,
                 self.template_file_creator.function_signature,
                 self.template_file_creator.func_doc, self.case_query)
+            self.case_query.scope.update(updates)
         self.template_file_creator = None
 
     def update_attribute_layout(self, obj, name: str):
