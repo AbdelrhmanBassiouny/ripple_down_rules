@@ -5,7 +5,7 @@ from ripple_down_rules.rdr import SingleClassRDR
 
 attribute_name = 'output_'
 conclusion_type = (bool,)
-type_ = SingleClassRDR
+mutually_exclusive = True
 
 
 def classify(case: Dict) -> bool:

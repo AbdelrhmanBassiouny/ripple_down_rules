@@ -12,9 +12,9 @@
                         "builtins.bool"
                     ],
                     "scope": {
+                        "Union": "typing.Union",
                         "Robot": "datasets.Robot",
                         "List": "typing.List",
-                        "Union": "typing.Union",
                         "Dict": "typing.Dict",
                         "PhysicalObject": "datasets.PhysicalObject"
                     },
@@ -33,9 +33,9 @@
                         "builtins.list"
                     ],
                     "scope": {
+                        "Union": "typing.Union",
                         "Robot": "datasets.Robot",
                         "List": "typing.List",
-                        "Union": "typing.Union",
                         "Dict": "typing.Dict",
                         "PhysicalObject": "datasets.PhysicalObject"
                     },

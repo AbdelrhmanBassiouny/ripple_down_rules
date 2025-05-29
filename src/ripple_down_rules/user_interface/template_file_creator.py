@@ -8,13 +8,13 @@ from functools import cached_property
 from textwrap import indent, dedent
 
 from colorama import Fore, Style
-from typing_extensions import Optional, Type, List, Callable, Tuple, Dict
+from typing_extensions import Optional, Type, List, Callable, Tuple, Dict, Any, Union
 
 from ..datastructures.case import Case
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import Editor, PromptFor
-from ..utils import str_to_snake_case, get_imports_from_scope, make_list, typing_hint_to_str, \
-    get_imports_from_types, extract_function_source, extract_imports
+from ..utils import str_to_snake_case, get_imports_from_scope, make_list, stringify_hint, \
+    get_imports_from_types, extract_function_source, extract_imports, get_types_to_import_from_type_hints
 
 
 def detect_available_editor() -> Optional[Editor]:
@@ -172,7 +172,7 @@ class TemplateFileCreator:
             for k, v in self.case_query.case.items():
                 if (self.case_query.function_args_type_hints is not None
                         and k in self.case_query.function_args_type_hints):
-                    func_args[k] = typing_hint_to_str(self.case_query.function_args_type_hints[k])[0]
+                    func_args[k] = stringify_hint(self.case_query.function_args_type_hints[k])
                 else:
                     func_args[k] = type(v).__name__ if not isinstance(v, type) else f"Type[{v.__name__}]"
             func_args = ', '.join([f"{k}: {v}" if str(v) not in ["NoneType", "None"] else str(k)
@@ -202,30 +202,25 @@ class TemplateFileCreator:
             for k, v in self.case_query.case.items():
                 if (self.case_query.function_args_type_hints is not None
                         and k in self.case_query.function_args_type_hints):
-                    hint_list = typing_hint_to_str(self.case_query.function_args_type_hints[k])[1]
-                    for hint in hint_list:
-                        hint_split = hint.split('.')
-                        if len(hint_split) > 1:
-                            case_type_imports.append(f"from {'.'.join(hint_split[:-1])} import {hint_split[-1]}")
+                    types_to_import = get_types_to_import_from_type_hints([self.case_query.function_args_type_hints[k]])
+                    case_type_imports.extend(list(types_to_import))
                 else:
-                    if isinstance(v, type):
-                        case_type_imports.append(f"from {v.__module__} import {v.__name__}")
-                    elif hasattr(v, "__module__") and not v.__module__.startswith("__"):
-                        case_type_imports.append(f"\nfrom {type(v).__module__} import {type(v).__name__}")
+                    case_type_imports.append(v)
         else:
-            case_type_imports.append(f"from {self.case_type.__module__} import {self.case_type.__name__}")
+            case_type_imports.append(self.case_type)
         if self.output_type is None:
-            output_type_imports = [f"from typing_extensions import Any"]
+            output_type_imports = [Any]
         else:
-            output_type_imports = get_imports_from_types(self.output_type)
+            output_type_imports = self.output_type
             if len(self.output_type) > 1:
-                output_type_imports.append("from typing_extensions import Union")
+                output_type_imports.append(Union)
             if list in self.output_type:
-                output_type_imports.append("from typing_extensions import List")
-        imports = get_imports_from_scope(self.case_query.scope)
-        imports = [i for i in imports if ("get_ipython" not in i)]
-        imports.extend(case_type_imports)
-        imports.extend([oti for oti in output_type_imports if oti not in imports])
+                output_type_imports.append(List)
+        import_types = list(self.case_query.scope.values())
+        # imports = [i for i in imports if ("get_ipython" not in i)]
+        import_types.extend(case_type_imports)
+        import_types.extend(output_type_imports)
+        imports = get_imports_from_types(import_types)
         imports = set(imports)
         return '\n'.join(imports)
 

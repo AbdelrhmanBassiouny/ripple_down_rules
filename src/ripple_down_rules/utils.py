@@ -10,14 +10,14 @@ import os
 import re
 import threading
 import uuid
-from collections import UserDict
+from collections import UserDict, defaultdict
 from copy import deepcopy, copy
 from dataclasses import is_dataclass, fields
 from enum import Enum
 from textwrap import dedent
 from types import NoneType
-from typing import List
 
+from sqlalchemy.exc import NoInspectionAvailable
 
 try:
     import matplotlib
@@ -42,8 +42,7 @@ from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
-    get_origin, get_args, Tuple, Optional, List, Union, Self
-
+    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
@@ -82,7 +81,7 @@ def are_results_subclass_of_types(result_types: List[Any], types_: List[Type]) -
     return True
 
 
-def get_imports_from_types(types: List[Type]) -> List[str]:
+def _get_imports_from_types(types: List[Type]) -> List[str]:
     """
     Get the import statements for a list of types.
 
@@ -660,56 +659,149 @@ def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> 
     return model_name
 
 
-def extract_bracket_arguments(val: str) -> List[str]:
-    """
-    Extract arguments inside brackets into a list.
+def stringify_hint(tp):
+    """Recursively convert a type hint to a string."""
+    if isinstance(tp, str):
+        return tp
 
-    :param val: The string containing brackets.
-    :return: List of arguments inside brackets.
-    """
-    if '[' not in val:
-        return [val]
-    args_start = val.find('[')
-    args_end = val.rfind(']')
-    if args_end == -1:
-        return [val]
-    base_type = val[:args_start]
-    args = val[args_start + 1:args_end].split(',')
-    args = [arg.strip() for arg in args]
-    return [base_type] + args
+    # Handle ForwardRef (string annotations not yet evaluated)
+    if isinstance(tp, ForwardRef):
+        return tp.__forward_arg__
+
+    # Handle typing generics like List[int], Dict[str, List[int]], etc.
+    origin = get_origin(tp)
+    args = get_args(tp)
+
+    if origin is not None:
+        origin_str = getattr(origin, '__name__', str(origin)).capitalize()
+        args_str = ", ".join(stringify_hint(arg) for arg in args)
+        return f"{origin_str}[{args_str}]"
+
+    # Handle built-in types like int, str, etc.
+    if isinstance(tp, type):
+        if tp.__module__ == 'builtins':
+            return tp.__name__
+        return f"{tp.__qualname__}"
+
+    return str(tp)
 
 
-def typing_hint_to_str(type_hint: Any) -> Tuple[str, List[str]]:
-    """
-    Convert a typing hint to a string.
+def is_builtin_type(tp):
+    return isinstance(tp, type) and tp.__module__ == "builtins"
 
-    :param type_hint: The typing hint to convert.
-    :return: The string representation of the typing hint.
+
+def is_typing_type(tp):
+    return tp.__module__ == "typing"
+
+origin_type_to_hint = {
+    list: List,
+    set: Set,
+    dict: Dict,
+    tuple: Tuple,
+}
+
+def extract_types(tp, seen: Set = None) -> Set[type]:
+    """Recursively extract all base types from a type hint."""
+    if seen is None:
+        seen = set()
+
+    if tp in seen or isinstance(tp, str):
+        return seen
+
+    # seen.add(tp)
+
+    if isinstance(tp, ForwardRef):
+        # Can't resolve until evaluated
+        return seen
+
+    origin = get_origin(tp)
+    args = get_args(tp)
+
+    if origin:
+        if origin in origin_type_to_hint:
+            seen.add(origin_type_to_hint[origin])
+        else:
+            seen.add(origin)
+        for arg in args:
+            extract_types(arg, seen)
+
+    elif isinstance(tp, type):
+        seen.add(tp)
+
+    return seen
+
+
+def get_types_to_import_from_func_type_hints(func: Callable) -> Set[Type]:
     """
-    val = (str(type_hint).strip("<>")
-           .replace("class ", "")
-           # .replace("typing.", "")
-           .replace("'", ""))
-    all_args = []
-    if '[' in val:
-        args = extract_bracket_arguments(val)
-        args_with_brackets = [arg for arg in args if '[' in arg]
-        all_args.extend([arg for arg in args if '[' not in arg])
-        while args_with_brackets:
-            for arg in args:
-                if '[' in arg:
-                    sub_args = extract_bracket_arguments(arg)
-                    args_with_brackets.remove(arg)
-                    all_args.extend([sarg for sarg in sub_args if '[' not in sarg])
-                    args_with_brackets.extend([sarg for sarg in sub_args if '[' in sarg])
-                elif arg not in all_args:
-                    all_args.append(arg)
-            args = args_with_brackets
-        for arg in all_args:
-            val = val.replace(arg, arg.split('.')[-1])
-    else:
-        val = val.split('.')[-1]
-    return val, all_args
+    Extract importable types from a function's annotations.
+
+    :param func: The function to extract type hints from.
+    """
+    hints = get_type_hints(func)
+
+    sig = inspect.signature(func)
+    all_hints = list(hints.values())
+    if sig.return_annotation != inspect.Signature.empty:
+        all_hints.append(sig.return_annotation)
+
+    for param in sig.parameters.values():
+        if param.annotation != inspect.Parameter.empty:
+            all_hints.append(param.annotation)
+
+    return get_types_to_import_from_type_hints(all_hints)
+
+
+def get_types_to_import_from_type_hints(hints: List[Type]) -> Set[Type]:
+    """
+    Extract importable types from a list of type hints.
+
+    :param hints: A list of type hints to extract types from.
+    :return: A set of types that need to be imported.
+    """
+    seen_types = set()
+    for hint in hints:
+        extract_types(hint, seen_types)
+
+    # Filter out built-in and internal types
+    to_import = set()
+    for tp in seen_types:
+        if isinstance(tp, ForwardRef) or isinstance(tp, str):
+            continue
+        if not is_builtin_type(tp):
+            to_import.add(tp)
+
+    return to_import
+
+
+def get_imports_from_types(type_objs: List[Type]) -> List[str]:
+    """
+    Format import lines from type objects.
+
+    :param type_objs: A list of type objects to format.
+    """
+
+    module_to_types = defaultdict(list)
+    for tp in type_objs:
+        try:
+            if isinstance(tp, type) or is_typing_type(tp):
+                module = tp.__module__
+                name = tp.__qualname__
+            elif hasattr(type(tp), "__module__"):
+                module = type(tp).__module__
+                name = type(tp).__qualname__
+            else:
+                continue
+            if module is None or module == 'builtins' or module.startswith('_'):
+                continue
+            module_to_types[module].append(name)
+        except AttributeError:
+            continue
+
+    lines = []
+    for module, names in module_to_types.items():
+        joined = ", ".join(sorted(set(names)))
+        lines.append(f"from {module} import {joined}")
+    return sorted(lines)
 
 
 def get_method_args_as_dict(method: Callable, *args, **kwargs) -> Dict[str, Any]:
@@ -865,6 +957,8 @@ class SubclassJSONSerializer:
     def to_json_static(obj, seen=None) -> Any:
         if isinstance(obj, SubclassJSONSerializer):
             return {"_type": get_full_class_name(obj.__class__), **obj._to_json()}
+        elif isinstance(obj, type):
+            return {"_type": get_full_class_name(obj)}
         elif is_dataclass(obj):
             return serialize_dataclass(obj, seen)
         elif isinstance(obj, list):
@@ -1017,13 +1111,20 @@ def copy_orm_instance(instance: SQLTable) -> SQLTable:
     :param instance: The instance to copy.
     :return: The copied instance.
     """
-    session: Session = inspect(instance).session
+    try:
+        session: Session = inspect(instance).session
+    except NoInspectionAvailable:
+        session = None
     if session is not None:
         session.expunge(instance)
         new_instance = deepcopy(instance)
         session.add(instance)
     else:
-        new_instance = instance
+        try:
+            new_instance = deepcopy(instance)
+        except Exception as e:
+            logging.debug(e)
+            new_instance = instance
     return new_instance
 
 
@@ -1037,8 +1138,12 @@ def copy_orm_instance_with_relationships(instance: SQLTable) -> SQLTable:
     instance_cp = copy_orm_instance(instance)
     for rel in class_mapper(instance.__class__).relationships:
         related_obj = getattr(instance, rel.key)
+        related_obj_cp = copy_orm_instance(related_obj)
         if related_obj is not None:
-            setattr(instance_cp, rel.key, related_obj)
+            try:
+                setattr(instance_cp, rel.key, related_obj_cp)
+            except Exception as e:
+                logging.debug(e)
     return instance_cp
 
 

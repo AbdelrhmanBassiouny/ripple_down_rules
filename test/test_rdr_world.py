@@ -182,7 +182,7 @@ class TestRDRWorld(TestCase):
         filename = os.path.join(os.getcwd(), "test_expert_answers/correct_drawer_rdr_expert_answers_fit")
         if use_loaded_answers:
             expert.load_answers(filename)
-        rdr = GeneralRDR(ask_always=True)
+        rdr = GeneralRDR()
         rdr.fit(self.drawer_case_queries, expert=expert, animate_tree=False)
         if save_answers:
             expert.save_answers(filename)

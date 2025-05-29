@@ -53,8 +53,7 @@ def test_rdr_decorator_func_name():
         def select_objects_that_are_parts_of_robot(self, objects: List[PhysicalObject], robot: Robot) -> List[PhysicalObject]:
             pass
     example = Example()
-    cq = RDRDecorator.create_case_query_from_method(example.is_a_robot, bool, True,
-                                               "output_")
+    cq = RDRDecorator.create_case_query_from_method(example.is_a_robot, {"output_": None}, bool, True)
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, cq)
     assert func_name == "example_is_a_robot"
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conditions, cq)
@@ -63,8 +62,8 @@ def test_rdr_decorator_func_name():
     objects = [Part("Object1"), Part("Object2"), Part("Object3")]
     robot = Robot("Robot1", objects[:2])
     cq = RDRDecorator.create_case_query_from_method(
-        example.select_objects_that_are_parts_of_robot, (List[PhysicalObject],),
-        False, "output_", *(objects, robot))
+        example.select_objects_that_are_parts_of_robot, {"output_": None}, (List[PhysicalObject],),
+        False, *(objects, robot))
 
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, cq)
     assert func_name == "example_select_objects_that_are_parts_of_robot"

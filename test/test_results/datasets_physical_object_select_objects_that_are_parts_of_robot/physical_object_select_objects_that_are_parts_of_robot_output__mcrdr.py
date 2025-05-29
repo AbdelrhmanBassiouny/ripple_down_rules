@@ -7,7 +7,7 @@ from ripple_down_rules.rdr import MultiClassRDR
 
 attribute_name = 'output_'
 conclusion_type = (PhysicalObject, set, list,)
-type_ = MultiClassRDR
+mutually_exclusive = False
 
 
 def classify(case: Dict) -> Set[PhysicalObject]:

@@ -12,10 +12,12 @@ from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.utils import is_iterable, make_list
 from os.path import dirname, join
 
-app = QApplication(sys.argv)
+# app = QApplication(sys.argv)
 save_dir = join(dirname(__file__), '..', 'src', 'ripple_down_rules')
-viewer = RDRCaseViewer(save_dir=save_dir)
+# viewer = RDRCaseViewer(save_dir=save_dir)
+viewer = None
 rdr_decorator: RDRDecorator = RDRDecorator(save_dir, (bool,), True, ask_always=True,
+                                           fit=False,
                                            viewer=viewer)
 
 
@@ -57,3 +59,7 @@ def test_should_i_ask_the_expert_for_a_target(conclusions: Union[Any, Dict[str, 
                                               ask_always: bool,
                                               update_existing: bool):
     out = should_i_ask_the_expert_for_a_target(conclusions, case_query, ask_always, update_existing)
+    # if not out:
+    #     rdr_decorator.fit = True
+    #     should_i_ask_the_expert_for_a_target(conclusions, case_query, ask_always, update_existing)
+    # rdr_decorator.fit = False

@@ -126,7 +126,7 @@ class TestRDR(TestCase):
                                             expert_answers_file="scrdr_expert_answers_fit_no_targets",
                                             load_answers=True,
                                             save_answers=False,
-                                            ask_always=True)
+                                            update_existing_rules=True)
         if draw:
             render_tree(scrdr.start_rule, use_dot_exporter=True,
                         filename=self.test_results_dir + f"/scrdr_no_targets")
@@ -137,7 +137,7 @@ class TestRDR(TestCase):
                                             expert_answers_dir=self.expert_answers_dir,
                                             expert_answers_file="scrdr_expert_answers_fit_no_targets",
                                             load_answers=True, save_answers=False,
-                                            ask_always=True)
+                                            update_existing_rules=True)
         model_dir = self.generated_rdrs_dir + '/scrdr_no_targets'
         os.makedirs(model_dir, exist_ok=True)
         scrdr._write_to_python(model_dir)
@@ -153,7 +153,7 @@ class TestRDR(TestCase):
                               expert_answers_file="mcrdr_expert_answers_fit_no_targets",
                               load_answers=True,
                               save_answers=False,
-                              ask_always=True)
+                              update_existing_rules=True)
         # render_tree(mcrdr.start_rule, use_dot_exporter=True,
         #             filename=self.test_results_dir + f"/mcrdr_no_targets")
         for case, target in zip(self.all_cases[:20], self.targets[:20]):
@@ -166,7 +166,7 @@ class TestRDR(TestCase):
                               expert_answers_dir=self.expert_answers_dir,
                               expert_answers_file="mcrdr_expert_answers_fit_no_targets",
                               load_answers=True, save_answers=False,
-                              ask_always=True)
+                              update_existing_rules=True)
         model_dir = self.generated_rdrs_dir + '/mcrdr_no_targets'
         os.makedirs(model_dir, exist_ok=True)
         mcrdr._write_to_python(model_dir)
@@ -183,7 +183,7 @@ class TestRDR(TestCase):
                                          expert_answers_dir=self.expert_answers_dir,
                                          expert_answers_file="grdr_expert_answers_fit_no_targets",
                                          load_answers=True, save_answers=False, append=False, no_targets=True,
-                                         ask_always=True)
+                                         update_existing_rules=True)
         if draw_tree:
             for conclusion_name, rdr in grdr.start_rules_dict.items():
                 render_tree(rdr.start_rule, use_dot_exporter=True,
@@ -200,7 +200,7 @@ class TestRDR(TestCase):
                                          expert_answers_dir=self.expert_answers_dir,
                                          expert_answers_file="grdr_expert_answers_fit_no_targets",
                                          load_answers=True, save_answers=False, append=False, no_targets=True,
-                                         ask_always=True)
+                                         update_existing_rules=True)
         model_dir = self.generated_rdrs_dir + '/grdr_no_targets'
         grdr._write_to_python(model_dir)
         classify_species_grdr = grdr.get_rdr_classifier_from_python_file(model_dir)

@@ -82,14 +82,12 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     """
 
     def __init__(self, start_rule: Optional[Rule] = None, viewer: Optional[RDRCaseViewer] = None,
-                 save_dir: Optional[str] = None, ask_always: bool = False, model_name: Optional[str] = None):
+                 save_dir: Optional[str] = None, model_name: Optional[str] = None):
         """
         :param start_rule: The starting rule for the classifier.
         :param viewer: The viewer gui to use for the classifier. If None, no viewer is used.
         :param save_dir: The directory to save the classifier to.
-        :param ask_always: Whether to always ask the expert (True) or only ask when classification fails (False).
         """
-        self.ask_always: bool = ask_always
         self.model_name: Optional[str] = model_name
         self.save_dir = save_dir
         self.start_rule = start_rule
@@ -230,7 +228,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
 
     def fit_case(self, case_query: CaseQuery,
                  expert: Optional[Expert] = None,
-                 ask_always_for_target: bool = False,
                  update_existing_rules: bool = True,
                  **kwargs) \
             -> Union[CallableExpression, Dict[str, CallableExpression]]:
@@ -240,7 +237,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
 
         :param case_query: The query containing the case to classify and the target category to compare the case with.
         :param expert: The expert to ask for differentiating features as new rule conditions.
-        :param ask_always_for_target: Whether to always ask the expert for targets for a case query.
         :param update_existing_rules: Whether to update the existing same conclusion type rules that already gave
         some conclusions with the type required by the case query.
         :return: The category that the case belongs to.
@@ -259,8 +255,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if case_query.target is None:
             case_query_cp = copy(case_query)
             conclusions = self.classify(case_query_cp.case, modify_case=True)
-            if self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp,
-                                                         ask_always_for_target, update_existing_rules):
+            if self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp, update_existing_rules):
                 expert.ask_for_conclusion(case_query_cp)
                 case_query.target = case_query_cp.target
             if case_query.target is None:
@@ -279,20 +274,16 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     @staticmethod
     def should_i_ask_the_expert_for_a_target(conclusions: Union[Any, Dict[str, Any]],
                                              case_query: CaseQuery,
-                                             ask_always: bool,
                                              update_existing: bool) -> bool:
         """
         Determine if the rdr should ask the expert for the target of a given case query.
 
         :param conclusions: The conclusions of the case.
         :param case_query: The query containing the case to classify.
-        :param ask_always: Whether to ask the expert always.
         :param update_existing: Whether to update rules that gave the required type of conclusions.
         :return: True if the rdr should ask the expert, False otherwise.
         """
-        if ask_always:
-            return True
-        elif conclusions is None:
+        if conclusions is None:
             return True
         elif is_iterable(conclusions) and len(conclusions) == 0:
             return True

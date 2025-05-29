@@ -139,7 +139,7 @@ class RDRDecorator:
         case_dict = get_method_args_as_dict(func, *args, **kwargs)
         case_dict.update(func_output)
         case_name = get_func_rdr_model_name(func)
-        return create_case(case_dict, obj_name=case_name, max_recursion_idx=3), case_dict
+        return Case(dict, id(case_dict), case_name, case_dict, **case_dict), case_dict
 
     def initialize_rdr_model_name_and_load(self, func: Callable) -> None:
         model_file_name = get_func_rdr_model_name(func, include_file_name=True)

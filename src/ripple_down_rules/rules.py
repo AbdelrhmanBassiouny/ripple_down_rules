@@ -12,7 +12,7 @@ from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer, conclusion_to_json
+from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
@@ -150,11 +150,16 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         pass
 
     def _to_json(self) -> Dict[str, Any]:
-        json_serialization = {"conditions": self.conditions.to_json(),
+        try:
+            corner_case = SubclassJSONSerializer.to_json_static(self.corner_case) if self.corner_case else None
+        except Exception as e:
+            logging.debug("Failed to serialize corner case to json, setting it to None. Error: %s", e)
+            corner_case = None
+        json_serialization = {"_type": get_full_class_name(type(self)),
+                              "conditions": self.conditions.to_json(),
                               "conclusion": conclusion_to_json(self.conclusion),
                               "parent": self.parent.json_serialization if self.parent else None,
-                              "corner_case": SubclassJSONSerializer.to_json_static(self.corner_case)
-                              if self.corner_case else None,
+                              "corner_case": corner_case,
                               "conclusion_name": self.conclusion_name,
                               "weight": self.weight,
                               "uid": self.uid}

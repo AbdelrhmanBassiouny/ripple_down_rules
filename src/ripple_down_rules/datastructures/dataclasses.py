@@ -95,7 +95,7 @@ class CaseQuery:
         """
         if self._case is not None:
             return self._case
-        elif not isinstance(self.original_case, (Case, SQLTable)):
+        elif not isinstance(self.original_case, Case):
             self._case = create_case(self.original_case, max_recursion_idx=3)
         else:
             self._case = self.original_case

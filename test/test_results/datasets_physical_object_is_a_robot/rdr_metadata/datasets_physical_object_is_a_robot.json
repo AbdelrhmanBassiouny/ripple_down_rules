@@ -12,8 +12,8 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Robot": "datasets.Robot",
                         "Dict": "typing.Dict",
+                        "Robot": "datasets.Robot",
                         "PhysicalObject": "datasets.PhysicalObject"
                     },
                     "conclusion": {
@@ -29,8 +29,8 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Robot": "datasets.Robot",
                         "Dict": "typing.Dict",
+                        "Robot": "datasets.Robot",
                         "PhysicalObject": "datasets.PhysicalObject"
                     },
                     "conclusion": {
