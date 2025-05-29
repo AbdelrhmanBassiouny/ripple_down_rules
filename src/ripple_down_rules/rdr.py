@@ -454,7 +454,6 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             f.write(defs_imports + "\n\n")
         with open(file_name, "w") as f:
             imports += f"from .{self.generated_python_defs_file_name} import *\n"
-            imports += f"from ripple_down_rules.rdr import {self.__class__.__name__}\n"
             f.write(imports + "\n\n")
             f.write(f"attribute_name = '{self.attribute_name}'\n")
             f.write(f"conclusion_type = ({', '.join([ct.__name__ for ct in self.conclusion_type])},)\n")
