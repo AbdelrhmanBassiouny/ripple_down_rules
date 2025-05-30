@@ -198,7 +198,7 @@ class TemplateFileCreator:
             with open(self.temp_file_path, 'w+') as f:
                 f.write(code)
 
-    def get_imports(self):
+    def get_imports(self) -> str:
         """
         :return: A string containing the imports for the function.
         """

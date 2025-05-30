@@ -1,9 +1,11 @@
 import os
+from os.path import dirname
 from unittest import TestCase
 
 from typing_extensions import List, Dict, Union, Tuple
 
-from ripple_down_rules.utils import extract_imports, make_set, stringify_hint
+from ripple_down_rules.utils import extract_imports, make_set, stringify_hint, get_relative_import, \
+    get_imports_from_types
 
 
 class UtilsTestCase(TestCase):
@@ -36,3 +38,41 @@ class UtilsTestCase(TestCase):
         self.assertEqual(stringify_hint(List[Dict[str, Union[int, str]]]), "List[Dict[str, Union[int, str]]]")
         self.assertEqual(stringify_hint(List[Dict[str, Union[int, List[Tuple[str, float]]]]]),
                                         "List[Dict[str, Union[int, List[Tuple[str, float]]]]]")
+
+    def test_get_relative_import(self):
+        package_dir = f"{dirname(__file__)}/../src/ripple_down_rules"
+
+        target_file = os.path.join(package_dir, "datastructures", "case.py")
+        imported_module = os.path.join(package_dir, "rdr.py")
+
+        rel_import = get_relative_import(target_file, imported_module)
+        expected_import = "..rdr"
+        assert rel_import == expected_import
+
+        imported_module = os.path.join(package_dir, "datastructures", "case.py")
+        target_file = os.path.join(package_dir, "rdr.py")
+
+        rel_import = get_relative_import(target_file, imported_module)
+        expected_import = ".datastructures.case"
+        assert rel_import == expected_import
+
+        target_file = os.path.join(package_dir, "datastructures", "nested_data", "case.py")
+        imported_module = os.path.join(package_dir, "rdr.py")
+
+        rel_import = get_relative_import(target_file, imported_module)
+        expected_import = "...rdr"
+        assert rel_import == expected_import
+
+    def test_get_imports_from_types(self):
+        from datasets import World, Species
+
+        imports = get_imports_from_types([World, Species])
+
+        assert imports == ["from datasets import Species, World"]
+
+        from ripple_down_rules.rdr import GeneralRDR
+
+        package_dir = f"{dirname(__file__)}/../src/ripple_down_rules"
+        target_file = os.path.join(package_dir, "datastructures", "case.py")
+        imports = get_imports_from_types([GeneralRDR], target_file, "ripple_down_rules")
+        assert imports == ["from ..rdr import GeneralRDR"]

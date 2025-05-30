@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import sys
 import threading
 import uuid
 from collections import UserDict, defaultdict
@@ -15,6 +16,7 @@ from copy import deepcopy, copy
 from dataclasses import is_dataclass, fields
 from enum import Enum
 from os.path import dirname
+from pathlib import Path
 from textwrap import dedent
 from types import NoneType
 
@@ -44,7 +46,7 @@ from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
-    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef
+    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Sequence, Iterable
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
@@ -122,7 +124,15 @@ def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     return imports
 
 
-def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = None) -> Dict[str, Any]:
+def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = None,
+                    package_name: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Extract imports from a Python file or an AST tree.
+
+    :param file_path: The path to the Python file to extract imports from.
+    :param tree: An AST tree to extract imports from. If provided, file_path is ignored.
+    :param package_name: The name of the package to use for relative imports.
+    """
     if tree is None:
         if file_path is None:
             raise ValueError("Either file_path or tree must be provided")
@@ -137,7 +147,7 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                 module_name = alias.name
                 asname = alias.asname or alias.name
                 try:
-                    scope[asname] = importlib.import_module(module_name)
+                    scope[asname] = importlib.import_module(module_name, package=package_name)
                 except ImportError as e:
                     print(f"Could not import {module_name}: {e}")
         elif isinstance(node, ast.ImportFrom):
@@ -146,7 +156,12 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                 name = alias.name
                 asname = alias.asname or name
                 try:
-                    module = importlib.import_module(module_name)
+                    if package_name is not None and node.level > 0: # Handle relative imports
+                        module_rel_path = Path(os.path.join(file_path, *['..'] * node.level, module_name)).resolve()
+                        idx = str(module_rel_path).rfind(package_name)
+                        if idx != -1:
+                            module_name = str(module_rel_path)[idx:].replace(os.path.sep, '.')
+                    module = importlib.import_module(module_name, package=package_name)
                     scope[asname] = getattr(module, name)
                 except (ImportError, AttributeError) as e:
                     logging.warning(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
@@ -833,37 +848,82 @@ def get_function_representation(func: Callable) -> str:
     return func_name
 
 
-def get_imports_from_types(type_objs: List[Type]) -> List[str]:
+def get_relative_import(target_file_path, imported_module_path: Optional[str] = None,
+                        module: Optional[str] = None) -> str:
+    """
+    Get a relative import path from the target file to the imported module.
+
+    :param target_file_path: The file path of the target file.
+    :param imported_module_path: The file path of the module being imported.
+    :param module: The module name, if available.
+    :return: A relative import path as a string.
+    """
+    # Convert to absolute paths
+    if module is not None:
+        imported_module_path = sys.modules[module].__file__
+    if imported_module_path is None:
+        raise ValueError("Either imported_module_path or module must be provided")
+    target_path = Path(target_file_path).resolve()
+    imported_path = Path(imported_module_path).resolve()
+
+    # Compute relative path from target to imported module
+    rel_path = os.path.relpath(imported_path.parent, target_path.parent)
+
+    # Convert path to Python import format
+    rel_parts = [part.replace('..', '.') for part in Path(rel_path).parts]
+    rel_parts = rel_parts if rel_parts else ['']
+
+    # Join the parts and add the module name
+    joined_parts = "".join(rel_parts) + f".{imported_path.stem}"
+    joined_parts = f".{joined_parts}" if not joined_parts.startswith(".") else joined_parts
+
+    return joined_parts
+
+
+def get_imports_from_types(type_objs: Iterable[Type],
+                           target_file_path: Optional[str] = None,
+                           package_name: Optional[str] = None) -> List[str]:
     """
     Format import lines from type objects.
 
     :param type_objs: A list of type objects to format.
+    :param target_file_path: The file path to which the imports should be relative.
+    :param package_name: The name of the package to use for relative imports.
     """
 
     module_to_types = defaultdict(list)
+    module_to_path = {}
     other_imports = []
     for tp in type_objs:
         try:
             if isinstance(tp, type) or is_typing_type(tp):
                 module = tp.__module__
+                file = getattr(tp, '__file__', None)
                 name = tp.__qualname__
             elif callable(tp):
                 module, name = get_function_import_data(tp)
+                file = get_method_file_name(tp)
             elif hasattr(type(tp), "__module__"):
                 module = type(tp).__module__
+                file = getattr(tp, '__file__', None)
                 name = type(tp).__qualname__
             else:
                 continue
             if module is None or module == 'builtins' or module.startswith('_'):
                 continue
             module_to_types[module].append(name)
+            if file:
+                module_to_path[module] = file
         except AttributeError:
             continue
 
     lines = []
     for module, names in module_to_types.items():
         joined = ", ".join(sorted(set(names)))
-        lines.append(f"from {module} import {joined}")
+        import_path = module
+        if (target_file_path is not None) and (package_name is not None) and (package_name in module):
+            import_path = get_relative_import(target_file_path, module=module)
+        lines.append(f"from {import_path} import {joined}")
     if other_imports:
         lines.extend(other_imports)
     return sorted(lines)

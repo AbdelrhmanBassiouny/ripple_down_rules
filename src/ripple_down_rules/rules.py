@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from anytree import NodeMixin
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple
+from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple, Type, Set
 
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
@@ -102,11 +102,21 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         """
         pass
 
-    def write_corner_case_as_source_code(self, cases_file: Path) -> None:
+    def write_corner_case_as_source_code(self, cases_file: str, package_name: Optional[str] = None) -> None:
         """
         Write the source code representation of the corner case of the rule to a file.
 
-        :param cases_file: The file to write the corner case to if it is a definition.
+        :param cases_file: The file to write the corner case to.
+        :param package_name: The package name to use for relative imports.
+        """
+        if self.corner_case_metadata is None:
+            return
+        with open(cases_file, 'a') as f:
+            f.write(f"corner_case_{self.uid} = {self.corner_case_metadata}" + "\n\n\n")
+
+    def get_corner_case_types_to_import(self) -> Set[Type]:
+        """
+        Get the types that need to be imported for the corner case of the rule.
         """
         if self.corner_case_metadata is None:
             return
@@ -117,10 +127,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             types_to_import.add(self.corner_case_metadata.scenario)
         if self.corner_case_metadata.case_conf is not None:
             types_to_import.add(self.corner_case_metadata.case_conf)
-        imports = get_imports_from_types(list(types_to_import))
-        with open(cases_file, 'a') as f:
-            f.write("\n".join(imports) + "\n\n\n")
-            f.write(f"corner_case_{self.uid} = {self.corner_case_metadata}" + "\n\n\n")
+        return types_to_import
 
     def write_conclusion_as_source_code(self, parent_indent: str = "", defs_file: Optional[str] = None) -> str:
         """
