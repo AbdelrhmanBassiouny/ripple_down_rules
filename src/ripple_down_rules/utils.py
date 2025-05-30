@@ -799,7 +799,7 @@ def get_import_path_from_path(path: str) -> Optional[str]:
     return package_name
 
 
-def get_function_import_path_and_representation(func: Callable) -> Tuple[str, str]:
+def get_function_import_data(func: Callable) -> Tuple[str, str]:
     """
     Get the import path of a function.
 
@@ -813,12 +813,24 @@ def get_function_import_path_and_representation(func: Callable) -> Tuple[str, st
     func_import_path = get_import_path_from_path(dirname(func_file_path))
     func_import_path = f"{func_import_path}.{func_file_name}" if func_import_path else func_file_name
     if func_class_name and func_class_name != func_name:
-        import_path = f"from {func_import_path} import {func_class_name}"
-        func_representation = f"{func_class_name}.{func_name}"
+        func_import_name = func_class_name
     else:
-        import_path = f"from {func_import_path} import {func_name}"
-        func_representation = func_name
-    return import_path, func_representation
+        func_import_name = func_name
+    return func_import_path, func_import_name
+
+
+def get_function_representation(func: Callable) -> str:
+    """
+    Get a string representation of a function, including its module and class if applicable.
+
+    :param func: The function to represent.
+    :return: A string representation of the function.
+    """
+    func_name = get_method_name(func)
+    func_class_name = get_method_class_name_if_exists(func)
+    if func_class_name and func_class_name != func_name:
+        return f"{func_class_name}.{func_name}"
+    return func_name
 
 
 def get_imports_from_types(type_objs: List[Type]) -> List[str]:
@@ -836,10 +848,7 @@ def get_imports_from_types(type_objs: List[Type]) -> List[str]:
                 module = tp.__module__
                 name = tp.__qualname__
             elif callable(tp):
-                import_, _ = get_function_import_path_and_representation(tp)
-                if import_ is not None:
-                    other_imports.append(import_)
-                module = None
+                module, name = get_function_import_data(tp)
             elif hasattr(type(tp), "__module__"):
                 module = type(tp).__module__
                 name = type(tp).__qualname__

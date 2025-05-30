@@ -8,11 +8,11 @@ from uuid import uuid4
 
 from anytree import NodeMixin
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple, Callable
+from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple
 
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
-from .datastructures.dataclasses import CaseFactoryMetaData, CaseConf, CaseQuery
+from .datastructures.dataclasses import CaseFactoryMetaData, CaseQuery
 from .datastructures.enums import RDREdge, Stop
 from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_imports_from_types
 
@@ -117,7 +117,6 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             types_to_import.add(self.corner_case_metadata.scenario)
         if self.corner_case_metadata.case_conf is not None:
             types_to_import.add(self.corner_case_metadata.case_conf)
-        types_to_import.add(CaseFactoryMetaData)
         imports = get_imports_from_types(list(types_to_import))
         with open(cases_file, 'a') as f:
             f.write("\n".join(imports) + "\n\n\n")

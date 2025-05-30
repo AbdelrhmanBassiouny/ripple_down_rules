@@ -39,7 +39,7 @@ except ImportError as e:
 from .utils import draw_tree, make_set, copy_case, \
     SubclassJSONSerializer, make_list, get_type_from_string, \
     is_conflicting, get_imports_from_scope, extract_function_source, extract_imports, get_full_class_name, \
-    is_iterable, str_to_snake_case, get_import_path_from_path
+    is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -401,12 +401,9 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         # remove from imports if exists first
         package_name = get_import_path_from_path(package_name)
         name = f"{package_name}.{self.generated_python_file_name}" if package_name else self.generated_python_file_name
-        try:
-            module = importlib.import_module(name)
-            del sys.modules[name]
-        except ModuleNotFoundError:
-            pass
-        return importlib.import_module(name).classify
+        module = importlib.import_module(name)
+        importlib.reload(module)
+        return module.classify
 
 
 class RDRWithCodeWriter(RippleDownRules, ABC):
@@ -434,7 +431,9 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                 rule.conditions.user_input = functions_source[f"conditions_{rule.uid}"]
                 rule.conditions.scope = scope
                 if os.path.exists(cases_path):
-                    rule.corner_case_metadata = importlib.import_module(cases_import_path).__dict__.get(f"corner_case_{rule.uid}", None)
+                    module = importlib.import_module(cases_import_path)
+                    importlib.reload(module)
+                    rule.corner_case_metadata = module.__dict__.get(f"corner_case_{rule.uid}", None)
             if rule.conclusion is not None and not isinstance(rule, MultiClassStopRule):
                 rule.conclusion.user_input = functions_source[f"conclusion_{rule.uid}"]
                 rule.conclusion.scope = scope
@@ -471,8 +470,10 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         # clear the files first
         with open(defs_file_name, "w") as f:
             f.write(defs_imports + "\n\n")
+        case_factory_import = get_imports_from_types([CaseFactoryMetaData])
         with open(cases_file_name, "w") as cases_f:
             cases_f.write("# This file contains the corner cases for the rules.\n")
+            cases_f.write('\n'.join(case_factory_import) + "\n\n\n")
         with open(file_name, "w") as f:
             imports += f"from .{self.generated_python_defs_file_name} import *\n"
             f.write(imports + "\n\n")
@@ -482,8 +483,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             f.write(f"\n\n{func_def}")
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
-            self.write_rules_as_source_code_to_file(self.start_rule, f, " " * 4, defs_file=defs_file_name,
-                                                    cases_file=cases_file_name)
+        self.write_rules_as_source_code_to_file(self.start_rule, file_name, " " * 4, defs_file=defs_file_name,
+                                                cases_file=cases_file_name)
 
     @property
     @abstractmethod
@@ -663,7 +664,7 @@ class SingleClassRDR(RDRWithCodeWriter):
             with open(model_dir + f"/{self.generated_python_file_name}.py", "a") as f:
                 f.write(f"{' ' * 4}else:\n{' ' * 8}return {self.default_conclusion}\n")
 
-    def write_rules_as_source_code_to_file(self, rule: SingleClassRule, file: TextIOWrapper, parent_indent: str = "",
+    def write_rules_as_source_code_to_file(self, rule: SingleClassRule, filename: str, parent_indent: str = "",
                                            defs_file: Optional[str] = None, cases_file: Optional[str] = None):
         """
         Write the rules as source code to a file.
@@ -671,16 +672,18 @@ class SingleClassRDR(RDRWithCodeWriter):
         if rule.conditions:
             rule.write_corner_case_as_source_code(cases_file)
             if_clause = rule.write_condition_as_source_code(parent_indent, defs_file)
-            file.write(if_clause)
+            with open(filename, "a") as file:
+                file.write(if_clause)
             if rule.refinement:
-                self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ",
+                self.write_rules_as_source_code_to_file(rule.refinement, filename, parent_indent + "    ",
                                                         defs_file=defs_file, cases_file=cases_file)
 
             conclusion_call = rule.write_conclusion_as_source_code(parent_indent, defs_file)
-            file.write(conclusion_call)
+            with open(filename, "a") as file:
+                file.write(conclusion_call)
 
             if rule.alternative:
-                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file,
+                self.write_rules_as_source_code_to_file(rule.alternative, filename, parent_indent, defs_file=defs_file,
                                                         cases_file=cases_file)
 
     @property
@@ -785,26 +788,30 @@ class MultiClassRDR(RDRWithCodeWriter):
         return self.conclusions
 
     def write_rules_as_source_code_to_file(self, rule: Union[MultiClassTopRule, MultiClassStopRule],
-                                           file, parent_indent: str = "", defs_file: Optional[str] = None,
+                                           filename: str, parent_indent: str = "", defs_file: Optional[str] = None,
                                            cases_file: Optional[str] = None):
         if rule == self.start_rule:
-            file.write(f"{parent_indent}conclusions = set()\n")
+            with open(filename, "a") as file:
+                file.write(f"{parent_indent}conclusions = set()\n")
         if rule.conditions:
             rule.write_corner_case_as_source_code(cases_file)
             if_clause = rule.write_condition_as_source_code(parent_indent, defs_file)
-            file.write(if_clause)
+            with open(filename, "a") as file:
+                file.write(if_clause)
             conclusion_indent = parent_indent
             if hasattr(rule, "refinement") and rule.refinement:
-                self.write_rules_as_source_code_to_file(rule.refinement, file, parent_indent + "    ",
+                self.write_rules_as_source_code_to_file(rule.refinement, filename, parent_indent + "    ",
                                                         defs_file=defs_file, cases_file=cases_file)
                 conclusion_indent = parent_indent + " " * 4
-                file.write(f"{conclusion_indent}else:\n")
+                with open(filename, "a") as file:
+                    file.write(f"{conclusion_indent}else:\n")
 
             conclusion_call = rule.write_conclusion_as_source_code(conclusion_indent, defs_file)
-            file.write(conclusion_call)
+            with open(filename, "a") as file:
+                file.write(conclusion_call)
 
             if rule.alternative:
-                self.write_rules_as_source_code_to_file(rule.alternative, file, parent_indent, defs_file=defs_file,
+                self.write_rules_as_source_code_to_file(rule.alternative, filename, parent_indent, defs_file=defs_file,
                                                         cases_file=cases_file)
 
     @property
