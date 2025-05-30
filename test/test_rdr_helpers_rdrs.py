@@ -1,16 +1,10 @@
-import os
-import sys
-import unittest
+from os.path import dirname, join
 
-from PyQt6.QtWidgets import QApplication
 from typing_extensions import Union, Any, Dict
 
-from datasets import Habitat, Species, load_zoo_dataset
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.rdr_decorators import RDRDecorator
-from ripple_down_rules.user_interface.gui import RDRCaseViewer
 from ripple_down_rules.utils import is_iterable, make_list
-from os.path import dirname, join
 
 # app = QApplication(sys.argv)
 save_dir = join(dirname(__file__), '..', 'src', 'ripple_down_rules')
