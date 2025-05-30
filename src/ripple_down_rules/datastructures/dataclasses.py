@@ -9,7 +9,7 @@ from omegaconf import MISSING
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, get_origin, Set, Callable
 
-from build.lib.ripple_down_rules.utils import get_method_name, get_function_import_path_and_representation
+from ..utils import get_method_name, get_function_import_path_and_representation
 from .callable_expression import CallableExpression
 from .case import create_case, Case
 from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, get_value_type_from_type_hint, \

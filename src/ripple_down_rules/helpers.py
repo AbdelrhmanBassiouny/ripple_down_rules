@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from types import ModuleType
 
+from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
+
 from .datastructures.case import create_case
 from .datastructures.dataclasses import CaseQuery
 from typing_extensions import Type, Optional, Callable, Any, Dict, TYPE_CHECKING, Union
@@ -15,7 +17,8 @@ if TYPE_CHECKING:
 
 
 def general_rdr_classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDownRules]],
-                         case: Any, modify_original_case: bool = False) -> Dict[str, Any]:
+                         case: Any, modify_original_case: bool = False,
+                         case_query: Optional[CaseQuery] = None) -> Dict[str, Any]:
     """
     Classify a case by going through all classifiers and adding the categories that are classified,
      and then restarting the classification until no more categories can be added.
@@ -23,6 +26,7 @@ def general_rdr_classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDow
     :param classifiers_dict: A dictionary mapping conclusion types to the classifiers that produce them.
     :param case: The case to classify.
     :param modify_original_case: Whether to modify the original case or create a copy and modify it.
+    :param case_query: The case query to extract metadata from if needed.
     :return: The categories that the case belongs to.
     """
     conclusions = {}
@@ -31,7 +35,7 @@ def general_rdr_classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDow
     while True:
         new_conclusions = {}
         for attribute_name, rdr in classifiers_dict.items():
-            pred_atts = rdr.classify(case_cp)
+            pred_atts = rdr.classify(case_cp, case_query=case_query)
             if pred_atts is None:
                 continue
             if rdr.mutually_exclusive:
@@ -49,8 +53,8 @@ def general_rdr_classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDow
                         conclusions[attribute_name] = set()
                     conclusions[attribute_name].update(pred_atts)
             if attribute_name in new_conclusions:
-                case_query = CaseQuery(case_cp, attribute_name, rdr.conclusion_type, rdr.mutually_exclusive)
-                update_case(case_query, new_conclusions)
+                temp_case_query = CaseQuery(case_cp, attribute_name, rdr.conclusion_type, rdr.mutually_exclusive)
+                update_case(temp_case_query, new_conclusions)
         if len(new_conclusions) == 0:
             break
     return conclusions

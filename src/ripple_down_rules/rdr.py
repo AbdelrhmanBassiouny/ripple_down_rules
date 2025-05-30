@@ -4,6 +4,8 @@ import copyreg
 import importlib
 import os
 
+from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
+
 from . import logger
 import sys
 from abc import ABC, abstractmethod
@@ -136,7 +138,11 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         model_dir = os.path.join(load_dir, model_name)
         json_file = os.path.join(model_dir, cls.metadata_folder, model_name)
         rdr = cls.from_json_file(json_file)
-        rdr.update_from_python(model_dir)
+        try:
+            rdr.update_from_python(model_dir)
+        except (FileNotFoundError, ValueError) as e:
+            logger.warning(f"Could not load the python file for the model {model_name} from {model_dir}. "
+                           f"Make sure the file exists and is valid.")
         rdr.save_dir = load_dir
         rdr.model_name = model_name
         return rdr
@@ -215,13 +221,15 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         return self.classify(case)
 
     @abstractmethod
-    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False) \
+    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False,
+                 case_query: Optional[CaseQuery] = None) \
             -> Optional[Union[CallableExpression, Dict[str, CallableExpression]]]:
         """
         Classify a case.
 
         :param case: The case to classify.
         :param modify_case: Whether to modify the original case attributes with the conclusion or not.
+        :param case_query: The case query containing the case to classify and the target category to compare the case with.
         :return: The category that the case belongs to.
         """
         pass
@@ -254,10 +262,9 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         expert = expert or Human(viewer=self.viewer,
                                  answers_save_path=self.save_dir + '/expert_answers'
                                  if self.save_dir else None)
-
         if case_query.target is None:
             case_query_cp = copy(case_query)
-            conclusions = self.classify(case_query_cp.case, modify_case=True)
+            conclusions = self.classify(case_query_cp.case, modify_case=True, case_query=case_query_cp)
             if self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp, update_existing_rules):
                 expert.ask_for_conclusion(case_query_cp)
                 case_query.target = case_query_cp.target
@@ -456,7 +463,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         if not os.path.exists(model_dir + '/__init__.py'):
             with open(model_dir + '/__init__.py', 'w') as f:
                 f.write("from . import *\n")
-        func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
+        func_def = f"def classify(case: {self.case_type.__name__}, **kwargs) -> {self.conclusion_type_hint}:\n"
         file_name = model_dir + f"/{self.generated_python_file_name}.py"
         defs_file_name = model_dir + f"/{self.generated_python_defs_file_name}.py"
         cases_file_name = model_dir + f"/{self.generated_python_cases_file_name}.py"
@@ -464,9 +471,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         # clear the files first
         with open(defs_file_name, "w") as f:
             f.write(defs_imports + "\n\n")
-        if os.path.exists(cases_file_name):
-            with open(cases_file_name, "w") as cases_f:
-                cases_f.write("# This file contains the corner cases for the rules.\n")
+        with open(cases_file_name, "w") as cases_f:
+            cases_f.write("# This file contains the corner cases for the rules.\n")
         with open(file_name, "w") as f:
             imports += f"from .{self.generated_python_defs_file_name} import *\n"
             f.write(imports + "\n\n")
@@ -627,15 +633,22 @@ class SingleClassRDR(RDRWithCodeWriter):
             expert.ask_for_conditions(case_query)
             self.start_rule = SingleClassRule.from_case_query(case_query)
 
-    def classify(self, case: Case, modify_case: bool = False) -> Optional[Any]:
+    def classify(self, case: Case, modify_case: bool = False,
+                 case_query: Optional[CaseQuery] = None) -> Optional[Any]:
         """
         Classify a case by recursively evaluating the rules until a rule fires or the last rule is reached.
 
         :param case: The case to classify.
         :param modify_case: Whether to modify the original case attributes with the conclusion or not.
+        :param case_query: The case query containing the case and the target category to compare the case with.
         """
         pred = self.evaluate(case)
-        return pred.conclusion(case) if pred is not None and pred.fired else self.default_conclusion
+        conclusion = pred.conclusion(case) if pred is not None else None
+        if pred is not None and pred.fired and case_query is not None:
+            if pred.corner_case_metadata is None and conclusion is not None\
+                    and type(conclusion) in case_query.core_attribute_type:
+                pred.corner_case_metadata = CaseFactoryMetaData.from_case_query(case_query)
+        return conclusion if pred is not None and pred.fired else self.default_conclusion
 
     def evaluate(self, case: Case) -> SingleClassRule:
         """
@@ -720,13 +733,19 @@ class MultiClassRDR(RDRWithCodeWriter):
         super(MultiClassRDR, self).__init__(start_rule, **kwargs)
         self.mode: MCRDRMode = mode
 
-    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False) -> Set[Any]:
+    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False,
+                 case_query: Optional[CaseQuery] = None) -> Set[Any]:
         evaluated_rule = self.start_rule
         self.conclusions = []
         while evaluated_rule:
             next_rule = evaluated_rule(case)
             if evaluated_rule.fired:
-                self.add_conclusion(evaluated_rule, case)
+                rule_conclusion = evaluated_rule.conclusion(case)
+                if evaluated_rule.corner_case_metadata is None and case_query is not None:
+                    if rule_conclusion is not None and len(make_list(rule_conclusion)) > 0\
+                            and any(ct in case_query.core_attribute_type for ct in map(type, make_list(rule_conclusion))):
+                        evaluated_rule.corner_case_metadata = CaseFactoryMetaData.from_case_query(case_query)
+                self.add_conclusion(rule_conclusion)
             evaluated_rule = next_rule
         return make_set(self.conclusions)
 
@@ -754,7 +773,7 @@ class MultiClassRDR(RDRWithCodeWriter):
                     self.stop_wrong_conclusion_else_add_it(case_query, expert, evaluated_rule)
                 else:
                     # Rule fired and target is correct or there is no target to compare
-                    self.add_conclusion(evaluated_rule, case_query.case)
+                    self.add_conclusion(rule_conclusion)
 
             if not next_rule:
                 if not make_set(target_value).issubset(make_set(self.conclusions)):
@@ -833,7 +852,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         if is_conflicting(rule_conclusion, case_query.target_value):
             self.stop_conclusion(case_query, expert, evaluated_rule)
         else:
-            self.add_conclusion(evaluated_rule, case_query.case)
+            self.add_conclusion(rule_conclusion)
 
     def stop_conclusion(self, case_query: CaseQuery,
                         expert: Expert, evaluated_rule: MultiClassTopRule):
@@ -868,15 +887,14 @@ class MultiClassRDR(RDRWithCodeWriter):
             conditions = expert.ask_for_conditions(case_query)
         self.add_top_rule(case_query)
 
-    def add_conclusion(self, evaluated_rule: Rule, case: Case) -> None:
+    def add_conclusion(self, rule_conclusion: List[Any]) -> None:
         """
         Add the conclusion of the evaluated rule to the list of conclusions.
 
-        :param evaluated_rule: The evaluated rule to add the conclusion of.
-        :param case: The case to add the conclusion for.
+        :param rule_conclusion: The conclusion of the evaluated rule, which can be a single conclusion
+         or a set of conclusions.
         """
         conclusion_types = [type(c) for c in self.conclusions]
-        rule_conclusion = evaluated_rule.conclusion(case)
         if type(rule_conclusion) not in conclusion_types:
             self.conclusions.extend(make_list(rule_conclusion))
         else:
@@ -956,16 +974,19 @@ class GeneralRDR(RippleDownRules):
     def start_rules(self) -> List[Union[SingleClassRule, MultiClassTopRule]]:
         return [rdr.start_rule for rdr in self.start_rules_dict.values()]
 
-    def classify(self, case: Any, modify_case: bool = False) -> Optional[Dict[str, Any]]:
+    def classify(self, case: Any, modify_case: bool = False,
+                 case_query: Optional[CaseQuery] = None) -> Optional[Dict[str, Any]]:
         """
         Classify a case by going through all RDRs and adding the categories that are classified, and then restarting
         the classification until no more categories can be added.
 
         :param case: The case to classify.
         :param modify_case: Whether to modify the original case or create a copy and modify it.
+        :param case_query: The case query containing the case and the target category to compare the case with.
         :return: The categories that the case belongs to.
         """
-        return general_rdr_classify(self.start_rules_dict, case, modify_original_case=modify_case)
+        return general_rdr_classify(self.start_rules_dict, case, modify_original_case=modify_case,
+                                    case_query=case_query)
 
     def _fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
             -> Dict[str, Any]:
@@ -1052,7 +1073,7 @@ class GeneralRDR(RippleDownRules):
         """
         for rdr in self.start_rules_dict.values():
             rdr._write_to_python(model_dir)
-        func_def = f"def classify(case: {self.case_type.__name__}) -> {self.conclusion_type_hint}:\n"
+        func_def = f"def classify(case: {self.case_type.__name__}, **kwargs) -> {self.conclusion_type_hint}:\n"
         with open(model_dir + f"/{self.generated_python_file_name}.py", "w") as f:
             f.write(self._get_imports() + "\n\n")
             f.write("classifiers_dict = dict()\n")
@@ -1062,7 +1083,7 @@ class GeneralRDR(RippleDownRules):
             f.write(func_def)
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
-            f.write(f"{' ' * 4}return general_rdr_classify(classifiers_dict, case)\n")
+            f.write(f"{' ' * 4}return general_rdr_classify(classifiers_dict, case, **kwargs)\n")
 
     @property
     def _default_generated_python_file_name(self) -> Optional[str]:

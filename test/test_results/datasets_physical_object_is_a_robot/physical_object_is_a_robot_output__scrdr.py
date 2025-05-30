@@ -7,7 +7,7 @@ conclusion_type = (bool,)
 mutually_exclusive = True
 
 
-def classify(case: Dict) -> bool:
+def classify(case: Dict, **kwargs) -> bool:
     if not isinstance(case, Case):
         case = create_case(case, max_recursion_idx=3)
 

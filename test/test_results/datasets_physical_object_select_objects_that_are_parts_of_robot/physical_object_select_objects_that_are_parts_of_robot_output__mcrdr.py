@@ -9,7 +9,7 @@ conclusion_type = (set, PhysicalObject, list,)
 mutually_exclusive = False
 
 
-def classify(case: Dict) -> Set[PhysicalObject]:
+def classify(case: Dict, **kwargs) -> Set[PhysicalObject]:
     if not isinstance(case, Case):
         case = create_case(case, max_recursion_idx=3)
     conclusions = set()

@@ -894,7 +894,9 @@ def get_method_class_name_if_exists(method: Callable) -> Optional[str]:
     :return: The class name of the method.
     """
     if hasattr(method, "__self__"):
-        if hasattr(method.__self__, "__class__"):
+        if hasattr(method.__self__, "__name__"):
+            return method.__self__.__name__
+        elif hasattr(method.__self__, "__class__"):
             return method.__self__.__class__.__name__
     return method.__qualname__.split('.')[0] if hasattr(method, "__qualname__") else None
 
