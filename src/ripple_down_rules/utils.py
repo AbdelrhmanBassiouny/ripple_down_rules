@@ -905,50 +905,60 @@ def get_path_starting_from_latest_encounter_of(path: str, package_name: str) -> 
 
 def get_imports_from_types(type_objs: Iterable[Type],
                            target_file_path: Optional[str] = None,
-                           package_name: Optional[str] = None) -> List[str]:
+                           package_name: Optional[str] = None,
+                           exclueded_names: Optional[List[str]] = None,
+                           excluded_modules: Optional[List[str]] = None) -> List[str]:
     """
     Format import lines from type objects.
 
     :param type_objs: A list of type objects to format.
     :param target_file_path: The file path to which the imports should be relative.
     :param package_name: The name of the package to use for relative imports.
+    :param exclueded_names: A list of names to exclude from the imports.
+    :param excluded_modules: A list of modules to exclude from the imports.
+    :return: A list of formatted import lines.
     """
-
+    excluded_modules = [] if excluded_modules is None else excluded_modules
+    exclueded_names = [] if exclueded_names is None else exclueded_names
     module_to_types = defaultdict(list)
-    module_to_path = {}
-    other_imports = []
     for tp in type_objs:
         try:
             if isinstance(tp, type) or is_typing_type(tp):
                 module = tp.__module__
-                file = getattr(tp, '__file__', None)
                 name = tp.__qualname__
             elif callable(tp):
                 module, name = get_function_import_data(tp)
-                file = get_method_file_name(tp)
             elif hasattr(type(tp), "__module__"):
                 module = type(tp).__module__
-                file = getattr(tp, '__file__', None)
                 name = type(tp).__qualname__
             else:
                 continue
-            if module is None or module == 'builtins' or module.startswith('_'):
+            if module is None or module == 'builtins' or module.startswith('_')\
+                or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
+                    or name in exclueded_names:
                 continue
             module_to_types[module].append(name)
-            if file:
-                module_to_path[module] = file
         except AttributeError:
             continue
 
     lines = []
+    stem_imports = []
     for module, names in module_to_types.items():
-        joined = ", ".join(sorted(set(names)))
+        filtered_names = set()
+        for name in set(names):
+            if '.' in name:
+                stem = '.'.join(name.split('.')[1:])
+                name_to_import = name.split('.')[0]
+                filtered_names.add(name_to_import)
+                stem_imports.append(f"{stem} = {name_to_import}.{stem}")
+            else:
+                filtered_names.add(name)
+        joined = ", ".join(sorted(set(filtered_names)))
         import_path = module
         if (target_file_path is not None) and (package_name is not None) and (package_name in module):
             import_path = get_relative_import(target_file_path, module=module, package_name=package_name)
         lines.append(f"from {import_path} import {joined}")
-    if other_imports:
-        lines.extend(other_imports)
+    lines.extend(stem_imports)
     return sorted(lines)
 
 
@@ -1376,6 +1386,7 @@ def table_rows_as_str(row_dicts: List[Dict[str, Any]], columns_per_row: int = 20
     :param row_dicts: The rows to print.
     :param columns_per_row: The maximum number of columns per row.
     """
+    max_line_sze = 100
     all_row_dicts_items = [list(row_dict.items()) for row_dict in row_dicts]
     # make items a list of n rows such that each row has a max size of 4
     all_items = [all_items[i:i + columns_per_row] for all_items in all_row_dicts_items
@@ -1388,9 +1399,9 @@ def table_rows_as_str(row_dicts: List[Dict[str, Any]], columns_per_row: int = 20
     keys_values = [list(r[0]) + list(r[1]) if len(r) > 1 else r[0] for r in keys_values]
     all_table_rows = []
     row_values = [list(map(lambda v: str(v) if v is not None else "", row)) for row in keys_values]
-    row_values = [list(map(lambda v: v[:150] + '...' if len(v) > 150 else v, row)) for row in row_values]
+    row_values = [list(map(lambda v: v[:max_line_sze] + '...' if len(v) > max_line_sze else v, row)) for row in row_values]
     row_values = [list(map(lambda v: v.lower() if v in ["True", "False"] else v, row)) for row in row_values]
-    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=[150] * 2)
+    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=[max_line_sze] * 2)
     all_table_rows.append(table)
     return "\n".join(all_table_rows)
 

@@ -222,10 +222,9 @@ class TemplateFileCreator:
             if list in self.output_type:
                 output_type_imports.append(List)
         import_types = list(self.case_query.scope.values())
-        # imports = [i for i in imports if ("get_ipython" not in i)]
         import_types.extend(case_type_imports)
         import_types.extend(output_type_imports)
-        imports = get_imports_from_types(import_types)
+        imports = get_imports_from_types(import_types, excluded_modules=["IPython.core.interactiveshell"])
         imports = set(imports)
         return '\n'.join(imports)
 
