@@ -134,7 +134,9 @@ class IPythonShell:
         """
         Update the user input from the code lines captured in the shell.
         """
-        if self.shell.all_lines[0].replace('return', '').strip() == '':
+        if self.shell.all_lines[-1] in ['quit', 'exit']:
+            self.user_input = 'exit'
+        elif self.shell.all_lines[0].replace('return', '').strip() == '':
             self.user_input = None
         else:
             self.all_code_lines = extract_dependencies(self.shell.all_lines)

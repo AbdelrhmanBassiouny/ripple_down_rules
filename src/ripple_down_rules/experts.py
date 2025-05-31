@@ -252,6 +252,8 @@ class Human(Expert):
             condition = CallableExpression(user_input, bool, scope=case_query.scope)
         else:
             user_input, condition = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conditions)
+        if user_input == 'exit':
+            exit()
         if not self.use_loaded_answers:
             self.all_expert_answers.append((condition.scope, user_input))
             if self.answers_save_path is not None:
@@ -284,11 +286,13 @@ class Human(Expert):
             if self.user_prompt.viewer is None:
                 show_current_and_corner_cases(case_query.case)
             expert_input, expression = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conclusion)
-            if expression is None:
+            if expert_input is None:
                 self.all_expert_answers.append(({}, None))
-            else:
+            elif expert_input != 'exit':
                 self.all_expert_answers.append((expression.scope, expert_input))
-            if self.answers_save_path is not None:
+            if self.answers_save_path is not None and expert_input != 'exit':
                 self.save_answers()
+        if expert_input == 'exit':
+            exit()
         case_query.target = expression
         return expression

@@ -58,6 +58,10 @@ class UserPrompt:
                 else:
                     self.print_func(f"{Fore.RED}Conditions must be provided. Please try again.{Style.RESET_ALL}")
                     continue
+            elif user_input == "exit":
+                self.print_func(f"{Fore.YELLOW}Exiting.{Style.RESET_ALL}")
+                return user_input, None
+                
             prev_user_input = '\n'.join(user_input.split('\n')[2:-1])
             conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
             callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
@@ -150,8 +154,8 @@ class UserPrompt:
                     self.viewer.show()
                     app.exec()
                     user_input = self.viewer.user_input
-                if user_input is None:
-                    return None, None
+                if user_input is None or user_input == 'exit':
+                    return user_input, None
                 self.print_func(f"{Fore.GREEN}Captured User input: {Style.RESET_ALL}")
                 highlighted_code = highlight(user_input, PythonLexer(), TerminalFormatter())
                 self.print_func(highlighted_code)
