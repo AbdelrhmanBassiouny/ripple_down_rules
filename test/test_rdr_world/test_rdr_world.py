@@ -9,7 +9,7 @@ except ImportError as e:
     QApplication = None
     RDRCaseViewer = None
 
-from datasets import *
+from ..datasets import *
 from ripple_down_rules.helpers import is_matching
 from ripple_down_rules.rdr import GeneralRDR
 

@@ -3,7 +3,7 @@ from unittest import TestCase, skip
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import PromptFor
 from ripple_down_rules.user_interface.prompt import UserPrompt
-from datasets import World, Handle, Container, FixedConnection, PrismaticConnection
+from ..datasets import World, Handle, Container, FixedConnection, PrismaticConnection
 
 
 class TestPrompt(TestCase):

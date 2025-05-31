@@ -132,11 +132,13 @@ class PhysicalObject:
     """
     The directory where the RDR serialized JSON files are stored.
     """
-    _is_a_robot_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (bool,), True)
+    _is_a_robot_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (bool,), True,
+                                                 package_name="test")
     """
     The RDR decorator that is used to determine if the object is a robot or not.
     """
-    _select_parts_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (Self,), False)
+    _select_parts_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (Self,), False,
+                                                   package_name="test")
     """
     The RDR decorator that is used to determine if the object is a robot or not.
     """

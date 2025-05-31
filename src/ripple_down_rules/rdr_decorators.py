@@ -31,7 +31,8 @@ class RDRDecorator:
                  expert: Optional[Expert] = None,
                  ask_always: bool = False,
                  update_existing_rules: bool = True,
-                 viewer: Optional[RDRCaseViewer] = None):
+                 viewer: Optional[RDRCaseViewer] = None,
+                 package_name: Optional[str] = None):
         """
         :param models_dir: The directory to save/load the RDR models.
         :param output_type: The type of the output. This is used to create the RDR model.
@@ -46,6 +47,8 @@ class RDRDecorator:
         :param ask_always: If True, the function will ask the user for a target if it doesn't exist.
         :param update_existing_rules: If True, the function will update the existing RDR rules
          even if they gave an output.
+        :param viewer: The viewer to use for the RDR model. If None, no viewer will be used.
+        :param package_name: The package name to use for relative imports in the RDR model.
         :return: A decorator to use a GeneralRDR as a classifier that monitors and modifies the function's output.
         """
         self.rdr_models_dir = models_dir
@@ -59,6 +62,7 @@ class RDRDecorator:
         self.ask_always = ask_always
         self.update_existing_rules = update_existing_rules
         self.viewer = viewer
+        self.package_name = package_name
         self.load()
 
     def decorator(self, func: Callable) -> Callable:
@@ -166,7 +170,7 @@ class RDRDecorator:
         """
         Save the RDR model to the specified directory.
         """
-        self.rdr.save(self.rdr_models_dir)
+        self.rdr.save(self.rdr_models_dir, package_name=self.package_name)
 
     def load(self):
         """
@@ -176,7 +180,7 @@ class RDRDecorator:
         if self.model_name is not None:
             model_path = os.path.join(self.rdr_models_dir, self.model_name + f"/rdr_metadata/{self.model_name}.json")
             if os.path.exists(os.path.join(self.rdr_models_dir, model_path)):
-                self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name)
+                self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name, package_name=self.package_name)
                 self.rdr.set_viewer(self.viewer)
         if self.rdr is None:
             self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name,
@@ -186,4 +190,4 @@ class RDRDecorator:
         """
         Update the RDR model from a python file.
         """
-        self.rdr.update_from_python(self.rdr_models_dir, self.model_name)
+        self.rdr.update_from_python(self.rdr_models_dir, self.model_name, package_name=self.package_name)

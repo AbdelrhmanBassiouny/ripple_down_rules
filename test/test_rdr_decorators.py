@@ -1,5 +1,5 @@
 import unittest
-from datasets import PhysicalObject, Part, Robot
+from .datasets import PhysicalObject, Part, Robot
 
 
 class RDRDecoratorsTestCase(unittest.TestCase):

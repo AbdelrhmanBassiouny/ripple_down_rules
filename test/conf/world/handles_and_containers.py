@@ -1,13 +1,12 @@
 # ===================== Possible World Configurations ========================
 from dataclasses import dataclass, field
 
-from jedi.inference.gradual.typing import Callable
-from typing_extensions import List
+from typing_extensions import List, Callable
 
-from conf.world.base_config import WorldConf, BodyConf, Connection, FixedConnectionConf, PrismaticConnectionConf, \
+from .base_config import WorldConf, BodyConf, Connection, FixedConnectionConf, PrismaticConnectionConf, \
     ContainerConf, HandleConf
 
-from factories.world.handles_and_containers import create_world_with_handles_and_containers
+from ...factories.world.handles_and_containers import create_world_with_handles_and_containers
 
 
 @dataclass

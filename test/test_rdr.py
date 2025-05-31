@@ -4,15 +4,15 @@ from unittest import TestCase
 
 from typing_extensions import List, Optional
 
-from datasets import Habitat, Species, load_zoo_cases
-from datasets import load_zoo_dataset
+from .datasets import Habitat, Species, load_zoo_cases
+from .datasets import load_zoo_dataset
 from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import MCRDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR, RDRWithCodeWriter
 from ripple_down_rules.utils import render_tree, make_set, extract_function_source
-from test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
+from .test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
 
 try:
     from PyQt6.QtWidgets import QApplication

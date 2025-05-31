@@ -3,7 +3,7 @@ import os
 
 from typing_extensions import List, Any, Tuple, Type, Callable, Optional
 
-from datasets import Species, Habitat, load_zoo_cases
+from ..datasets import Species, Habitat, load_zoo_cases
 from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import Category

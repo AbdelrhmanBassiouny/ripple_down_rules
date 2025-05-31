@@ -11,11 +11,11 @@ except ImportError as e:
     style = None
 from typing_extensions import List
 
-from datasets import load_zoo_dataset, Species
+from ..datasets import load_zoo_dataset, Species
 from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from test_helpers.helpers import get_fit_grdr
-from test_object_diagram import Person, Address
+from ..test_helpers.helpers import get_fit_grdr
+from ..test_object_diagram import Person, Address
 
 
 @unittest.skipIf(QApplication is None, "GUI tests need PyQt6,"

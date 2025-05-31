@@ -2,7 +2,7 @@ import unittest
 
 from sqlalchemy import select
 
-from datasets import *
+from .datasets import *
 
 
 class TestDDL(unittest.TestCase):

@@ -1,5 +1,5 @@
-from datasets import World, Handle, Container, FixedConnection, PrismaticConnection
-from conf.world.base_config import WorldConf, HandleConf, ContainerConf, FixedConnectionConf, PrismaticConnectionConf
+from ...datasets import World, Handle, Container, FixedConnection, PrismaticConnection
+from ...conf.world.base_config import WorldConf, HandleConf, ContainerConf, FixedConnectionConf, PrismaticConnectionConf
 
 
 def create_world_with_handles_and_containers(world_conf: WorldConf) -> World:

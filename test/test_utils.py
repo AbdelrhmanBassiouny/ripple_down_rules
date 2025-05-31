@@ -64,11 +64,11 @@ class UtilsTestCase(TestCase):
         assert rel_import == expected_import
 
     def test_get_imports_from_types(self):
-        from datasets import World, Species
+        from .datasets import World, Species
 
         imports = get_imports_from_types([World, Species])
 
-        assert imports == ["from datasets import Species, World"]
+        assert imports == ["from test.datasets import Species, World"]
 
         from ripple_down_rules.rdr import GeneralRDR
 
