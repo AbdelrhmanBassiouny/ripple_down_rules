@@ -29,7 +29,6 @@ class RDRDecorator:
                  output_name: str = "output_",
                  fit: bool = True,
                  expert: Optional[Expert] = None,
-                 ask_always: bool = False,
                  update_existing_rules: bool = True,
                  viewer: Optional[RDRCaseViewer] = None,
                  package_name: Optional[str] = None):
@@ -44,7 +43,6 @@ class RDRDecorator:
             classification mode. This means that the RDR will classify the function's output based on the RDR model.
         :param expert: The expert that will be used to prompt the user for the correct output. If None, a Human
             expert will be used.
-        :param ask_always: If True, the function will ask the user for a target if it doesn't exist.
         :param update_existing_rules: If True, the function will update the existing RDR rules
          even if they gave an output.
         :param viewer: The viewer to use for the RDR model. If None, no viewer will be used.
@@ -59,7 +57,6 @@ class RDRDecorator:
         self.output_name = output_name
         self.fit: bool = fit
         self.expert: Optional[Expert] = expert
-        self.ask_always = ask_always
         self.update_existing_rules = update_existing_rules
         self.viewer = viewer
         self.package_name = package_name
@@ -76,7 +73,7 @@ class RDRDecorator:
                 self.initialize_rdr_model_name_and_load(func)
             if self.expert is None:
                 self.expert = Human(viewer=self.viewer,
-                                    answers_save_path=self.rdr_models_dir + f'/expert_answers')
+                                    answers_save_path=self.rdr_models_dir + f'/{self.model_name}/expert_answers')
 
             func_output = {self.output_name: func(*args, **kwargs)}
 
@@ -86,7 +83,6 @@ class RDRDecorator:
                                                                 self.mutual_exclusive,
                                                                 *args, **kwargs)
                 output = self.rdr.fit_case(case_query, expert=self.expert,
-                                           ask_always_for_target=self.ask_always,
                                            update_existing_rules=self.update_existing_rules,
                                            viewer=self.viewer)
             else:
@@ -170,7 +166,7 @@ class RDRDecorator:
         """
         Save the RDR model to the specified directory.
         """
-        self.rdr.save(self.rdr_models_dir, package_name=self.package_name)
+        self.rdr.save(self.rdr_models_dir, self.model_name, package_name=self.package_name)
 
     def load(self):
         """
@@ -190,4 +186,4 @@ class RDRDecorator:
         """
         Update the RDR model from a python file.
         """
-        self.rdr.update_from_python(self.rdr_models_dir, self.model_name, package_name=self.package_name)
+        self.rdr.update_from_python(self.rdr_models_dir, package_name=self.package_name)
