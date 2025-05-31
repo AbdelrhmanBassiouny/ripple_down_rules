@@ -1,4 +1,5 @@
 import os
+import sys
 from os.path import dirname
 from unittest import TestCase
 
@@ -72,7 +73,7 @@ class UtilsTestCase(TestCase):
 
         from ripple_down_rules.rdr import GeneralRDR
 
-        package_dir = f"{dirname(__file__)}/../src/ripple_down_rules"
+        package_dir = dirname(sys.modules["ripple_down_rules"].__file__)
         target_file = os.path.join(package_dir, "datastructures", "case.py")
         imports = get_imports_from_types([GeneralRDR], target_file, "ripple_down_rules")
         assert imports == ["from ..rdr import GeneralRDR"]
