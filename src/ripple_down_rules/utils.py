@@ -863,14 +863,14 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     # Convert to absolute paths
     target_path = Path(target_file_path).resolve()
     if package_name is not None:
-        target_path = Path(get_path_starting_from(str(target_path), package_name))
+        target_path = Path(get_path_starting_from_latest_encounter_of(str(target_path), package_name))
     if module is not None:
         imported_module_path = sys.modules[module].__file__
     if imported_module_path is None:
         raise ValueError("Either imported_module_path or module must be provided")
     imported_path = Path(imported_module_path).resolve()
     if package_name is not None:
-        imported_path = Path(get_path_starting_from(str(imported_path), package_name))
+        imported_path = Path(get_path_starting_from_latest_encounter_of(str(imported_path), package_name))
 
     # Compute relative path from target to imported module
     rel_path = os.path.relpath(imported_path.parent, target_path.parent)
@@ -878,15 +878,18 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     # Convert path to Python import format
     rel_parts = [part.replace('..', '.') for part in Path(rel_path).parts]
     rel_parts = rel_parts if rel_parts else ['']
+    dot_parts = [part for part in rel_parts if part == '.']
+    non_dot_parts = [part for part in rel_parts if part != '.']
+
 
     # Join the parts and add the module name
-    joined_parts = "".join(rel_parts) + f".{imported_path.stem}"
+    joined_parts = "".join(dot_parts) + ".".join(non_dot_parts) + f".{imported_path.stem}"
     joined_parts = f".{joined_parts}" if not joined_parts.startswith(".") else joined_parts
 
     return joined_parts
 
 
-def get_path_starting_from(path: str, package_name: str) -> Optional[str]:
+def get_path_starting_from_latest_encounter_of(path: str, package_name: str) -> Optional[str]:
     """
     Get the path starting from the package name.
 
@@ -895,7 +898,7 @@ def get_path_starting_from(path: str, package_name: str) -> Optional[str]:
     :return: The path starting from the package name or None if not found.
     """
     if package_name in path:
-        idx = path.index(package_name)
+        idx = path.rfind(package_name)
         return path[idx:]
     return None
 
