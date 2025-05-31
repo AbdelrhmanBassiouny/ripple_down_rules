@@ -850,22 +850,27 @@ def get_function_representation(func: Callable) -> str:
 
 
 def get_relative_import(target_file_path, imported_module_path: Optional[str] = None,
-                        module: Optional[str] = None) -> str:
+                        module: Optional[str] = None, package_name: Optional[str] = None) -> str:
     """
     Get a relative import path from the target file to the imported module.
 
     :param target_file_path: The file path of the target file.
     :param imported_module_path: The file path of the module being imported.
     :param module: The module name, if available.
+    :param package_name: The name of the root package where the module is located.
     :return: A relative import path as a string.
     """
     # Convert to absolute paths
+    target_path = Path(target_file_path).resolve()
+    if package_name is not None:
+        target_path = Path(get_path_starting_from(str(target_path), package_name))
     if module is not None:
         imported_module_path = sys.modules[module].__file__
     if imported_module_path is None:
         raise ValueError("Either imported_module_path or module must be provided")
-    target_path = Path(target_file_path).resolve()
     imported_path = Path(imported_module_path).resolve()
+    if package_name is not None:
+        imported_path = Path(get_path_starting_from(str(imported_path), package_name))
 
     # Compute relative path from target to imported module
     rel_path = os.path.relpath(imported_path.parent, target_path.parent)
@@ -879,6 +884,20 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     joined_parts = f".{joined_parts}" if not joined_parts.startswith(".") else joined_parts
 
     return joined_parts
+
+
+def get_path_starting_from(path: str, package_name: str) -> Optional[str]:
+    """
+    Get the path starting from the package name.
+
+    :param path: The full path to the file.
+    :param package_name: The name of the package to start from.
+    :return: The path starting from the package name or None if not found.
+    """
+    if package_name in path:
+        idx = path.index(package_name)
+        return path[idx:]
+    return None
 
 
 def get_imports_from_types(type_objs: Iterable[Type],
@@ -923,7 +942,7 @@ def get_imports_from_types(type_objs: Iterable[Type],
         joined = ", ".join(sorted(set(names)))
         import_path = module
         if (target_file_path is not None) and (package_name is not None) and (package_name in module):
-            import_path = get_relative_import(target_file_path, module=module)
+            import_path = get_relative_import(target_file_path, module=module, package_name=package_name)
         lines.append(f"from {import_path} import {joined}")
     if other_imports:
         lines.extend(other_imports)

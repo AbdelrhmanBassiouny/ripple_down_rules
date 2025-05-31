@@ -5,7 +5,7 @@ from .physical_object_select_objects_that_are_parts_of_robot_output__mcrdr_defs 
 
 
 attribute_name = 'output_'
-conclusion_type = (set, PhysicalObject, list,)
+conclusion_type = (PhysicalObject, set, list,)
 mutually_exclusive = False
 
 
