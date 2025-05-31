@@ -1147,12 +1147,16 @@ class GeneralRDR(RippleDownRules):
         is required in case of relative imports in the generated python file.
         :return: The imports needed for the generated python file.
         """
+        all_types = set()
+        # add type hints
+        all_types.update({Dict, Any})
+        # import rdr type
+        all_types.add(general_rdr_classify)
+        # add case type
+        all_types.update({Case, create_case, self.case_type})
         # get the imports from the types
-        imports = get_imports_from_types([self.case_type], target_file_path=file_path, package_name=package_name)
+        imports = get_imports_from_types(all_types, target_file_path=file_path, package_name=package_name)
         # add rdr python generated functions.
-        imports.append("from typing import Dict, Any")
-        imports.append("from ripple_down_rules.datastructures.case import Case, create_case")
-        imports.append("from ripple_down_rules.helpers import general_rdr_classify")
         for rdr_key, rdr in self.start_rules_dict.items():
             imports.append(
                 f"from . import {rdr.generated_python_file_name} as {self.rdr_key_to_function_name(rdr_key)}")

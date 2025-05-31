@@ -798,10 +798,11 @@ def get_import_path_from_path(path: str) -> Optional[str]:
     :return: The Python import path.
     """
     package_name = os.path.abspath(path)
-    formated_package_name = package_name.strip('./').replace('/', '.')
+    packages = package_name.split(os.path.sep)
+    # formated_package_name = package_name.replace('/', '.')
     parent_package_idx = 0
-    packages = formated_package_name.split('.')
-    for i, possible_pacakge in enumerate(reversed(packages)):
+    # packages = formated_package_name.split('.')
+    for i in range(len(packages)):
         if i == 0:
             current_path = package_name
         else:
