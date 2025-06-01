@@ -20,14 +20,14 @@ from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import PromptFor
 from .ipython_custom_shell import IPythonShell
 from ..utils import make_list
-from threading import Lock
+from threading import RLock
 
 
 class UserPrompt:
     """
     A class to handle user prompts for the RDR.
     """
-    shell_lock: Lock = Lock()  # To ensure that only one thread can access the shell at a time
+    shell_lock: RLock = RLock()  # To ensure that only one thread can access the shell at a time
 
     def __init__(self, viewer: Optional[RDRCaseViewer] = None):
         """
@@ -52,8 +52,8 @@ class UserPrompt:
         prev_user_input: Optional[str] = None
         callable_expression: Optional[CallableExpression] = None
         while True:
-            user_input, expression_tree = self.prompt_user_about_case(case_query, prompt_for, prompt_str,
-                                                                 code_to_modify=prev_user_input)
+            with self.shell_lock:
+                user_input, expression_tree = self.prompt_user_about_case(case_query, prompt_for, prompt_str, code_to_modify=prev_user_input)
             if user_input is None:
                 if prompt_for == PromptFor.Conclusion:
                     self.print_func(f"{Fore.YELLOW}No conclusion provided. Exiting.{Style.RESET_ALL}")
@@ -95,23 +95,26 @@ class UserPrompt:
         :param code_to_modify: The code to modify. If given will be used as a start for user to modify.
         :return: The user input, and the executable expression that was parsed from the user input.
         """
-        if prompt_str is None:
-            if prompt_for == PromptFor.Conclusion:
-                prompt_str = f"Give possible value(s) for:"
-            else:
-                prompt_str = f"Give conditions on when can the rule be evaluated for:"
+        self.print_func("Entered shell")
+        prompt_str = f"{Fore.WHITE}{prompt_str}" if prompt_str is not None else ''
+        if prompt_for == PromptFor.Conclusion:
+            prompt_str += f"\n{Fore.MAGENTA}Give possible value(s) for:"
+        else:
+            prompt_str += f"\n{Fore.MAGENTA}Give conditions on when can the rule be evaluated for:"
         case_query.scope.update({'case': case_query.case})
         shell = None
-        with self.shell_lock:
-            if self.viewer is None:
-                prompt_str = self.construct_prompt_str_for_shell(case_query, prompt_for, prompt_str)
-                shell = IPythonShell(header=prompt_str, prompt_for=prompt_for, case_query=case_query,
-                                     code_to_modify=code_to_modify)
-            else:
+        if self.viewer is None:
+            prompt_str = self.construct_prompt_str_for_shell(case_query, prompt_for, prompt_str)
+            shell = IPythonShell(header=prompt_str, prompt_for=prompt_for, case_query=case_query,
+                                    code_to_modify=code_to_modify)
+        else:
 
-                self.viewer.update_for_case_query(case_query, prompt_str,
-                                                  prompt_for=prompt_for, code_to_modify=code_to_modify)
-            return self.prompt_user_input_and_parse_to_expression(shell=shell)
+            self.viewer.update_for_case_query(case_query, prompt_str,
+                                                prompt_for=prompt_for, code_to_modify=code_to_modify)
+        user_input, expression_tree = self.prompt_user_input_and_parse_to_expression(shell=shell)
+        self.print_func("Exited shell")
+        return user_input, expression_tree
+
 
 
     def construct_prompt_str_for_shell(self, case_query: CaseQuery, prompt_for: PromptFor,
@@ -129,9 +132,9 @@ class UserPrompt:
             prompt_str += (f"\ne.g. `{Fore.GREEN}return {Fore.BLUE}len{Fore.RESET}(case.attribute) > {Fore.BLUE}0` "
                            f"{Fore.MAGENTA}\nOR `{Fore.GREEN}return {Fore.YELLOW}True`{Fore.MAGENTA} (If you want the"
                            f" rule to be always evaluated) \n"
-                           f"You can also do {Fore.YELLOW}%edit{Fore.MAGENTA} for more complex conditions.")
+                           f"You can also do {Fore.YELLOW}%edit{Fore.MAGENTA} for more complex conditions.\n")
 
-        prompt_str = f"{Fore.MAGENTA}{prompt_str}{Fore.YELLOW}\n(Write %help for guide){Fore.RESET}"
+        prompt_str = f"{Fore.MAGENTA}{prompt_str}{Fore.YELLOW}\n(Write %help for guide){Fore.RESET}\n"
         return prompt_str
 
 
