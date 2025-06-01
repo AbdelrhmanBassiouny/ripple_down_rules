@@ -102,15 +102,16 @@ class UserPrompt:
                 prompt_str = f"Give conditions on when can the rule be evaluated for:"
         case_query.scope.update({'case': case_query.case})
         shell = None
-        if self.viewer is None:
-            prompt_str = self.construct_prompt_str_for_shell(case_query, prompt_for, prompt_str)
-            shell = IPythonShell(header=prompt_str, prompt_for=prompt_for, case_query=case_query,
-                                 code_to_modify=code_to_modify)
-        else:
+        with self.shell_lock:
+            if self.viewer is None:
+                prompt_str = self.construct_prompt_str_for_shell(case_query, prompt_for, prompt_str)
+                shell = IPythonShell(header=prompt_str, prompt_for=prompt_for, case_query=case_query,
+                                     code_to_modify=code_to_modify)
+            else:
 
-            self.viewer.update_for_case_query(case_query, prompt_str,
-                                              prompt_for=prompt_for, code_to_modify=code_to_modify)
-        return self.prompt_user_input_and_parse_to_expression(shell=shell)
+                self.viewer.update_for_case_query(case_query, prompt_str,
+                                                  prompt_for=prompt_for, code_to_modify=code_to_modify)
+            return self.prompt_user_input_and_parse_to_expression(shell=shell)
 
 
     def construct_prompt_str_for_shell(self, case_query: CaseQuery, prompt_for: PromptFor,
@@ -167,16 +168,15 @@ class UserPrompt:
         :param shell: The Ipython shell to use for prompting the user.
         :return: The user input.
         """
-        with self.shell_lock:
-            if self.viewer is None:
-                shell = IPythonShell() if shell is None else shell
-                shell.run()
-                user_input = shell.user_input
-            else:
-                app = QApplication.instance()
-                if app is None:
-                    raise RuntimeError("QApplication instance is None. Please run the application first.")
-                self.viewer.show()
-                app.exec()
-                user_input = self.viewer.user_input
-            return user_input
+        if self.viewer is None:
+            shell = IPythonShell() if shell is None else shell
+            shell.run()
+            user_input = shell.user_input
+        else:
+            app = QApplication.instance()
+            if app is None:
+                raise RuntimeError("QApplication instance is None. Please run the application first.")
+            self.viewer.show()
+            app.exec()
+            user_input = self.viewer.user_input
+        return user_input
