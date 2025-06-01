@@ -10,7 +10,7 @@ from ripple_down_rules.utils import is_iterable, make_list
 save_dir = join(dirname(__file__), '..', 'src', 'ripple_down_rules')
 # viewer = RDRCaseViewer(save_dir=save_dir)
 viewer = None
-rdr_decorator: RDRDecorator = RDRDecorator(save_dir, (bool,), True, ask_always=True,
+rdr_decorator: RDRDecorator = RDRDecorator(save_dir, (bool,), True,
                                            fit=False,
                                            viewer=viewer)
 
@@ -18,7 +18,6 @@ rdr_decorator: RDRDecorator = RDRDecorator(save_dir, (bool,), True, ask_always=T
 @rdr_decorator.decorator
 def should_i_ask_the_expert_for_a_target(conclusions: Union[Any, Dict[str, Any]],
                                          case_query: CaseQuery,
-                                         ask_always: bool,
                                          update_existing: bool) -> bool:
     """
     Determine if the rdr should ask the expert for the target of a given case query.
@@ -29,9 +28,7 @@ def should_i_ask_the_expert_for_a_target(conclusions: Union[Any, Dict[str, Any]]
     :param update_existing: Whether to update rules that gave the required type of conclusions.
     :return: True if the rdr should ask the expert, False otherwise.
     """
-    if ask_always:
-        return True
-    elif conclusions is None:
+    if conclusions is None:
         return True
     elif is_iterable(conclusions) and len(conclusions) == 0:
         return True

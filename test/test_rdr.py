@@ -69,7 +69,7 @@ class TestRDR(TestCase):
         scrdr, _ = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False,
                                  expert_answers_dir=self.expert_answers_dir,
                                  expert_answers_file="scrdr_expert_answers_fit",
-                                 load_answers=True,
+                                 load_answers=False,
                                  scenario=self.test_fit_scrdr)
         # render_tree(scrdr.start_rule, use_dot_exporter=True,
         #             filename=self.test_results_dir + f"/scrdr")

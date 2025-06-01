@@ -20,12 +20,15 @@ from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import PromptFor
 from .ipython_custom_shell import IPythonShell
 from ..utils import make_list
+from threading import Lock
 
 
 class UserPrompt:
     """
     A class to handle user prompts for the RDR.
     """
+    shell_lock: Lock = Lock()  # To ensure that only one thread can access the shell at a time
+
     def __init__(self, viewer: Optional[RDRCaseViewer] = None):
         """
         Initialize the UserPrompt class.
@@ -143,17 +146,7 @@ class UserPrompt:
         """
         while True:
             if user_input is None:
-                if self.viewer is None:
-                    shell = IPythonShell() if shell is None else shell
-                    shell.run()
-                    user_input = shell.user_input
-                else:
-                    app = QApplication.instance()
-                    if app is None:
-                        raise RuntimeError("QApplication instance is None. Please run the application first.")
-                    self.viewer.show()
-                    app.exec()
-                    user_input = self.viewer.user_input
+                user_input = self.start_shell_and_get_user_input(shell=shell)
                 if user_input is None or user_input == 'exit':
                     return user_input, None
                 self.print_func(f"{Fore.GREEN}Captured User input: {Style.RESET_ALL}")
@@ -166,3 +159,24 @@ class UserPrompt:
                 logging.error(msg)
                 self.print_func(f"{Fore.RED}{msg}{Style.RESET_ALL}")
                 user_input = None
+
+    def start_shell_and_get_user_input(self, shell: Optional[IPythonShell] = None) -> Optional[str]:
+        """
+        Start the shell and get user input.
+
+        :param shell: The Ipython shell to use for prompting the user.
+        :return: The user input.
+        """
+        with self.shell_lock:
+            if self.viewer is None:
+                shell = IPythonShell() if shell is None else shell
+                shell.run()
+                user_input = shell.user_input
+            else:
+                app = QApplication.instance()
+                if app is None:
+                    raise RuntimeError("QApplication instance is None. Please run the application first.")
+                self.viewer.show()
+                app.exec()
+                user_input = self.viewer.user_input
+            return user_input
