@@ -959,7 +959,7 @@ def get_imports_from_types(type_objs: Iterable[Type],
             import_path = get_relative_import(target_file_path, module=module, package_name=package_name)
         lines.append(f"from {import_path} import {joined}")
     lines.extend(stem_imports)
-    return sorted(lines)
+    return lines
 
 
 def get_method_args_as_dict(method: Callable, *args, **kwargs) -> Dict[str, Any]:
