@@ -120,7 +120,7 @@ class RDRDecorator:
         func_args_type_hints = get_type_hints(func)
         output_name = list(func_output.keys())[0]
         func_args_type_hints.update({output_name: Union[tuple(output_type)]})
-        return CaseQuery(case, output_name, Union[tuple(output_type)],
+        return CaseQuery(case, output_name, tuple(output_type),
                          mutual_exclusive, scope=scope,
                          is_function=True, function_args_type_hints=func_args_type_hints)
 
