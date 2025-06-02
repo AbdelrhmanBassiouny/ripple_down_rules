@@ -1,5 +1,5 @@
-from ...datasets import PhysicalObject, Robot
 from typing import Dict, List, Union
+from ...datasets import PhysicalObject, Robot
 
 
 def conditions_164855806603893754507167918997373216146(case):

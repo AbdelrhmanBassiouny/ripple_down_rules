@@ -1,6 +1,6 @@
-from ripple_down_rules.datastructures.case import Case, create_case
 from ripple_down_rules.utils import make_set
 from typing import Set, Union
+from ripple_down_rules.datastructures.case import Case, create_case
 from .physical_object_select_objects_that_are_parts_of_robot_output__mcrdr_defs import *
 
 

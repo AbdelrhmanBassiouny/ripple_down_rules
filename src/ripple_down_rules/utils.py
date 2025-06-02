@@ -85,30 +85,6 @@ def are_results_subclass_of_types(result_types: List[Any], types_: List[Type]) -
     return True
 
 
-def _get_imports_from_types(types: List[Type]) -> List[str]:
-    """
-    Get the import statements for a list of types.
-
-    :param types: The types to get the import statements for.
-    :return: The import statements as a string.
-    """
-    imports = map(get_import_from_type, types)
-    return list({i for i in imports if i is not None})
-
-
-def get_import_from_type(type_: Type) -> Optional[str]:
-    """
-    Get the import statement for a given type.
-
-    :param type_: The type to get the import statement for.
-    :return: The import statement as a string.
-    """
-    if hasattr(type_, "__module__") and hasattr(type_, "__name__"):
-        if type_.__module__ == "builtins":
-            return
-        return f"from {type_.__module__} import {type_.__name__}"
-
-
 def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     """
     Get the imports from the given scope.
@@ -116,12 +92,7 @@ def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     :param scope: The scope to get the imports from.
     :return: The imports as a string.
     """
-    imports = []
-    for k, v in scope.items():
-        if not hasattr(v, "__module__") or not hasattr(v, "__name__") or v.__module__ is None:
-            continue
-        imports.append(f"from {v.__module__} import {v.__name__}")
-    return imports
+    return get_imports_from_types(list(scope.values()))
 
 
 def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = None,
@@ -861,16 +832,18 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     :return: A relative import path as a string.
     """
     # Convert to absolute paths
-    target_path = Path(target_file_path).resolve()
-    if package_name is not None:
-        target_path = Path(get_path_starting_from_latest_encounter_of(str(target_path), package_name))
     if module is not None:
         imported_module_path = sys.modules[module].__file__
     if imported_module_path is None:
         raise ValueError("Either imported_module_path or module must be provided")
+    target_path = Path(target_file_path).resolve()
+    imported_file_name = Path(imported_module_path).name
+    target_file_name = Path(target_file_path).name
+    if package_name is not None:
+        target_path = Path(get_path_starting_from_latest_encounter_of(str(target_path), package_name, [target_file_name]))
     imported_path = Path(imported_module_path).resolve()
     if package_name is not None:
-        imported_path = Path(get_path_starting_from_latest_encounter_of(str(imported_path), package_name))
+        imported_path = Path(get_path_starting_from_latest_encounter_of(str(imported_path), package_name, [imported_file_name]))
 
     # Compute relative path from target to imported module
     rel_path = os.path.relpath(imported_path.parent, target_path.parent)
@@ -878,29 +851,45 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     # Convert path to Python import format
     rel_parts = [part.replace('..', '.') for part in Path(rel_path).parts]
     rel_parts = rel_parts if rel_parts else ['']
-    dot_parts = [part for part in rel_parts if part == '.']
-    non_dot_parts = [part for part in rel_parts if part != '.']
+    # dot_parts = [part for part in rel_parts if part == '.']
+    # non_dot_parts = [part for part in rel_parts if part != '.']
 
 
     # Join the parts and add the module name
-    joined_parts = "".join(dot_parts) + ".".join(non_dot_parts) + f".{imported_path.stem}"
-    joined_parts = f".{joined_parts}" if not joined_parts.startswith(".") else joined_parts
+    # joined_parts = "".join(dot_parts) + ".".join(non_dot_parts) + f".{imported_path.stem}"
+    joined_parts = "." + "".join(rel_parts)
+    joined_parts += imported_path.stem if joined_parts.endswith(".") else f".{imported_path.stem}"
+    # joined_parts = f".{joined_parts}" if not joined_parts.startswith(".") else joined_parts
 
     return joined_parts
 
 
-def get_path_starting_from_latest_encounter_of(path: str, package_name: str) -> Optional[str]:
+def get_path_starting_from_latest_encounter_of(path: str, package_name: str, should_contain: List[str]) -> str:
     """
     Get the path starting from the package name.
 
     :param path: The full path to the file.
     :param package_name: The name of the package to start from.
-    :return: The path starting from the package name or None if not found.
+    :param should_contain: The names of the files or directorys to look for.
+    :return: The path starting from the package name that contains all the names in should_contain, otherwise raise an error.
+    :raise ValueError: If the path does not contain all the names in should_contain.
     """
-    if package_name in path:
-        idx = path.rfind(package_name)
-        return path[idx:]
-    return None
+    path_parts = path.split(os.path.sep)
+    if package_name not in path_parts:
+        raise ValueError(f"Could not find {package_name} in {path}")
+    idx = path_parts.index(package_name)
+    prev_idx = idx
+    while all(sc in path_parts[idx:] for sc in should_contain):
+        prev_idx = idx
+        try:
+            idx = path_parts.index(package_name, idx + 1)
+        except ValueError:
+            break
+    if all(sc in path_parts[idx:] for sc in should_contain):
+        path_parts = path_parts[prev_idx:]
+        return os.path.join(*path_parts)
+    else:
+        raise ValueError(f"Could not find {should_contain} in {path}")
 
 
 def get_imports_from_types(type_objs: Iterable[Type],
@@ -955,6 +944,7 @@ def get_imports_from_types(type_objs: Iterable[Type],
                 filtered_names.add(name)
         joined = ", ".join(sorted(set(filtered_names)))
         import_path = module
+        # import pdb; pdb.set_trace()
         if (target_file_path is not None) and (package_name is not None) and (package_name in module):
             import_path = get_relative_import(target_file_path, module=module, package_name=package_name)
         lines.append(f"from {import_path} import {joined}")
