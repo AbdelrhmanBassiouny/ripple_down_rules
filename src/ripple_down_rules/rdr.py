@@ -139,13 +139,15 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         model_dir = os.path.join(load_dir, model_name)
         json_file = os.path.join(model_dir, cls.metadata_folder, model_name)
         rdr = cls.from_json_file(json_file)
+        rdr.save_dir = load_dir
+        rdr.model_name = model_name
         try:
             rdr.update_from_python(model_dir, package_name=package_name)
+            rdr.to_json_file(json_file)
         except (FileNotFoundError, ValueError) as e:
             logger.warning(f"Could not load the python file for the model {model_name} from {model_dir}. "
                            f"Make sure the file exists and is valid.")
-        rdr.save_dir = load_dir
-        rdr.model_name = model_name
+            rdr.save(save_dir=load_dir, model_name=model_name, package_name=package_name)
         return rdr
 
     @abstractmethod
