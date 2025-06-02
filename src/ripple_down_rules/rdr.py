@@ -296,7 +296,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param update_existing: Whether to update rules that gave the required type of conclusions.
         :return: True if the rdr should ask the expert, False otherwise.
         """
-        if conclusions is None:
+        if conclusions is None and type(None) not in case_query.core_attribute_type:
             return True
         elif is_iterable(conclusions) and len(conclusions) == 0:
             return True
@@ -571,8 +571,9 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :return: The type of the conclusion of the RDR classifier.
         """
         all_types = []
-        for rule in [self.start_rule] + list(self.start_rule.descendants):
-            all_types.extend(list(rule.conclusion.conclusion_type))
+        if self.start_rule is not None:
+            for rule in [self.start_rule] + list(self.start_rule.descendants):
+                all_types.extend(list(rule.conclusion.conclusion_type))
         return tuple(set(all_types))
 
     @property

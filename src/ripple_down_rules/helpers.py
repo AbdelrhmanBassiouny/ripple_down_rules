@@ -36,7 +36,7 @@ def general_rdr_classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDow
         new_conclusions = {}
         for attribute_name, rdr in classifiers_dict.items():
             pred_atts = rdr.classify(case_cp, case_query=case_query)
-            if pred_atts is None:
+            if pred_atts is None and type(None) not in rdr.conclusion_type:
                 continue
             if rdr.mutually_exclusive:
                 if attribute_name not in conclusions or \
