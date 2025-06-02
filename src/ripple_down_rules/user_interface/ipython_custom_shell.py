@@ -128,7 +128,7 @@ class IPythonShell:
                 break
             except Exception as e:
                 logging.error(e)
-                print(f"{Fore.RED}ERROR::{e}{Style.RESET_ALL}")
+                print(f"{Fore.RED}ERROR:: {e}{Style.RESET_ALL}")
 
     def update_user_input_from_code_lines(self):
         """
