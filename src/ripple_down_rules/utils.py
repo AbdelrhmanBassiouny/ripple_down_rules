@@ -944,7 +944,6 @@ def get_imports_from_types(type_objs: Iterable[Type],
                 filtered_names.add(name)
         joined = ", ".join(sorted(set(filtered_names)))
         import_path = module
-        # import pdb; pdb.set_trace()
         if (target_file_path is not None) and (package_name is not None) and (package_name in module):
             import_path = get_relative_import(target_file_path, module=module, package_name=package_name)
         lines.append(f"from {import_path} import {joined}")
