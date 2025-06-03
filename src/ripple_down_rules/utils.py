@@ -918,6 +918,8 @@ def get_imports_from_types(type_objs: Iterable[Type],
                 name = type(tp).__qualname__
             else:
                 continue
+            if name == "NoneType":
+                module = "types"
             if module is None or module == 'builtins' or module.startswith('_')\
                 or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
                     or name in exclueded_names:
@@ -1053,7 +1055,19 @@ def get_type_from_string(type_path: str):
     :param type_path: The path to the type.
     """
     module_path, class_name = type_path.rsplit(".", 1)
-    module = importlib.import_module(module_path)
+    try:
+        module = importlib.import_module(module_path)
+    except ModuleNotFoundError:
+        module_path_parts = module_path.split(".")
+        idx = -1
+        while True:
+            try:
+                module = importlib.import_module('.'.join(module_path_parts[:idx]))
+                break
+            except ModuleNotFoundError:
+                idx -= 1
+                if abs(idx) > len(module_path_parts):
+                    raise
     if module == builtins and class_name == 'NoneType':
         return type(None)
     return getattr(module, class_name)

@@ -4,6 +4,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
+from types import NoneType
 from uuid import uuid4
 
 from anytree import NodeMixin
@@ -162,6 +163,22 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             # use regex to replace the function name
             new_function_name = f"def conclusion_{self.uid}"
             conclusion_lines[0] = re.sub(r"def (\w+)", new_function_name, conclusion_lines[0])
+            # add type hint
+            if len(self.conclusion.conclusion_type) == 1:
+                hint = self.conclusion.conclusion_type[0].__name__
+            else:
+                if (all(t in self.conclusion.conclusion_type for t in [list, set])
+                        and len(self.conclusion.conclusion_type) > 2):
+                    type_names = [t.__name__ for t in self.conclusion.conclusion_type if t not in [list, set]]
+                    hint = f"List[{', '.join(type_names)}]"
+                else:
+                    if NoneType in self.conclusion.conclusion_type:
+                        type_names = [t.__name__ for t in self.conclusion.conclusion_type if t is not NoneType]
+                        hint = f"Optional[{', '.join(type_names)}]"
+                    else:
+                        type_names = [t.__name__ for t in self.conclusion.conclusion_type]
+                        hint = f"Union[{', '.join(type_names)}]"
+            conclusion_lines[0] = conclusion_lines[0].replace("):", f") -> {hint}:")
             func_call = f"{parent_indent}    return {new_function_name.replace('def ', '')}(case)\n"
             return "\n".join(conclusion_lines).strip(' '), func_call
         else:
@@ -184,6 +201,8 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             # use regex to replace the function name
             new_function_name = f"def conditions_{self.uid}"
             conditions_lines[0] = re.sub(r"def (\w+)", new_function_name, conditions_lines[0])
+            # add type hint
+            conditions_lines[0] = conditions_lines[0].replace('):', ') -> bool:')
             def_code = "\n".join(conditions_lines)
             with open(defs_file, 'a') as f:
                 f.write(def_code.strip() + "\n\n\n")

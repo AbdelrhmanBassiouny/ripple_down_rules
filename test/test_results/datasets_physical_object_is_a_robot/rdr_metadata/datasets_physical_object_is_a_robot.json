@@ -14,7 +14,10 @@
                     "scope": {
                         "PhysicalObject": "test.datasets.PhysicalObject",
                         "Robot": "test.datasets.Robot",
-                        "Dict": "typing.Dict"
+                        "NoneType": "builtins.NoneType",
+                        "Dict": "typing.Dict",
+                        "Optional": "typing.Optional",
+                        "Union": "typing.Union"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -31,7 +34,10 @@
                     "scope": {
                         "PhysicalObject": "test.datasets.PhysicalObject",
                         "Robot": "test.datasets.Robot",
-                        "Dict": "typing.Dict"
+                        "NoneType": "builtins.NoneType",
+                        "Dict": "typing.Dict",
+                        "Optional": "typing.Optional",
+                        "Union": "typing.Union"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",

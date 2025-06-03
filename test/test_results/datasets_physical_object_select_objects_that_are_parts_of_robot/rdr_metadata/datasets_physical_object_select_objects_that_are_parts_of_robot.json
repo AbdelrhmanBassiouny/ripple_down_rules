@@ -14,6 +14,7 @@
                     "scope": {
                         "Dict": "typing.Dict",
                         "List": "typing.List",
+                        "Set": "typing.Set",
                         "Union": "typing.Union",
                         "PhysicalObject": "test.datasets.PhysicalObject",
                         "Robot": "test.datasets.Robot"
@@ -35,6 +36,7 @@
                     "scope": {
                         "Dict": "typing.Dict",
                         "List": "typing.List",
+                        "Set": "typing.Set",
                         "Union": "typing.Union",
                         "PhysicalObject": "test.datasets.PhysicalObject",
                         "Robot": "test.datasets.Robot"
