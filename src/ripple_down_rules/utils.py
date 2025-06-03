@@ -851,15 +851,11 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     # Convert path to Python import format
     rel_parts = [part.replace('..', '.') for part in Path(rel_path).parts]
     rel_parts = rel_parts if rel_parts else ['']
-    # dot_parts = [part for part in rel_parts if part == '.']
-    # non_dot_parts = [part for part in rel_parts if part != '.']
+    dot_parts = [part for part in rel_parts if part == '.']
+    non_dot_parts = [part for part in rel_parts if part != '.'] + [imported_path.stem]
 
-
-    # Join the parts and add the module name
-    # joined_parts = "".join(dot_parts) + ".".join(non_dot_parts) + f".{imported_path.stem}"
-    joined_parts = "." + "".join(rel_parts)
-    joined_parts += imported_path.stem if joined_parts.endswith(".") else f".{imported_path.stem}"
-    # joined_parts = f".{joined_parts}" if not joined_parts.startswith(".") else joined_parts
+    # Join the parts
+    joined_parts = "." + "".join(dot_parts) + ".".join(non_dot_parts)
 
     return joined_parts
 
@@ -926,6 +922,8 @@ def get_imports_from_types(type_objs: Iterable[Type],
                 or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
                     or name in exclueded_names:
                 continue
+            if module == "typing":
+                module = "typing_extensions"
             module_to_types[module].append(name)
         except AttributeError:
             continue

@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing_extensions import Any, Dict
 from ripple_down_rules.helpers import general_rdr_classify
 from ripple_down_rules.datastructures.case import Case, create_case
 from . import physical_object_is_a_robot_output__scrdr as output__classifier

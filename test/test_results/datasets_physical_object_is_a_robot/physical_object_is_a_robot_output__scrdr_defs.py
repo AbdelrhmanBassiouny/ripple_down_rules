@@ -1,4 +1,4 @@
-from typing import Dict
+from typing_extensions import Dict
 from ...datasets import PhysicalObject, Robot
 
 
