@@ -676,7 +676,7 @@ class SingleClassRDR(RDRWithCodeWriter):
         :param case_query: The case query containing the case and the target category to compare the case with.
         """
         pred = self.evaluate(case)
-        conclusion = pred.conclusion(case) if pred is not None else self.default_conclusion
+        conclusion = pred.conclusion(case) if pred is not None and pred.fired else self.default_conclusion
         if pred is not None and pred.fired and case_query is not None:
             if pred.corner_case_metadata is None and conclusion is not None \
                     and type(conclusion) in case_query.core_attribute_type:
