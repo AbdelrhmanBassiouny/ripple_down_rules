@@ -1,4 +1,4 @@
-__version__ = "0.5.96"
+__version__ = "0.5.97"
 
 import logging
 logger = logging.Logger("rdr")
