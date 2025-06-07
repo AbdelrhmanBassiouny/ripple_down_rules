@@ -76,7 +76,7 @@ class RDRDecorator:
 
             func_output = {self.output_name: func(*args, **kwargs)}
 
-            if self.fit:
+            if self.fit and not self.use_generated_classifier:
                 if len(self.parsed_output_type) == 0:
                     self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
                 if self.expert is None:
