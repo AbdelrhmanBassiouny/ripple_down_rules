@@ -32,7 +32,8 @@ class RDRDecorator:
                  update_existing_rules: bool = True,
                  viewer: Optional[RDRCaseViewer] = None,
                  package_name: Optional[str] = None,
-                 use_generated_classifier: bool = False):
+                 use_generated_classifier: bool = False,
+                 ask_now: Callable[[Any], bool] = lambda _: True):
         """
         :param models_dir: The directory to save/load the RDR models.
         :param output_type: The type of the output. This is used to create the RDR model.
@@ -64,6 +65,7 @@ class RDRDecorator:
         self.package_name = package_name
         self.use_generated_classifier = use_generated_classifier
         self.generated_classifier: Optional[Callable] = None
+        self.ask_now = ask_now
         self.load()
 
     def decorator(self, func: Callable) -> Callable:
@@ -76,7 +78,9 @@ class RDRDecorator:
 
             func_output = {self.output_name: func(*args, **kwargs)}
 
-            if self.fit and not self.use_generated_classifier:
+            case, case_dict = self.create_case_from_method(func, func_output, *args, **kwargs)
+            
+            if self.fit and not self.use_generated_classifier and self.ask_now(case_dict):
                 if len(self.parsed_output_type) == 0:
                     self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
                 if self.expert is None:
@@ -90,7 +94,6 @@ class RDRDecorator:
                                            update_existing_rules=self.update_existing_rules,
                                            viewer=self.viewer)
             else:
-                case, case_dict = self.create_case_from_method(func, func_output, *args, **kwargs)
                 if self.use_generated_classifier:
                     if self.generated_classifier is None:
                         model_path = os.path.join(self.rdr_models_dir, self.model_name)
