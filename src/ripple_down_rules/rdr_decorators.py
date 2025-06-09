@@ -33,7 +33,8 @@ class RDRDecorator:
                  viewer: Optional[RDRCaseViewer] = None,
                  package_name: Optional[str] = None,
                  use_generated_classifier: bool = False,
-                 ask_now: Callable[[Any], bool] = lambda _: True):
+                 ask_now: Callable[[Any], bool] = lambda _: True,
+                 fitting_decorator: Optional[Callable] = None):
         """
         :param models_dir: The directory to save/load the RDR models.
         :param output_type: The type of the output. This is used to create the RDR model.
@@ -66,6 +67,7 @@ class RDRDecorator:
         self.use_generated_classifier = use_generated_classifier
         self.generated_classifier: Optional[Callable] = None
         self.ask_now = ask_now
+        self.fitting_decorator = fitting_decorator
         self.load()
 
     def decorator(self, func: Callable) -> Callable:
@@ -79,8 +81,9 @@ class RDRDecorator:
             func_output = {self.output_name: func(*args, **kwargs)}
 
             case, case_dict = self.create_case_from_method(func, func_output, *args, **kwargs)
-            
-            if self.fit and not self.use_generated_classifier and self.ask_now(case_dict):
+
+            @self.fitting_decorator
+            def fit():
                 if len(self.parsed_output_type) == 0:
                     self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
                 if self.expert is None:
@@ -89,10 +92,16 @@ class RDRDecorator:
                 case_query = self.create_case_query_from_method(func, func_output,
                                                                 self.parsed_output_type,
                                                                 self.mutual_exclusive,
+                                                                case, case_dict,
                                                                 *args, **kwargs)
+                # import pdb; pdb.set_trace()
                 output = self.rdr.fit_case(case_query, expert=self.expert,
                                            update_existing_rules=self.update_existing_rules,
                                            viewer=self.viewer)
+                return output
+            
+            if self.fit and not self.use_generated_classifier and self.ask_now(case_dict):
+                output = fit()
             else:
                 if self.use_generated_classifier:
                     if self.generated_classifier is None:
@@ -114,6 +123,8 @@ class RDRDecorator:
                                       func_output: Dict[str, Any],
                                       output_type: Sequence[Type],
                                       mutual_exclusive: bool,
+                                      case: Optional[Case] = None,
+                                      case_dict: Optional[Dict[str, Any]] = None,
                                       *args, **kwargs) -> CaseQuery:
         """
         Create a CaseQuery from the function and its arguments.
@@ -127,7 +138,8 @@ class RDRDecorator:
         :return: A CaseQuery object representing the case.
         """
         output_type = make_set(output_type)
-        case, case_dict = RDRDecorator.create_case_from_method(func, func_output, *args, **kwargs)
+        if case is None or case_dict is None:
+            case, case_dict = RDRDecorator.create_case_from_method(func, func_output, *args, **kwargs)
         scope = func.__globals__
         scope.update(case_dict)
         func_args_type_hints = get_type_hints(func)
