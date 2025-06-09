@@ -55,7 +55,7 @@ def general_rdr_classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDow
             if attribute_name in new_conclusions:
                 temp_case_query = CaseQuery(case_cp, attribute_name, rdr.conclusion_type, rdr.mutually_exclusive)
                 update_case(temp_case_query, new_conclusions)
-        if len(new_conclusions) == 0:
+        if len(new_conclusions) == 0 or (len(classifiers_dict) == 1 and all(rdr.mutually_exclusive for rdr in classifiers_dict.values())):
             break
     return conclusions
 
