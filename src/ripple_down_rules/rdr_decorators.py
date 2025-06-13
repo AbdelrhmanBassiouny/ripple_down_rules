@@ -33,7 +33,7 @@ class RDRDecorator:
                  viewer: Optional[RDRCaseViewer] = None,
                  package_name: Optional[str] = None,
                  use_generated_classifier: bool = False,
-                 ask_now: Callable[[Any], bool] = lambda _: True,
+                 ask_now: Callable[[Any, Any], bool] = lambda _,n: True,
                  fitting_decorator: Optional[Callable] = None):
         """
         :param models_dir: The directory to save/load the RDR models.
@@ -94,13 +94,12 @@ class RDRDecorator:
                                                                 self.mutual_exclusive,
                                                                 case, case_dict,
                                                                 *args, **kwargs)
-                # import pdb; pdb.set_trace()
                 output = self.rdr.fit_case(case_query, expert=self.expert,
                                            update_existing_rules=self.update_existing_rules,
                                            viewer=self.viewer)
                 return output
             
-            if self.fit and not self.use_generated_classifier and self.ask_now(case_dict):
+            if self.fit and not self.use_generated_classifier and self.ask_now(case_dict, self.rdr.classify(case)):
                 output = fit()
             else:
                 if self.use_generated_classifier:

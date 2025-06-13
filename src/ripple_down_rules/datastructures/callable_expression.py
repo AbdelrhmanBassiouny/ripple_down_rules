@@ -161,7 +161,7 @@ class CallableExpression(SubclassJSONSerializer):
             else:
                 raise ValueError("Either user_input or conclusion must be provided.")
         except Exception as e:
-            raise ValueError(f"Error during evaluation: {e}")
+            raise ValueError(f"Error during evaluation: {e}, user_input: {self.user_input}")
 
     def combine_with(self, other: 'CallableExpression') -> 'CallableExpression':
         """

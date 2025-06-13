@@ -244,6 +244,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                  expert: Optional[Expert] = None,
                  update_existing_rules: bool = True,
                  scenario: Optional[Callable] = None,
+                 ask_now: Callable = lambda _: True,
                  **kwargs) \
             -> Union[CallableExpression, Dict[str, CallableExpression]]:
         """
@@ -255,6 +256,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param update_existing_rules: Whether to update the existing same conclusion type rules that already gave
         some conclusions with the type required by the case query.
         :param scenario: The scenario at which the case was created, this is used to recreate the case if needed.
+        :ask_now: Whether to ask the expert for refinements or alternatives.
         :return: The category that the case belongs to.
         """
         if case_query is None:
@@ -271,7 +273,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if case_query.target is None:
             case_query_cp = copy(case_query)
             conclusions = self.classify(case_query_cp.case, modify_case=True, case_query=case_query_cp)
-            if self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp, update_existing_rules):
+            if (self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp, update_existing_rules)
+                    and ask_now(case_query_cp.case)):
                 expert.ask_for_conclusion(case_query_cp)
                 case_query.target = case_query_cp.target
             if case_query.target is None:
