@@ -99,7 +99,8 @@ class CallableExpression(SubclassJSONSerializer):
                  expression_tree: Optional[AST] = None,
                  scope: Optional[Dict[str, Any]] = None,
                  conclusion: Optional[Any] = None,
-                 mutually_exclusive: bool = True):
+                 mutually_exclusive: bool = True,
+                 expression_name: Optional[str] = None):
         """
         Create a callable expression.
 
@@ -110,6 +111,7 @@ class CallableExpression(SubclassJSONSerializer):
         :param conclusion: The conclusion to use for the callable expression.
         :param mutually_exclusive: If True, the conclusion is mutually exclusive, i.e. the callable expression can only
             return one conclusion. If False, the callable expression can return multiple conclusions.
+        :param expression_name: The semantic name of the expression.
         """
         if user_input is None and conclusion is None:
             raise ValueError("Either user_input or conclusion must be provided.")
@@ -130,6 +132,7 @@ class CallableExpression(SubclassJSONSerializer):
         self.visitor = VariableVisitor()
         self.visitor.visit(self.expression_tree)
         self.mutually_exclusive: bool = mutually_exclusive
+        self.expression_name: Optional[str] = None
 
     @classmethod
     def get_encapsulating_function(cls, postfix: str = '') -> str:
@@ -214,6 +217,8 @@ class CallableExpression(SubclassJSONSerializer):
         Set the user input.
         """
         if value is not None:
+            if value.startswith("def "):
+                self.expression_name = value.split("(")[0].replace("def ", "")
             self._user_input = encapsulate_user_input(value, self.get_encapsulating_function())
             self.scope = get_used_scope(self.user_input, self.scope)
             self.expression_tree = parse_string_to_expression(self.user_input)
@@ -263,6 +268,7 @@ class CallableExpression(SubclassJSONSerializer):
                           and v.__module__ is not None and v.__name__ is not None},
                 "conclusion": conclusion_to_json(self.conclusion),
                 "mutually_exclusive": self.mutually_exclusive,
+                "expression_name": self.expression_name,
                 }
 
     @classmethod
@@ -278,7 +284,8 @@ class CallableExpression(SubclassJSONSerializer):
                    if data["conclusion_type"] else None,
                    scope=scope,
                    conclusion=SubclassJSONSerializer.from_json(data["conclusion"]),
-                   mutually_exclusive=data["mutually_exclusive"])
+                   mutually_exclusive=data["mutually_exclusive"],
+                   expression_name=data["expression_name"] if "expression_name" in data else None)
 
 
 def compile_expression_to_code(expression_tree: AST) -> Any:
