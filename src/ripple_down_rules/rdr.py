@@ -92,8 +92,21 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.start_rule = start_rule
         self.fig: Optional[Figure] = None
         self.viewer: Optional[RDRCaseViewer] = viewer
-        if self.viewer is not None:
-            self.viewer.set_save_function(self.save)
+        if viewer is None:
+            if len(RDRCaseViewer.instances) > 0:
+                self.viewer = RDRCaseViewer.instances[0]
+                logger.error("No viewer was provided, but there is already an existing viewer. "
+                             "Using the existing viewer.")
+
+    @property
+    def viewer(self):
+        return self._viewer
+    
+    @viewer.setter
+    def viewer(self, value):
+        self._viewer = value
+        if value is not None:
+            value.set_save_function(self.save)
 
     def save(self, save_dir: Optional[str] = None, model_name: Optional[str] = None,
              package_name: Optional[str] = None) -> str:

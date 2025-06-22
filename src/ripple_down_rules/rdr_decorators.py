@@ -33,7 +33,7 @@ class RDRDecorator:
                  viewer: Optional[RDRCaseViewer] = None,
                  package_name: Optional[str] = None,
                  use_generated_classifier: bool = False,
-                 ask_now: Callable[[Any, Any], bool] = lambda _,n: True,
+                 ask_now: Callable[Dict[str, Any], bool] = lambda _: True,
                  fitting_decorator: Optional[Callable] = None):
         """
         :param models_dir: The directory to save/load the RDR models.
@@ -99,7 +99,7 @@ class RDRDecorator:
                                            viewer=self.viewer)
                 return output
             
-            if self.fit and not self.use_generated_classifier and self.ask_now(case_dict, self.rdr.classify(case)):
+            if self.fit and not self.use_generated_classifier and self.ask_now(case_dict):
                 output = fit()
             else:
                 if self.use_generated_classifier:
@@ -167,6 +167,7 @@ class RDRDecorator:
         return Case(dict, id(case_dict), case_name, case_dict, **case_dict), case_dict
 
     def initialize_rdr_model_name_and_load(self, func: Callable) -> None:
+        self.viewer = RDRCaseViewer.instances[0] if len(RDRCaseViewer.instances) > 0 else self.viewer
         model_file_name = get_func_rdr_model_name(func, include_file_name=True)
         self.model_name = str_to_snake_case(model_file_name)
         self.load()
@@ -201,10 +202,8 @@ class RDRDecorator:
             model_path = os.path.join(self.rdr_models_dir, self.model_name + f"/rdr_metadata/{self.model_name}.json")
             if os.path.exists(os.path.join(self.rdr_models_dir, model_path)):
                 self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name, package_name=self.package_name)
-                self.rdr.set_viewer(self.viewer)
         if self.rdr is None:
-            self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name,
-                                  viewer=self.viewer)
+            self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name)
 
     def update_from_python(self):
         """
