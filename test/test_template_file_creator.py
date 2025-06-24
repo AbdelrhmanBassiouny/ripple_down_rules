@@ -63,7 +63,7 @@ def test_rdr_decorator_func_name():
     robot = Robot("Robot1", objects[:2])
     cq = RDRDecorator.create_case_query_from_method(
         example.select_objects_that_are_parts_of_robot, {"output_": None}, (List[PhysicalObject],),
-        False, *(objects, robot))
+        False, args=(objects, robot))
 
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, cq)
     assert func_name == "example_select_objects_that_are_parts_of_robot"

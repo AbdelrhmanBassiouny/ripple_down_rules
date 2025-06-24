@@ -12,12 +12,12 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot",
-                        "NoneType": "builtins.NoneType",
                         "Dict": "typing.Dict",
                         "Optional": "typing.Optional",
-                        "Union": "typing.Union"
+                        "Union": "typing.Union",
+                        "NoneType": "builtins.NoneType",
+                        "PhysicalObject": "test.datasets.PhysicalObject",
+                        "Robot": "test.datasets.Robot"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -32,12 +32,12 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot",
-                        "NoneType": "builtins.NoneType",
                         "Dict": "typing.Dict",
                         "Optional": "typing.Optional",
-                        "Union": "typing.Union"
+                        "Union": "typing.Union",
+                        "NoneType": "builtins.NoneType",
+                        "PhysicalObject": "test.datasets.PhysicalObject",
+                        "Robot": "test.datasets.Robot"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",

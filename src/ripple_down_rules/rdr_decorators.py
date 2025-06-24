@@ -67,7 +67,8 @@ class RDRDecorator:
         self.use_generated_classifier = use_generated_classifier
         self.generated_classifier: Optional[Callable] = None
         self.ask_now = ask_now
-        self.fitting_decorator = fitting_decorator
+        self.fitting_decorator = fitting_decorator if fitting_decorator is not None else \
+            lambda f: f  # Default to no fitting decorator
         self.load()
 
     def decorator(self, func: Callable) -> Callable:
