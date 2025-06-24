@@ -34,7 +34,8 @@ class RDRDecorator:
                  package_name: Optional[str] = None,
                  use_generated_classifier: bool = False,
                  ask_now: Callable[Dict[str, Any], bool] = lambda _: True,
-                 fitting_decorator: Optional[Callable] = None):
+                 fitting_decorator: Optional[Callable] = None,
+                 generate_dot_file: bool = False) -> None:
         """
         :param models_dir: The directory to save/load the RDR models.
         :param output_type: The type of the output. This is used to create the RDR model.
@@ -51,6 +52,10 @@ class RDRDecorator:
         :param viewer: The viewer to use for the RDR model. If None, no viewer will be used.
         :param package_name: The package name to use for relative imports in the RDR model.
         :param use_generated_classifier: If True, the function will use the generated classifier instead of the RDR model.
+        :param ask_now: A callable that takes the case dictionary and returns True if the user should be asked for
+            the output, or False if the function should return the output without asking.
+        :param fitting_decorator: A decorator to use for the fitting function. If None, no decorator will be used.
+        :param generate_dot_file: If True, the RDR model will generate a dot file for visualization.
         :return: A decorator to use a GeneralRDR as a classifier that monitors and modifies the function's output.
         """
         self.rdr_models_dir = models_dir
@@ -69,6 +74,7 @@ class RDRDecorator:
         self.ask_now = ask_now
         self.fitting_decorator = fitting_decorator if fitting_decorator is not None else \
             lambda f: f  # Default to no fitting decorator
+        self.generate_dot_file = generate_dot_file
         self.load()
 
     def decorator(self, func: Callable) -> Callable:
@@ -110,6 +116,8 @@ class RDRDecorator:
                     output = self.generated_classifier(case)
                 else:
                     output = self.rdr.classify(case)
+                    if self.generate_dot_file:
+                        self.rdr.render_evaluated_rule_tree(self.rdr_models_dir + f'/{self.model_name}')
 
             if self.output_name in output:
                 return output[self.output_name]
