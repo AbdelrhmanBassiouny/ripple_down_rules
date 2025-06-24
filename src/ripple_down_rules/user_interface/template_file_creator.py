@@ -225,7 +225,6 @@ class TemplateFileCreator:
         import_types.extend(case_type_imports)
         import_types.extend(output_type_imports)
         imports = get_imports_from_types(import_types, excluded_modules=["IPython.core.interactiveshell"])
-        imports = set(imports)
         return '\n'.join(imports)
 
     @staticmethod

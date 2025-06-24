@@ -329,9 +329,9 @@ def create_case_attribute_from_iterable_attribute(attr_value: Any, name: str, ob
 
 def show_current_and_corner_cases(case: Any, targets: Optional[Dict[str, Any]] = None,
                                   current_conclusions: Optional[Dict[str, Any]] = None,
-                                  last_evaluated_rule: Optional[Rule] = None) -> None:
+                                  last_evaluated_rule: Optional[Rule] = None) -> str:
     """
-    Show the data of the new case and if last evaluated rule exists also show that of the corner case.
+    Get the the data to show of the new case and if last evaluated rule exists also show that of the corner case.
 
     :param case: The new case.
     :param targets: The target attribute of the case.
@@ -341,9 +341,10 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Dict[str, Any]] =
     corner_case = None
     targets = {f"target_{name}": value for name, value in targets.items()} if targets else {}
     current_conclusions = {name: value for name, value in current_conclusions.items()} if current_conclusions else {}
+    information = ""
     if last_evaluated_rule:
         action = "Refinement" if last_evaluated_rule.fired else "Alternative"
-        print(f"{action} needed for rule: {last_evaluated_rule}\n")
+        information += f"{action} needed for rule: {last_evaluated_rule}\n"
         corner_case = last_evaluated_rule.corner_case
 
     corner_row_dict = None
@@ -367,6 +368,6 @@ def show_current_and_corner_cases(case: Any, targets: Optional[Dict[str, Any]] =
         corner_conclusion = last_evaluated_rule.conclusion(case)
         corner_row_dict.update({corner_conclusion.__class__.__name__: corner_conclusion})
         all_table_rows.append(corner_row_dict)
-        # print(table_rows_as_str(corner_row_dict))
-    print("\n" + "=" * 50)
-    print(table_rows_as_str(all_table_rows))
+    information += "\n" + "=" * 50 + "\n"
+    information += "\n" + table_rows_as_str(all_table_rows) + "\n"
+    return information

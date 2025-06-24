@@ -225,12 +225,13 @@ class Human(Expert):
     def ask_for_conditions(self, case_query: CaseQuery,
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
+        data_to_show = None
         if (not self.use_loaded_answers or len(self.all_expert_answers) == 0) and self.user_prompt.viewer is None:
-            show_current_and_corner_cases(case_query.case, {case_query.attribute_name: case_query.target_value},
+            data_to_show = show_current_and_corner_cases(case_query.case, {case_query.attribute_name: case_query.target_value},
                                           last_evaluated_rule=last_evaluated_rule)
-        return self._get_conditions(case_query)
+        return self._get_conditions(case_query, data_to_show)
 
-    def _get_conditions(self, case_query: CaseQuery) \
+    def _get_conditions(self, case_query: CaseQuery, data_to_show: Optional[str] = None) \
             -> CallableExpression:
         """
         Ask the expert to provide the differentiating features between two cases or unique features for a case
@@ -251,7 +252,7 @@ class Human(Expert):
             case_query.scope.update(loaded_scope)
             condition = CallableExpression(user_input, bool, scope=case_query.scope)
         else:
-            user_input, condition = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conditions)
+            user_input, condition = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conditions, prompt_str=data_to_show)
         if user_input == 'exit':
             exit()
         if not self.use_loaded_answers:
@@ -283,9 +284,10 @@ class Human(Expert):
             except IndexError:
                 self.use_loaded_answers = False
         if not self.use_loaded_answers:
+            data_to_show = None
             if self.user_prompt.viewer is None:
-                show_current_and_corner_cases(case_query.case)
-            expert_input, expression = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conclusion)
+                data_to_show = show_current_and_corner_cases(case_query.case)
+            expert_input, expression = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conclusion, prompt_str=data_to_show)
             if expert_input is None:
                 self.all_expert_answers.append(({}, None))
             elif expert_input != 'exit':

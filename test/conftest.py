@@ -41,9 +41,6 @@ def pytest_generate_tests(metafunc):
                                 {'species': Species.fish, 'habitat': Habitat.water}]
         metafunc.parametrize("conclusions", possible_conclusions)
 
-        possible_ask_always = [True, False]
-        metafunc.parametrize("ask_always", possible_ask_always)
-
         possible_update_existing = [True, False]
         metafunc.parametrize("update_existing", possible_update_existing)
 

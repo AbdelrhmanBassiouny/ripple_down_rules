@@ -4,6 +4,7 @@ import importlib
 import os
 from abc import ABC, abstractmethod
 from copy import copy
+from types import NoneType
 
 from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
 from . import logger
@@ -91,8 +92,21 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.start_rule = start_rule
         self.fig: Optional[Figure] = None
         self.viewer: Optional[RDRCaseViewer] = viewer
-        if self.viewer is not None:
-            self.viewer.set_save_function(self.save)
+        if viewer is None:
+            if len(RDRCaseViewer.instances) > 0:
+                self.viewer = RDRCaseViewer.instances[0]
+                logger.error("No viewer was provided, but there is already an existing viewer. "
+                             "Using the existing viewer.")
+
+    @property
+    def viewer(self):
+        return self._viewer
+    
+    @viewer.setter
+    def viewer(self, value):
+        self._viewer = value
+        if value is not None:
+            value.set_save_function(self.save)
 
     def render_evaluated_rule_tree(self, filename: str) -> None:
         evaluated_rules = self.get_evaluated_rule_tree()
@@ -156,13 +170,15 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         model_dir = os.path.join(load_dir, model_name)
         json_file = os.path.join(model_dir, cls.metadata_folder, model_name)
         rdr = cls.from_json_file(json_file)
-        try:
-            rdr.update_from_python(model_dir, package_name=package_name)
-        except (FileNotFoundError, ValueError) as e:
-            logger.warning(f"Could not load the python file for the model {model_name} from {model_dir}. "
-                           f"Make sure the file exists and is valid.")
         rdr.save_dir = load_dir
         rdr.model_name = model_name
+        try:
+            rdr.update_from_python(model_dir, package_name=package_name)
+            rdr.to_json_file(json_file)
+        except (FileNotFoundError, ValueError, SyntaxError) as e:
+            logger.warning(f"Could not load the python file for the model {model_name} from {model_dir}. "
+                           f"Make sure the file exists and is valid.")
+            rdr.save(save_dir=load_dir, model_name=model_name, package_name=package_name)
         return rdr
 
     @abstractmethod
@@ -258,6 +274,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                  expert: Optional[Expert] = None,
                  update_existing_rules: bool = True,
                  scenario: Optional[Callable] = None,
+                 ask_now: Callable = lambda _: True,
                  **kwargs) \
             -> Union[CallableExpression, Dict[str, CallableExpression]]:
         """
@@ -269,6 +286,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param update_existing_rules: Whether to update the existing same conclusion type rules that already gave
         some conclusions with the type required by the case query.
         :param scenario: The scenario at which the case was created, this is used to recreate the case if needed.
+        :ask_now: Whether to ask the expert for refinements or alternatives.
         :return: The category that the case belongs to.
         """
         if case_query is None:
@@ -285,7 +303,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if case_query.target is None:
             case_query_cp = copy(case_query)
             conclusions = self.classify(case_query_cp.case, modify_case=True, case_query=case_query_cp)
-            if self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp, update_existing_rules):
+            if (self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp, update_existing_rules)
+                    and ask_now(case_query_cp.case)):
                 expert.ask_for_conclusion(case_query_cp)
                 case_query.target = case_query_cp.target
             if case_query.target is None:
@@ -313,7 +332,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param update_existing: Whether to update rules that gave the required type of conclusions.
         :return: True if the rdr should ask the expert, False otherwise.
         """
-        if conclusions is None:
+        if conclusions is None and type(None) not in case_query.core_attribute_type:
             return True
         elif is_iterable(conclusions) and len(conclusions) == 0:
             return True
@@ -561,6 +580,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         main_types = set()
         main_types.add(self.case_type)
         main_types.update(make_set(self.conclusion_type))
+        main_types.update({Union, Optional})
+        defs_types.add(Union)
         main_types.update({Case, create_case})
         main_types = main_types.difference(defs_types)
         return main_types, defs_types, cases_types
@@ -588,8 +609,9 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :return: The type of the conclusion of the RDR classifier.
         """
         all_types = []
-        for rule in [self.start_rule] + list(self.start_rule.descendants):
-            all_types.extend(list(rule.conclusion.conclusion_type))
+        if self.start_rule is not None:
+            for rule in [self.start_rule] + list(self.start_rule.descendants):
+                all_types.extend(list(rule.conclusion.conclusion_type))
         return tuple(set(all_types))
 
     @property
@@ -687,12 +709,12 @@ class SingleClassRDR(RDRWithCodeWriter):
         :param case_query: The case query containing the case and the target category to compare the case with.
         """
         pred = self.evaluate(case)
-        conclusion = pred.conclusion(case) if pred is not None else None
+        conclusion = pred.conclusion(case) if pred is not None and pred.fired else self.default_conclusion
         if pred is not None and pred.fired and case_query is not None:
             if pred.corner_case_metadata is None and conclusion is not None \
                     and type(conclusion) in case_query.core_attribute_type:
                 pred.corner_case_metadata = CaseFactoryMetaData.from_case_query(case_query)
-        return conclusion if pred is not None and pred.fired else self.default_conclusion
+        return conclusion
 
     def evaluate(self, case: Case) -> SingleClassRule:
         """
@@ -703,9 +725,8 @@ class SingleClassRDR(RDRWithCodeWriter):
 
     def _write_to_python(self, model_dir: str, package_name: Optional[str] = None):
         super()._write_to_python(model_dir, package_name=package_name)
-        if self.default_conclusion is not None:
-            with open(model_dir + f"/{self.generated_python_file_name}.py", "a") as f:
-                f.write(f"{' ' * 4}else:\n{' ' * 8}return {self.default_conclusion}\n")
+        with open(model_dir + f"/{self.generated_python_file_name}.py", "a") as f:
+            f.write(f"{' ' * 4}else:\n{' ' * 8}return {self.default_conclusion}\n")
 
     def write_rules_as_source_code_to_file(self, rule: SingleClassRule, filename: str, parent_indent: str = "",
                                            defs_file: Optional[str] = None, cases_file: Optional[str] = None,
@@ -733,7 +754,19 @@ class SingleClassRDR(RDRWithCodeWriter):
 
     @property
     def conclusion_type_hint(self) -> str:
-        return self.conclusion_type[0].__name__
+        all_types = set(list(self.conclusion_type) + [type(self.default_conclusion)])
+        if NoneType in all_types:
+            return f"Optional[{', '.join([t.__name__ for t in all_types if t is not NoneType])}]"
+        return f"Union[{', '.join([t.__name__ for t in all_types])}]"
+
+    def _get_types_to_import(self) -> Tuple[Set[Type], Set[Type], Set[Type]]:
+        main_types, def_types, case_types = super()._get_types_to_import()
+        main_types.add(type(self.default_conclusion))
+        def_types.add(type(self.default_conclusion))
+        if self.default_conclusion is None:
+            main_types.add(Optional)
+            def_types.add(Optional)
+        return main_types, def_types, case_types
 
     @property
     def conclusion_type(self) -> Tuple[Type]:
@@ -871,8 +904,8 @@ class MultiClassRDR(RDRWithCodeWriter):
 
     def _get_types_to_import(self) -> Tuple[Set[Type], Set[Type], Set[Type]]:
         main_types, defs_types, cases_types = super()._get_types_to_import()
-        main_types.update({Set, Union, make_set})
-        defs_types.add(Union)
+        main_types.update({Set, make_set})
+        defs_types.update({List, Set})
         return main_types, defs_types, cases_types
 
     def update_start_rule(self, case_query: CaseQuery, expert: Expert):

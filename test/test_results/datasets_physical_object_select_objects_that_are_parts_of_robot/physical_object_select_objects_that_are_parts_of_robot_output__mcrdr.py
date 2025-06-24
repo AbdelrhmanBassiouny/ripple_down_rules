@@ -1,11 +1,11 @@
+from typing_extensions import Optional, Set
 from ripple_down_rules.datastructures.case import Case, create_case
 from ripple_down_rules.utils import make_set
-from typing import Set, Union
 from .physical_object_select_objects_that_are_parts_of_robot_output__mcrdr_defs import *
 
 
 attribute_name = 'output_'
-conclusion_type = (set, PhysicalObject, list,)
+conclusion_type = (set, list, PhysicalObject,)
 mutually_exclusive = False
 
 

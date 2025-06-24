@@ -282,11 +282,14 @@ class RDRCaseViewer(QMainWindow):
     user_input: Optional[str] = None
     attributes_widget: Optional[QWidget] = None
     save_function: Optional[Callable[str, str], None] = None
+    instances: List[RDRCaseViewer] = []
 
     def __init__(self, parent=None,
                  save_dir: Optional[str] = None,
                  save_model_name: Optional[str] = None):
         super().__init__(parent)
+        self.instances.clear()
+        self.instances.append(self)
         self.save_dir = save_dir
         self.save_model_name = save_model_name
 

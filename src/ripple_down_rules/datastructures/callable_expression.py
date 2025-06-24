@@ -165,7 +165,7 @@ class CallableExpression(SubclassJSONSerializer):
             else:
                 raise ValueError("Either user_input or conclusion must be provided.")
         except Exception as e:
-            raise ValueError(f"Error during evaluation: {e}")
+            raise ValueError(f"Error during evaluation: {e}, user_input: {self.user_input}")
 
     def combine_with(self, other: 'CallableExpression') -> 'CallableExpression':
         """
@@ -275,10 +275,16 @@ class CallableExpression(SubclassJSONSerializer):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> CallableExpression:
+        scope = {}
+        for k, v in data['scope'].items():
+            try:
+                scope[k] = get_type_from_string(v)
+            except ModuleNotFoundError:
+                pass
         return cls(user_input=data["user_input"],
                    conclusion_type=tuple(get_type_from_string(t) for t in data["conclusion_type"])
                    if data["conclusion_type"] else None,
-                   scope={k: get_type_from_string(v) for k, v in data["scope"].items()},
+                   scope=scope,
                    conclusion=SubclassJSONSerializer.from_json(data["conclusion"]),
                    mutually_exclusive=data["mutually_exclusive"])
 
