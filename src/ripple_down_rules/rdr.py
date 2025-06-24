@@ -110,7 +110,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
 
     def render_evaluated_rule_tree(self, filename: str) -> None:
         evaluated_rules = self.get_evaluated_rule_tree()
-        if len(evaluated_rules) > 0:
+        if evaluated_rules is not None and len(evaluated_rules) > 0:
             render_tree(evaluated_rules[0], use_dot_exporter=True, filename=filename,
                         only_nodes=evaluated_rules)
 
@@ -121,7 +121,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :return: The evaluated rule tree.
         """
         if self.start_rule is None:
-            raise ValueError("The start rule is not set. Please set the start rule before getting the evaluated rule tree.")
+            return
+            # raise ValueError("The start rule is not set. Please set the start rule before getting the evaluated rule tree.")
         evaluated_rule_tree = [r for r in [self.start_rule] + list(self.start_rule.descendants) if r.evaluated]
         return evaluated_rule_tree
 
