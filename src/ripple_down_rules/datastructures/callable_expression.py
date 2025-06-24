@@ -116,6 +116,10 @@ class CallableExpression(SubclassJSONSerializer):
         if user_input is None:
             user_input = build_user_input_from_conclusion(conclusion)
         self.conclusion: Optional[Any] = conclusion
+        if "def " in user_input:
+            self.user_defined_name = user_input.split('(')[0].replace('def ', '')
+        else:
+            self.user_defined_name = user_input
         self._user_input: str = encapsulate_user_input(user_input, self.get_encapsulating_function())
         if conclusion_type is not None:
             if is_iterable(conclusion_type):
@@ -214,6 +218,10 @@ class CallableExpression(SubclassJSONSerializer):
         Set the user input.
         """
         if value is not None:
+            if "def " in value:
+                self.user_defined_name = value.split('(')[0].replace('def ', '')
+            else:
+                self.user_defined_name = value
             self._user_input = encapsulate_user_input(value, self.get_encapsulating_function())
             self.scope = get_used_scope(self.user_input, self.scope)
             self.expression_tree = parse_string_to_expression(self.user_input)

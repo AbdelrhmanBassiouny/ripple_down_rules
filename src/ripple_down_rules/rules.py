@@ -56,6 +56,21 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self._name: Optional[str] = None
         # generate a unique id for the rule using uuid4
         self.uid: str = uid if uid else str(uuid4().int)
+        self.evaluated: bool = False
+        self._user_defined_name: Optional[str] = None
+
+    @property
+    def user_defined_name(self) -> Optional[str]:
+        """
+        Get the user defined name of the rule, if it exists.
+        """
+        if self._user_defined_name is None:
+            if self.conditions and self.conditions.user_input and "def " in self.conditions.user_input:
+                # If the conditions have a user input, use it as the name
+                self._user_defined_name = self.conditions.user_input.split('(')[0].replace('def ', '').strip()
+            else:
+                self._user_defined_name = f"Rule_{self.uid}"
+        return self._user_defined_name
 
     @classmethod
     def from_case_query(cls, case_query: CaseQuery) -> Rule:
@@ -90,6 +105,10 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         :param x: The case to evaluate the rule on.
         :return: The rule that fired or the last evaluated rule if no rule fired.
         """
+        if self.root is self:
+            for descendant in self.descendants:
+                descendant.evaluated = False
+        self.evaluated = True
         if not self.conditions:
             raise ValueError("Rule has no conditions")
         self.fired = self.conditions(x)
@@ -242,11 +261,40 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         """
         self._name = new_name
 
+    @property
+    def semantic_condition_name(self) -> Optional[str]:
+        """
+        Get the name of the conditions of the rule, which is the user input of the conditions.
+        """
+        return self.expression_name(self.conditions)
+
+    @property
+    def semantic_conclusion_name(self) -> Optional[str]:
+        """
+        Get the name of the conclusion of the rule, which is the user input of the conclusion.
+        """
+        return self.expression_name(self.conclusion)
+
+    @staticmethod
+    def expression_name(expression: CallableExpression) -> str:
+        """
+        Get the name of the expression, which is the user input of the expression if it exists,
+        otherwise it is the conclusion or conditions of the rule.
+        """
+        if expression.user_defined_name is not None:
+            return expression.user_defined_name.strip()
+        elif expression.user_input and "def " in expression.user_input:
+            return expression.user_input.split('(')[0].replace('def ', '').strip()
+        elif expression.user_input:
+            return expression.user_input.strip()
+        else:
+            return str(expression)
+
     def __str__(self, sep="\n"):
         """
         Get the string representation of the rule, which is the conditions and the conclusion.
         """
-        return f"{self.conditions}{sep}=> {self.conclusion}"
+        return f"{self.semantic_condition_name}{sep}=> {self.semantic_conclusion_name}"
 
     def __repr__(self):
         return self.__str__()

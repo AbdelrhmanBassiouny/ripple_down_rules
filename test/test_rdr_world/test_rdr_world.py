@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from os.path import dirname
 
+from ripple_down_rules.utils import draw_tree, render_tree
+
 try:
     from PyQt6.QtWidgets import QApplication
     from ripple_down_rules.user_interface.gui import RDRCaseViewer
@@ -26,6 +28,15 @@ def test_save_and_load_drawer_cabinet_rdr(handles_and_containers_world, drawer_c
     loaded_rdr = GeneralRDR.load(filename, model_name=model_name)
     assert drawer_cabinet_rdr.classify(world) == loaded_rdr.classify(world)
     assert world.bodies == loaded_rdr.start_rules[0].corner_case.bodies
+
+
+def test_draw_evaluated_tree_for_drawer_cabinet_rdr(handles_and_containers_world, drawer_cabinet_rdr):
+    world = handles_and_containers_world
+    filename = os.path.join(dirname(__file__), "../test_results/world_drawer_cabinet_rdr")
+    loaded_rdr = GeneralRDR.load(filename, model_name="world_rdr")
+    loaded_rdr.classify(world)
+    loaded_rdr.render_evaluated_rule_tree("drawer_cabinet_rdr_evaluated_tree")
+    assert True  # If no exception is raised, the test passes
 
 
 def test_write_drawer_cabinet_rdr_to_python_file(drawer_cabinet_rdr, handles_and_containers_world):

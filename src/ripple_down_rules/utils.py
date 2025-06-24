@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import builtins
 import copyreg
 import importlib
@@ -22,10 +21,10 @@ from types import NoneType
 
 from sqlalchemy.exc import NoInspectionAvailable
 
-
 try:
     import matplotlib
     from matplotlib import pyplot as plt
+
     Figure = plt.Figure
 except ImportError as e:
     matplotlib = None
@@ -40,13 +39,13 @@ except ImportError as e:
     logging.debug(f"{e}: networkx is not installed")
 
 import requests
-from anytree import Node, RenderTree
+from anytree import Node, RenderTree, PreOrderIter
 from anytree.exporter import DotExporter
 from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
-    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Sequence, Iterable
+    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Iterable
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
@@ -156,7 +155,7 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                 name = alias.name
                 asname = alias.asname or name
                 try:
-                    if package_name is not None and node.level > 0: # Handle relative imports
+                    if package_name is not None and node.level > 0:  # Handle relative imports
                         module_rel_path = Path(os.path.join(file_path, *['..'] * node.level, module_name)).resolve()
                         idx = str(module_rel_path).rfind(package_name)
                         if idx != -1:
@@ -710,12 +709,14 @@ def is_builtin_type(tp):
 def is_typing_type(tp):
     return tp.__module__ == "typing"
 
+
 origin_type_to_hint = {
     list: List,
     set: Set,
     dict: Dict,
     tuple: Tuple,
 }
+
 
 def extract_types(tp, seen: Set = None) -> Set[type]:
     """Recursively extract all base types from a type hint."""
@@ -881,7 +882,6 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     dot_parts = [part for part in rel_parts if part == '.']
     non_dot_parts = [part for part in rel_parts if part != '.']
 
-
     # Join the parts and add the module name
     joined_parts = "".join(dot_parts) + ".".join(non_dot_parts) + f".{imported_path.stem}"
     joined_parts = f".{joined_parts}" if not joined_parts.startswith(".") else joined_parts
@@ -933,8 +933,8 @@ def get_imports_from_types(type_objs: Iterable[Type],
                 name = type(tp).__qualname__
             else:
                 continue
-            if module is None or module == 'builtins' or module.startswith('_')\
-                or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
+            if module is None or module == 'builtins' or module.startswith('_') \
+                    or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
                     or name in exclueded_names:
                 continue
             module_to_types[module].append(name)
@@ -1399,7 +1399,8 @@ def table_rows_as_str(row_dicts: List[Dict[str, Any]], columns_per_row: int = 20
     keys_values = [list(r[0]) + list(r[1]) if len(r) > 1 else r[0] for r in keys_values]
     all_table_rows = []
     row_values = [list(map(lambda v: str(v) if v is not None else "", row)) for row in keys_values]
-    row_values = [list(map(lambda v: v[:max_line_sze] + '...' if len(v) > max_line_sze else v, row)) for row in row_values]
+    row_values = [list(map(lambda v: v[:max_line_sze] + '...' if len(v) > max_line_sze else v, row)) for row in
+                  row_values]
     row_values = [list(map(lambda v: v.lower() if v in ["True", "False"] else v, row)) for row in row_values]
     table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=[max_line_sze] * 2)
     all_table_rows.append(table)
@@ -1626,14 +1627,46 @@ def edge_attr_setter(parent, child):
     return ""
 
 
+class FilteredDotExporter(DotExporter):
+    def __init__(self, root, include_nodes=None, **kwargs):
+        self.include_nodes = include_nodes
+        node_name_func = get_unique_node_names_func(root)
+        self.include_node_names = [node_name_func(n) for n in self.include_nodes] if include_nodes else None
+        super().__init__(root, **kwargs)
+
+    def __iter_nodes(self, indent, nodenamefunc, nodeattrfunc):
+        for node in PreOrderIter(self.node, maxlevel=self.maxlevel):
+            nodename = nodenamefunc(node)
+            if self.include_nodes is not None and nodename not in self.include_node_names:
+                continue
+            nodeattr = nodeattrfunc(node)
+            nodeattr = " [%s]" % nodeattr if nodeattr is not None else ""
+            yield '%s"%s"%s;' % (indent, DotExporter.esc(nodename), nodeattr)
+
+    def __iter_edges(self, indent, nodenamefunc, edgeattrfunc, edgetypefunc):
+        maxlevel = self.maxlevel - 1 if self.maxlevel else None
+        for node in PreOrderIter(self.node, maxlevel=maxlevel):
+            nodename = nodenamefunc(node)
+            if self.include_nodes is not None and nodename not in self.include_node_names:
+                continue
+            for child in node.children:
+                childname = nodenamefunc(child)
+                edgeattr = edgeattrfunc(node, child)
+                edgetype = edgetypefunc(node, child)
+                edgeattr = " [%s]" % edgeattr if edgeattr is not None else ""
+                yield '%s"%s" %s "%s"%s;' % (indent, DotExporter.esc(nodename), edgetype,
+                                             DotExporter.esc(childname), edgeattr)
+
+
 def render_tree(root: Node, use_dot_exporter: bool = False,
-                filename: str = "scrdr"):
+                filename: str = "scrdr", only_nodes: List[Node] = None):
     """
     Render the tree using the console and optionally export it to a dot file.
 
     :param root: The root node of the tree.
     :param use_dot_exporter: Whether to export the tree to a dot file.
     :param filename: The name of the file to export the tree to.
+    :param only_nodes: A list of nodes to include in the dot export.
     """
     if not root:
         logging.warning("No rules to render")
@@ -1643,10 +1676,11 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     if use_dot_exporter:
         unique_node_names = get_unique_node_names_func(root)
 
-        de = DotExporter(root,
-                         nodenamefunc=unique_node_names,
-                         edgeattrfunc=edge_attr_setter
-                         )
+        de = FilteredDotExporter(root,
+                                 include_nodes=only_nodes,
+                                 nodenamefunc=unique_node_names,
+                                 edgeattrfunc=edge_attr_setter
+                                 )
         de.to_dotfile(f"{filename}{'.dot'}")
         de.to_picture(f"{filename}{'.png'}")
 

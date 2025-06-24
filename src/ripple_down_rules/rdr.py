@@ -35,7 +35,7 @@ except ImportError as e:
     RDRCaseViewer = None
 from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_type_from_string, \
     is_conflicting, extract_function_source, extract_imports, get_full_class_name, \
-    is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types
+    is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -93,6 +93,23 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.viewer: Optional[RDRCaseViewer] = viewer
         if self.viewer is not None:
             self.viewer.set_save_function(self.save)
+
+    def render_evaluated_rule_tree(self, filename: str) -> None:
+        evaluated_rules = self.get_evaluated_rule_tree()
+        if len(evaluated_rules) > 0:
+            render_tree(evaluated_rules[0], use_dot_exporter=True, filename=filename,
+                        only_nodes=evaluated_rules)
+
+    def get_evaluated_rule_tree(self) -> List[Rule]:
+        """
+        Get the evaluated rule tree of the classifier.
+
+        :return: The evaluated rule tree.
+        """
+        if self.start_rule is None:
+            raise ValueError("The start rule is not set. Please set the start rule before getting the evaluated rule tree.")
+        evaluated_rule_tree = [r for r in [self.start_rule] + list(self.start_rule.descendants) if r.evaluated]
+        return evaluated_rule_tree
 
     def save(self, save_dir: Optional[str] = None, model_name: Optional[str] = None,
              package_name: Optional[str] = None) -> str:
