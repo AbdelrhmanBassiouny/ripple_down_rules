@@ -61,6 +61,9 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 def serve_dot(dot_file, port=8000):
     global dot_path
     dot_path = dot_file
+    while not os.path.exists(dot_path):
+        print(f"Waiting for {dot_path} to be created...")
+        time.sleep(1)
     generate_html("graph.html")
 
     handler = CustomHandler
