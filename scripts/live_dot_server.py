@@ -41,7 +41,7 @@ def generate_html(dot_output="graph.html"):
     }}
 
     fetchAndRender();
-    setInterval(fetchAndRender, 2000);  // Refresh every 2 seconds
+    setInterval(fetchAndRender, 50);  // Refresh every 2 seconds
   </script>
 </body>
 </html>"""
@@ -81,9 +81,5 @@ if __name__ == "__main__":
 
     dot_file = sys.argv[1]
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
-
-    if not os.path.exists(dot_file):
-        print(f"Error: File '{dot_file}' does not exist.")
-        sys.exit(1)
 
     serve_dot(dot_file, port)
