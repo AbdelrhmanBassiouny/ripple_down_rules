@@ -73,6 +73,14 @@ def serve_dot(dot_file, port=8000):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python live_dot_server.py path/to/graph.dot")
-    else:
-        serve_dot(sys.argv[1])
+        print("Usage: python live_dot_server.py path/to/graph.dot [port]")
+        sys.exit(1)
+
+    dot_file = sys.argv[1]
+    port = int(sys.argv[2]) if len(sys.argv) > 2 else 8000
+
+    if not os.path.exists(dot_file):
+        print(f"Error: File '{dot_file}' does not exist.")
+        sys.exit(1)
+
+    serve_dot(dot_file, port)
