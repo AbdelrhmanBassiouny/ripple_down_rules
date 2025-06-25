@@ -1839,7 +1839,7 @@ class FilteredDotExporter(object):
                 continue
             nodeattr = nodeattrfunc(node)
             nodeattr = " [%s]" % nodeattr if nodeattr is not None else ""
-            yield '%s"%s"%s;' % (indent, DotExporter.esc(nodename), nodeattr)
+            yield '%s"%s"%s;' % (indent, FilteredDotExporter.esc(nodename), nodeattr)
 
     def __iter_edges(self, indent, nodenamefunc, edgeattrfunc, edgetypefunc):
         maxlevel = self.maxlevel - 1 if self.maxlevel else None
@@ -1854,8 +1854,8 @@ class FilteredDotExporter(object):
                 edgeattr = edgeattrfunc(node, child)
                 edgetype = edgetypefunc(node, child)
                 edgeattr = " [%s]" % edgeattr if edgeattr is not None else ""
-                yield '%s"%s" %s "%s"%s;' % (indent, DotExporter.esc(nodename), edgetype,
-                                             DotExporter.esc(childname), edgeattr)
+                yield '%s"%s" %s "%s"%s;' % (indent, FilteredDotExporter.esc(nodename), edgetype,
+                                             FilteredDotExporter.esc(childname), edgeattr)
 
     def to_dotfile(self, filename):
         """
@@ -1925,8 +1925,8 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     if not root:
         logging.warning("No rules to render")
         return
-    for pre, _, node in RenderTree(root):
-        print(f"{pre}{node.weight if hasattr(node, 'weight') and node.weight else ''} {node.__str__()}")
+    # for pre, _, node in RenderTree(root):
+    #     print(f"{pre}{node.weight if hasattr(node, 'weight') and node.weight else ''} {node.__str__()}")
     if use_dot_exporter:
         unique_node_names = get_unique_node_names_func(root)
 
@@ -1936,7 +1936,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
                                  edgeattrfunc=edge_attr_setter
                                  )
         de.to_dotfile(f"{filename}{'.dot'}")
-        de.to_picture(f"{filename}{'.png'}")
+        # de.to_picture(f"{filename}{'.png'}")
 
 
 def draw_tree(root: Node, fig: Figure):
