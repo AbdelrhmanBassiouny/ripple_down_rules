@@ -75,6 +75,7 @@ class RDRDecorator:
         self.fitting_decorator = fitting_decorator if fitting_decorator is not None else \
             lambda f: f  # Default to no fitting decorator
         self.generate_dot_file = generate_dot_file
+        self.not_none_output_found: bool = False
         self.load()
 
     def decorator(self, func: Callable) -> Callable:
@@ -117,7 +118,10 @@ class RDRDecorator:
                 else:
                     output = self.rdr.classify(case)
                     if self.generate_dot_file:
-                        self.rdr.render_evaluated_rule_tree(self.rdr_models_dir + f'/{self.model_name}')
+                        if not self.not_none_output_found or (self.output_name in output and output[self.output_name]):
+                            self.rdr.render_evaluated_rule_tree(self.rdr_models_dir + f'/{self.model_name}')
+                        if self.output_name in output and output[self.output_name]:
+                            self.not_none_output_found = True
 
             if self.output_name in output:
                 return output[self.output_name]
