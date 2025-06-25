@@ -1,18 +1,29 @@
 import http.server
+import shutil
 import socketserver
 import threading
 import time
 import os
 import sys
+import urllib.request
 
 dot_path = None
 last_modified = None
 
 def get_dot_content():
-    with open(dot_path, "r", encoding="utf-8") as f:
-        return f.read().replace("`", "\\`")
+    if dot_path.startswith("http://") or dot_path.startswith("https://"):
+        try:
+            with urllib.request.urlopen(dot_path) as response:
+                return response.read().decode("utf-8").replace("`", "\\`")
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch DOT from URL: {e}")
+            return "digraph G { ErrorFetching -> DOT; }"
+    else:
+        with open(dot_path, "r", encoding="utf-8") as f:
+            return f.read().replace("`", "\\`")
 
 def generate_html(dot_output="graph.html"):
+    shutil.copy(dot_file, "graph.dot")
     html_template = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -41,7 +52,7 @@ def generate_html(dot_output="graph.html"):
     }}
 
     fetchAndRender();
-    setInterval(fetchAndRender, 50);  // Refresh every 2 seconds
+    setInterval(fetchAndRender, 500);  // Refresh every 2 seconds
   </script>
 </body>
 </html>"""
@@ -67,7 +78,7 @@ def serve_dot(dot_file, port=8000):
     generate_html("graph.html")
 
     handler = CustomHandler
-    with socketserver.TCPServer(("", port), handler) as httpd:
+    with socketserver.TCPServer(("0.0.0.0", port), handler) as httpd:
         print(f"Serving at http://localhost:{port}/graph.html")
         try:
             httpd.serve_forever()

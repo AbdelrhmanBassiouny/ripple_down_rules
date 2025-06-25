@@ -61,6 +61,16 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self._user_defined_name: Optional[str] = None
 
     @property
+    def color(self) -> str:
+        if self.evaluated:
+            if self.fired:
+                return "green"
+            else:
+                return "red"
+        else:
+            return "white"
+
+    @property
     def user_defined_name(self) -> Optional[str]:
         """
         Get the user defined name of the rule, if it exists.
