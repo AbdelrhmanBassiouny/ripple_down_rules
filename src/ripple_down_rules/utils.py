@@ -1933,7 +1933,8 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
         de = FilteredDotExporter(root,
                                  include_nodes=only_nodes,
                                  nodenamefunc=unique_node_names,
-                                 edgeattrfunc=edge_attr_setter
+                                 edgeattrfunc=edge_attr_setter,
+                                 nodeattrfunc=lambda node: f'style=filled, fillcolor={"green" if node.fired else "red"}'
                                  )
         de.to_dotfile(f"{filename}{'.dot'}")
         # de.to_picture(f"{filename}{'.png'}")

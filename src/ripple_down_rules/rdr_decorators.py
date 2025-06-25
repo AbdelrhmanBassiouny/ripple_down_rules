@@ -118,9 +118,10 @@ class RDRDecorator:
                 else:
                     output = self.rdr.classify(case)
                     if self.generate_dot_file:
-                        if not self.not_none_output_found or (self.output_name in output and output[self.output_name]):
+                        eval_rule_tree = self.rdr.get_evaluated_rule_tree()
+                        if not self.not_none_output_found or (eval_rule_tree and len(eval_rule_tree) > 1):
                             self.rdr.render_evaluated_rule_tree(self.rdr_models_dir + f'/{self.model_name}')
-                        if self.output_name in output and output[self.output_name]:
+                        if eval_rule_tree and len(eval_rule_tree) > 1:
                             self.not_none_output_found = True
 
             if self.output_name in output:
