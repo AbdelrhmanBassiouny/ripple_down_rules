@@ -120,7 +120,7 @@ class RDRDecorator:
                     if self.generate_dot_file:
                         eval_rule_tree = self.rdr.get_evaluated_rule_tree()
                         if not self.not_none_output_found or (eval_rule_tree and len(eval_rule_tree) > 1):
-                            self.rdr.render_evaluated_rule_tree(self.rdr_models_dir + f'/{self.model_name}')
+                            self.rdr.render_evaluated_rule_tree(self.rdr_models_dir + f'/{self.model_name}', show_full_tree=True)
                         if eval_rule_tree and len(eval_rule_tree) > 1:
                             self.not_none_output_found = True
 
@@ -181,7 +181,7 @@ class RDRDecorator:
         return Case(dict, id(case_dict), case_name, case_dict, **case_dict), case_dict
 
     def initialize_rdr_model_name_and_load(self, func: Callable) -> None:
-        self.viewer = RDRCaseViewer.instances[0] if len(RDRCaseViewer.instances) > 0 else self.viewer
+        self.viewer = RDRCaseViewer.instances[0] if RDRCaseViewer is not None and len(RDRCaseViewer.instances) > 0 else self.viewer
         model_file_name = get_func_rdr_model_name(func, include_file_name=True)
         self.model_name = str_to_snake_case(model_file_name)
         self.load()

@@ -92,7 +92,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.start_rule = start_rule
         self.fig: Optional[Figure] = None
         self.viewer: Optional[RDRCaseViewer] = viewer
-        if viewer is None:
+        if viewer is None and RDRCaseViewer is not None:
             if len(RDRCaseViewer.instances) > 0:
                 self.viewer = RDRCaseViewer.instances[0]
                 logger.error("No viewer was provided, but there is already an existing viewer. "
@@ -108,11 +108,14 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if value is not None:
             value.set_save_function(self.save)
 
-    def render_evaluated_rule_tree(self, filename: str) -> None:
-        evaluated_rules = self.get_evaluated_rule_tree()
-        if evaluated_rules is not None and len(evaluated_rules) > 0:
-            render_tree(evaluated_rules[0], use_dot_exporter=True, filename=filename,
-                        only_nodes=evaluated_rules)
+    def render_evaluated_rule_tree(self, filename: str, show_full_tree: bool = False) -> None:
+        if show_full_tree:
+            render_tree(self.start_rule, use_dot_exporter=True, filename=filename)
+        else:
+            evaluated_rules = self.get_evaluated_rule_tree()
+            if evaluated_rules is not None and len(evaluated_rules) > 0:
+                render_tree(evaluated_rules[0], use_dot_exporter=True, filename=filename,
+                            only_nodes=evaluated_rules)
 
     def get_evaluated_rule_tree(self) -> List[Rule]:
         """

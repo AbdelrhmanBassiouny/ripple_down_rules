@@ -1934,7 +1934,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
                                  include_nodes=only_nodes,
                                  nodenamefunc=unique_node_names,
                                  edgeattrfunc=edge_attr_setter,
-                                 nodeattrfunc=lambda node: f'style=filled, fillcolor={"green" if node.fired else "red"}'
+                                 nodeattrfunc=lambda node: f'style=filled, fillcolor={node.color}'
                                  )
         de.to_dotfile(f"{filename}{'.dot'}")
         # de.to_picture(f"{filename}{'.png'}")
