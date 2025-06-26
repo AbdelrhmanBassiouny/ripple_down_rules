@@ -15,9 +15,9 @@
                         "Dict": "typing.Dict",
                         "Optional": "typing.Optional",
                         "Union": "typing.Union",
-                        "NoneType": "builtins.NoneType",
                         "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot"
+                        "Robot": "test.datasets.Robot",
+                        "NoneType": "builtins.NoneType"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -35,9 +35,9 @@
                         "Dict": "typing.Dict",
                         "Optional": "typing.Optional",
                         "Union": "typing.Union",
-                        "NoneType": "builtins.NoneType",
                         "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot"
+                        "Robot": "test.datasets.Robot",
+                        "NoneType": "builtins.NoneType"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
