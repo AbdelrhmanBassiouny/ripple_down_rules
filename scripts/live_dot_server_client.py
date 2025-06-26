@@ -1,14 +1,13 @@
 import http.server
+import os
 import shutil
 import socketserver
-import threading
-import time
-import os
 import sys
+import time
 import urllib.request
 
 dot_path = None
-last_modified = None
+
 
 def get_dot_content():
     if dot_path.startswith("http://") or dot_path.startswith("https://"):
@@ -21,6 +20,7 @@ def get_dot_content():
     else:
         with open(dot_path, "r", encoding="utf-8") as f:
             return f.read().replace("`", "\\`")
+
 
 def generate_html(dot_output="graph.html"):
     shutil.copy(dot_file, "graph.dot")
@@ -59,6 +59,7 @@ def generate_html(dot_output="graph.html"):
     with open(dot_output, "w", encoding="utf-8") as f:
         f.write(html_template)
 
+
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/graph.dot"):
@@ -69,12 +70,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_GET()
 
+
 def serve_dot(dot_file, port=8000):
     global dot_path
     dot_path = dot_file
-    while not os.path.exists(dot_path):
-        print(f"Waiting for {dot_path} to be created...")
-        time.sleep(1)
+    if not dot_path.startswith("http://") and not dot_path.startswith("https://"):
+        while not os.path.exists(dot_path):
+            print(f"Waiting for {dot_path} to be created...")
+            time.sleep(1)
     generate_html("graph.html")
 
     handler = CustomHandler
@@ -84,6 +87,7 @@ def serve_dot(dot_file, port=8000):
             httpd.serve_forever()
         except KeyboardInterrupt:
             print("\nServer stopped.")
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
