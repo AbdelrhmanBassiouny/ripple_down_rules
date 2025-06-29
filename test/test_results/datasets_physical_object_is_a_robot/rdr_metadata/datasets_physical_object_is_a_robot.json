@@ -55,7 +55,7 @@
                     "_name": "PhysicalObject_is_a_robot"
                 },
                 "conclusion_name": "output_",
-                "weight": null,
+                "weight": "",
                 "uid": "226969243620390858682731042391766665817",
                 "refinement": null,
                 "alternative": null

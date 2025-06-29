@@ -97,11 +97,12 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                 self.viewer = RDRCaseViewer.instances[0]
                 logger.error("No viewer was provided, but there is already an existing viewer. "
                              "Using the existing viewer.")
+        self.input_node: Optional[Rule] = None
 
     @property
     def viewer(self):
         return self._viewer
-    
+
     @viewer.setter
     def viewer(self, value):
         self._viewer = value
@@ -110,23 +111,24 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
 
     def render_evaluated_rule_tree(self, filename: str, show_full_tree: bool = False) -> None:
         if show_full_tree:
-            render_tree(self.start_rule, use_dot_exporter=True, filename=filename)
+            start_rule = self.start_rule if self.input_node is None else self.input_node
+            render_tree(start_rule, use_dot_exporter=True, filename=filename)
         else:
             evaluated_rules = self.get_evaluated_rule_tree()
             if evaluated_rules is not None and len(evaluated_rules) > 0:
                 render_tree(evaluated_rules[0], use_dot_exporter=True, filename=filename,
                             only_nodes=evaluated_rules)
 
-    def get_evaluated_rule_tree(self) -> List[Rule]:
+    def get_evaluated_rule_tree(self) -> Optional[List[Rule]]:
         """
         Get the evaluated rule tree of the classifier.
 
         :return: The evaluated rule tree.
         """
         if self.start_rule is None:
-            return
-            # raise ValueError("The start rule is not set. Please set the start rule before getting the evaluated rule tree.")
-        evaluated_rule_tree = [r for r in [self.start_rule] + list(self.start_rule.descendants) if r.evaluated]
+            return None
+        start_rule = self.start_rule if self.input_node is None else self.input_node
+        evaluated_rule_tree = [r for r in [start_rule] + list(start_rule.descendants) if r.evaluated]
         return evaluated_rule_tree
 
     def save(self, save_dir: Optional[str] = None, model_name: Optional[str] = None,
@@ -260,9 +262,32 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     def __call__(self, case: Union[Case, SQLTable]) -> Union[CallableExpression, Dict[str, CallableExpression]]:
         return self.classify(case)
 
+    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False, case_query: Optional[CaseQuery] = None) \
+            -> Optional[Union[CallableExpression, Dict[str, CallableExpression]]]:
+        """
+        Classify a case using the RDR classifier.
+
+        :param case: The case to classify.
+        :param modify_case: Whether to modify the original case attributes with the conclusion or not.
+        :param case_query: The case query containing the case to classify and the target category to compare the case with.
+        :return: The category that the case belongs to.
+        """
+        if self.start_rule is not None and self.start_rule.parent is None:
+            if self.input_node is None:
+                self.input_node = type(self.start_rule)(
+                    # conditions=CallableExpression(conclusion_type=(bool,), conclusion=True),
+                    # conclusion=CallableExpression(conclusion_type=(type(None),), conclusion=None),
+                    parent=None, uid='0')
+                self.input_node.evaluated = True
+            self.start_rule.parent = self.input_node
+            self.start_rule.weight = ""
+        if self.input_node is not None:
+            self.input_node.name = f"{case}"
+        return self._classify(case, modify_case=modify_case, case_query=case_query)
+
     @abstractmethod
-    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False,
-                 case_query: Optional[CaseQuery] = None) \
+    def _classify(self, case: Union[Case, SQLTable], modify_case: bool = False,
+                  case_query: Optional[CaseQuery] = None) \
             -> Optional[Union[CallableExpression, Dict[str, CallableExpression]]]:
         """
         Classify a case.
@@ -703,8 +728,8 @@ class SingleClassRDR(RDRWithCodeWriter):
             expert.ask_for_conditions(case_query)
             self.start_rule = SingleClassRule.from_case_query(case_query)
 
-    def classify(self, case: Case, modify_case: bool = False,
-                 case_query: Optional[CaseQuery] = None) -> Optional[Any]:
+    def _classify(self, case: Case, modify_case: bool = False,
+                  case_query: Optional[CaseQuery] = None) -> Optional[Any]:
         """
         Classify a case by recursively evaluating the rules until a rule fires or the last rule is reached.
 
@@ -818,8 +843,8 @@ class MultiClassRDR(RDRWithCodeWriter):
         super(MultiClassRDR, self).__init__(start_rule, **kwargs)
         self.mode: MCRDRMode = mode
 
-    def classify(self, case: Union[Case, SQLTable], modify_case: bool = False,
-                 case_query: Optional[CaseQuery] = None) -> Set[Any]:
+    def _classify(self, case: Union[Case, SQLTable], modify_case: bool = False,
+                  case_query: Optional[CaseQuery] = None) -> Set[Any]:
         evaluated_rule = self.start_rule
         self.conclusions = []
         while evaluated_rule:
@@ -1064,8 +1089,8 @@ class GeneralRDR(RippleDownRules):
     def start_rules(self) -> List[Union[SingleClassRule, MultiClassTopRule]]:
         return [rdr.start_rule for rdr in self.start_rules_dict.values()]
 
-    def classify(self, case: Any, modify_case: bool = False,
-                 case_query: Optional[CaseQuery] = None) -> Optional[Dict[str, Any]]:
+    def _classify(self, case: Any, modify_case: bool = False,
+                  case_query: Optional[CaseQuery] = None) -> Optional[Dict[str, Any]]:
         """
         Classify a case by going through all RDRs and adding the categories that are classified, and then restarting
         the classification until no more categories can be added.

@@ -1913,7 +1913,7 @@ class FilteredDotExporter(object):
 
 
 def render_tree(root: Node, use_dot_exporter: bool = False,
-                filename: str = "scrdr", only_nodes: List[Node] = None):
+                filename: str = "scrdr", only_nodes: List[Node] = None, show_in_console: bool = False):
     """
     Render the tree using the console and optionally export it to a dot file.
 
@@ -1921,12 +1921,16 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     :param use_dot_exporter: Whether to export the tree to a dot file.
     :param filename: The name of the file to export the tree to.
     :param only_nodes: A list of nodes to include in the dot export.
+    :param show_in_console: Whether to print the tree to the console.
     """
     if not root:
         logging.warning("No rules to render")
         return
-    # for pre, _, node in RenderTree(root):
-    #     print(f"{pre}{node.weight if hasattr(node, 'weight') and node.weight else ''} {node.__str__()}")
+    if show_in_console:
+        for pre, _, node in RenderTree(root):
+            if only_nodes is not None and node not in only_nodes:
+                continue
+            print(f"{pre}{node.weight if hasattr(node, 'weight') and node.weight else ''} {node.__str__()}")
     if use_dot_exporter:
         unique_node_names = get_unique_node_names_func(root)
 
@@ -1937,7 +1941,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
                                  nodeattrfunc=lambda node: f'style=filled, fillcolor={node.color}'
                                  )
         de.to_dotfile(f"{filename}{'.dot'}")
-        # de.to_picture(f"{filename}{'.png'}")
+        de.to_picture(f"{filename}{'.png'}")
 
 
 def draw_tree(root: Node, fig: Figure):

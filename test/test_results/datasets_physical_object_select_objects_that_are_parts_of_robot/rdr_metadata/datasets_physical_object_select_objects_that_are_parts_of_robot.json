@@ -64,7 +64,7 @@
                     "_name": "PhysicalObject_select_objects_that_are_parts_of_robot"
                 },
                 "conclusion_name": "output_",
-                "weight": "next",
+                "weight": "",
                 "uid": "164855806603893754507167918997373216146",
                 "refinement": null,
                 "alternative": null
