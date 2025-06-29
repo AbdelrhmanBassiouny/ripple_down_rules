@@ -116,9 +116,6 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         :param x: The case to evaluate the rule on.
         :return: The rule that fired or the last evaluated rule if no rule fired.
         """
-        if self.root is self:
-            for descendant in self.descendants:
-                descendant.evaluated = False
         self.evaluated = True
         if not self.conditions:
             raise ValueError("Rule has no conditions")

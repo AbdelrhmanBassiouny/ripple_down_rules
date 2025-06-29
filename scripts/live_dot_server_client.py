@@ -52,7 +52,7 @@ def generate_html(dot_output="graph.html"):
     }}
 
     fetchAndRender();
-    setInterval(fetchAndRender, 500);  // Refresh every 2 seconds
+    setInterval(fetchAndRender, 100);  // Refresh every 2 seconds
   </script>
 </body>
 </html>"""

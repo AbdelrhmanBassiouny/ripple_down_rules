@@ -8,15 +8,16 @@ from functools import wraps
 
 from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any, Self, get_type_hints, List, Union, Sequence
 
-from ripple_down_rules.datastructures.case import Case
-from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from ripple_down_rules.experts import Expert, Human
-from ripple_down_rules.rdr import GeneralRDR
+from .datastructures.case import Case
+from .datastructures.dataclasses import CaseQuery
+from .experts import Expert, Human
+from .rdr import GeneralRDR
+from . import logger
 try:
-    from ripple_down_rules.user_interface.gui import RDRCaseViewer
+    from .user_interface.gui import RDRCaseViewer
 except ImportError:
     RDRCaseViewer = None
-from ripple_down_rules.utils import get_method_args_as_dict, get_func_rdr_model_name, make_set, \
+from .utils import get_method_args_as_dict, get_func_rdr_model_name, make_set, \
     get_method_class_if_exists, str_to_snake_case
 
 

@@ -21,6 +21,7 @@ from subprocess import check_call
 from tempfile import NamedTemporaryFile
 from textwrap import dedent
 from types import NoneType
+import shutil
 
 import six
 from sqlalchemy.exc import NoInspectionAvailable
@@ -50,6 +51,7 @@ from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQ
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
     get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Iterable
+from . import logger
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
@@ -1408,7 +1410,11 @@ def table_rows_as_str(row_dicts: List[Dict[str, Any]], columns_per_row: int = 20
     row_values = [list(map(lambda v: v[:max_line_sze] + '...' if len(v) > max_line_sze else v, row)) for row in
                   row_values]
     row_values = [list(map(lambda v: v.lower() if v in ["True", "False"] else v, row)) for row in row_values]
-    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=[max_line_sze] * 2)
+    # Step 1: Get terminal size
+    terminal_width = shutil.get_terminal_size((80, 20)).columns
+    # Step 2: Dynamically calculate max width per column (simple approximation)
+    max_col_width = terminal_width // len(row_values[0])
+    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=max_col_width)#[max_line_sze] * 2)
     all_table_rows.append(table)
     return "\n".join(all_table_rows)
 
@@ -1628,7 +1634,7 @@ def edge_attr_setter(parent, child):
     """
     Set the edge attributes for the dot exporter.
     """
-    if child and hasattr(child, "weight") and child.weight:
+    if child and hasattr(child, "weight") and child.weight is not None:
         return f'style="bold", label=" {child.weight}"'
     return ""
 
@@ -1924,7 +1930,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     :param show_in_console: Whether to print the tree to the console.
     """
     if not root:
-        logging.warning("No rules to render")
+        logger.warning("No rules to render")
         return
     if show_in_console:
         for pre, _, node in RenderTree(root):
@@ -1941,7 +1947,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
                                  nodeattrfunc=lambda node: f'style=filled, fillcolor={node.color}'
                                  )
         de.to_dotfile(f"{filename}{'.dot'}")
-        de.to_picture(f"{filename}{'.png'}")
+        # de.to_picture(f"{filename}{'.png'}")
 
 
 def draw_tree(root: Node, fig: Figure):

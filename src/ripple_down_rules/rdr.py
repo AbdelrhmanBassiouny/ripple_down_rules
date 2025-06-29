@@ -5,6 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from copy import copy
 from types import NoneType
+import json
 
 from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
 from . import logger
@@ -36,7 +37,7 @@ except ImportError as e:
     RDRCaseViewer = None
 from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_type_from_string, \
     is_conflicting, extract_function_source, extract_imports, get_full_class_name, \
-    is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree
+    is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree, table_rows_as_str
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -127,7 +128,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         if self.start_rule is None:
             return None
-        start_rule = self.start_rule if self.input_node is None else self.input_node
+        start_rule = self.start_rule
         evaluated_rule_tree = [r for r in [start_rule] + list(start_rule.descendants) if r.evaluated]
         return evaluated_rule_tree
 
@@ -272,17 +273,18 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param case_query: The case query containing the case to classify and the target category to compare the case with.
         :return: The category that the case belongs to.
         """
+        for rule in [self.start_rule] + list(self.start_rule.descendants):
+            rule.evaluated = False
+            rule.fired = False
         if self.start_rule is not None and self.start_rule.parent is None:
             if self.input_node is None:
-                self.input_node = type(self.start_rule)(
-                    # conditions=CallableExpression(conclusion_type=(bool,), conclusion=True),
-                    # conclusion=CallableExpression(conclusion_type=(type(None),), conclusion=None),
-                    parent=None, uid='0')
-                self.input_node.evaluated = True
+                self.input_node = type(self.start_rule)(parent=None, uid='0')
+                self.input_node.evaluated = False
+                self.input_node.fired = False
             self.start_rule.parent = self.input_node
             self.start_rule.weight = ""
         if self.input_node is not None:
-            self.input_node.name = f"{case}"
+            self.input_node.name = json.dumps({k: str(v) for k, v in case.items()}, indent=4)
         return self._classify(case, modify_case=modify_case, case_query=case_query)
 
     @abstractmethod
