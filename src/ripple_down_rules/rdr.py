@@ -4,6 +4,7 @@ import importlib
 import os
 from abc import ABC, abstractmethod
 from copy import copy
+from dataclasses import is_dataclass
 from types import NoneType
 import json
 
@@ -273,9 +274,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param case_query: The case query containing the case to classify and the target category to compare the case with.
         :return: The category that the case belongs to.
         """
-        for rule in [self.start_rule] + list(self.start_rule.descendants):
-            rule.evaluated = False
-            rule.fired = False
+        if self.start_rule is not None:
+            for rule in [self.start_rule] + list(self.start_rule.descendants):
+                rule.evaluated = False
+                rule.fired = False
         if self.start_rule is not None and self.start_rule.parent is None:
             if self.input_node is None:
                 self.input_node = type(self.start_rule)(parent=None, uid='0')
@@ -284,7 +286,11 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             self.start_rule.parent = self.input_node
             self.start_rule.weight = ""
         if self.input_node is not None:
-            self.input_node.name = json.dumps({k: str(v) for k, v in case.items()}, indent=4)
+            data = case.__dict__ if is_dataclass(case) else case
+            if hasattr(case, "items"):
+                self.input_node.name = json.dumps({k: str(v) for k, v in data.items()}, indent=4)
+            else:
+                self.input_node.name = str(data)
         return self._classify(case, modify_case=modify_case, case_query=case_query)
 
     @abstractmethod
