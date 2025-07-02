@@ -50,6 +50,7 @@ class UserPrompt:
         :return: A callable expression that takes a case and executes user expression on it.
         """
         prev_user_input: Optional[str] = None
+        user_input_to_modify: Optional[str] = None
         callable_expression: Optional[CallableExpression] = None
         while True:
             with self.shell_lock:
@@ -72,9 +73,11 @@ class UserPrompt:
                                                       mutually_exclusive=case_query.mutually_exclusive)
             try:
                 result = callable_expression(case_query.case)
-                if len(make_list(result)) == 0:
+                if len(make_list(result)) == 0 and (user_input_to_modify is not None
+                                                    and (prev_user_input != user_input_to_modify)):
+                    user_input_to_modify = prev_user_input
                     self.print_func(f"{Fore.YELLOW}The given expression gave an empty result for case {case_query.name}."
-                          f" Please modify!{Style.RESET_ALL}")
+                          f" Please accept or modify!{Style.RESET_ALL}")
                     continue
                 break
             except Exception as e:

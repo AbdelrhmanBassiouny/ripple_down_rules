@@ -95,7 +95,7 @@ class CallableExpression(SubclassJSONSerializer):
     encapsulating_function_name: str = "_get_value"
 
     def __init__(self, user_input: Optional[str] = None,
-                 conclusion_type: Optional[Tuple[Type]] = None,
+                 conclusion_type: Optional[Tuple[Type, ...]] = None,
                  expression_tree: Optional[AST] = None,
                  scope: Optional[Dict[str, Any]] = None,
                  conclusion: Optional[Any] = None,

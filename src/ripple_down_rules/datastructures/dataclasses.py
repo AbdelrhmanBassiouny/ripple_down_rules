@@ -31,7 +31,7 @@ class CaseQuery:
     """
     The name of the attribute.
     """
-    _attribute_types: Tuple[Type]
+    _attribute_types: Tuple[Type, ...]
     """
     The type(s) of the attribute.
     """

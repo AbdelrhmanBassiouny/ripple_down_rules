@@ -196,7 +196,10 @@ class RDREdge(Enum):
     """
     Next edge, the edge that represents the next rule to be evaluated.
     """
-
+    Filter = "filter if"
+    """
+    Filter edge, the edge that represents the filter condition.
+    """
 
 class ValueType(Enum):
     Unary = auto()

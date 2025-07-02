@@ -41,14 +41,14 @@ class Expert(ABC):
     A flag to indicate if the expert should use loaded answers or not.
     """
 
-    def __init__(self, use_loaded_answers: bool = True,
+    def __init__(self, use_loaded_answers: bool = False,
                  append: bool = False,
                  answers_save_path: Optional[str] = None):
         self.all_expert_answers = []
         self.use_loaded_answers = use_loaded_answers
         self.append = append
         self.answers_save_path = answers_save_path
-        if answers_save_path is not None:
+        if answers_save_path is not None and os.path.exists(answers_save_path + '.py'):
             if use_loaded_answers:
                 self.load_answers(answers_save_path)
             else:

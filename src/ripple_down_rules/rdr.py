@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 from abc import ABC, abstractmethod
 from copy import copy
 from dataclasses import is_dataclass
 from types import NoneType
-import json
 
 from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
 from . import logger
@@ -30,15 +30,16 @@ from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode
 from .experts import Expert, Human
 from .helpers import is_matching, general_rdr_classify
-from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
+from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule, MultiClassRefinementRule, \
+    MultiClassFilterRule
 
 try:
     from .user_interface.gui import RDRCaseViewer
 except ImportError as e:
     RDRCaseViewer = None
 from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_type_from_string, \
-    is_conflicting, extract_function_source, extract_imports, get_full_class_name, \
-    is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree, table_rows_as_str
+    is_value_conflicting, extract_function_source, extract_imports, get_full_class_name, \
+    is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -972,28 +973,43 @@ class MultiClassRDR(RDRWithCodeWriter):
         Stop a wrong conclusion by adding a stopping rule.
         """
         rule_conclusion = evaluated_rule.conclusion(case_query.case)
-        if is_conflicting(rule_conclusion, case_query.target_value):
-            self.stop_conclusion(case_query, expert, evaluated_rule)
-        else:
-            self.add_conclusion(rule_conclusion)
+        stop: bool = False
+        add_filter_rule: bool = False
+        if is_value_conflicting(rule_conclusion, case_query.target_value):
+            stop = True
+        elif make_set(case_query.core_attribute_type).issubset(make_set(evaluated_rule.conclusion.conclusion_type)):
+            if len(case_query.target_value) == 0 and len(rule_conclusion) > 0:
+                stop = True
+            elif 0 < len(case_query.target_value) < len(rule_conclusion):
+                if len(make_set(case_query.target_value).intersection(make_set(rule_conclusion))) > 0:
+                    add_filter_rule = True
 
-    def stop_conclusion(self, case_query: CaseQuery,
-                        expert: Expert, evaluated_rule: MultiClassTopRule):
+        if not stop:
+            self.add_conclusion(rule_conclusion)
+        if stop or add_filter_rule:
+            refinement_type = MultiClassStopRule if stop else MultiClassFilterRule
+            self.stop_or_filter_conclusion(case_query, expert, evaluated_rule, refinement_type=refinement_type)
+
+    def stop_or_filter_conclusion(self, case_query: CaseQuery,
+                                  expert: Expert, evaluated_rule: MultiClassTopRule,
+                                  refinement_type: Type[MultiClassRefinementRule] = MultiClassStopRule):
         """
         Stop a conclusion by adding a stopping rule.
 
         :param case_query: The case query to stop the conclusion for.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param evaluated_rule: The evaluated rule to ask the expert about.
+        :param refinement_type: The refinement type to use.
         """
         conditions = expert.ask_for_conditions(case_query, evaluated_rule)
-        evaluated_rule.fit_rule(case_query)
-        if self.mode == MCRDRMode.StopPlusRule:
-            self.stop_rule_conditions = conditions
-        if self.mode == MCRDRMode.StopPlusRuleCombined:
-            new_top_rule_conditions = conditions.combine_with(evaluated_rule.conditions)
-            case_query.conditions = new_top_rule_conditions
-            self.add_top_rule(case_query)
+        evaluated_rule.fit_rule(case_query, refinement_type=refinement_type)
+        if refinement_type is MultiClassStopRule:
+            if self.mode == MCRDRMode.StopPlusRule:
+                self.stop_rule_conditions = conditions
+            if self.mode == MCRDRMode.StopPlusRuleCombined:
+                new_top_rule_conditions = conditions.combine_with(evaluated_rule.conditions)
+                case_query.conditions = new_top_rule_conditions
+                self.add_top_rule(case_query)
 
     def add_rule_for_case(self, case_query: CaseQuery, expert: Expert):
         """

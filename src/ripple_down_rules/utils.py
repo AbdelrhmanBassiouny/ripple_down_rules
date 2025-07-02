@@ -60,6 +60,23 @@ if TYPE_CHECKING:
 import ast
 
 
+def get_an_updated_case_copy(case: Case, conclusion: Callable, attribute_name: str, conclusion_type: Tuple[Type, ...],
+                             mutually_exclusive: bool) -> Case:
+    """
+    :param case: The case to copy and update.
+    :param conclusion: The conclusion to add to the case.
+    :param attribute_name: The name of the attribute to update.
+    :param conclusion_type: The type of the conclusion to update.
+    :param mutually_exclusive: Whether the rule belongs to a mutually exclusive RDR.
+    :return: A copy of the case updated with the given conclusion.
+    """
+    case_cp = copy_case(case)
+    temp_case_query = CaseQuery(case_cp, attribute_name, conclusion_type,
+                                mutually_exclusive=mutually_exclusive)
+    update_case(temp_case_query, conclusion(case_cp))
+    return case_cp
+
+
 def str_to_snake_case(snake_str: str) -> str:
     """
     Convert a string to snake case.
@@ -287,7 +304,7 @@ def update_case(case_query: CaseQuery, conclusions: Dict[str, Any]):
         case_query.case.update(conclusions)
 
 
-def is_conflicting(conclusion: Any, target: Any) -> bool:
+def is_value_conflicting(conclusion: Any, target: Any) -> bool:
     """
     :param conclusion: The conclusion to check.
     :param target: The target to compare the conclusion with.
