@@ -1235,7 +1235,8 @@ class SubclassJSONSerializer:
             return cls._from_json(data)
         for subclass in recursive_subclasses(SubclassJSONSerializer):
             if get_full_class_name(subclass) == data["_type"]:
-                subclass_data = deepcopy(data)
+                # subclass_data = deepcopy(data)
+                subclass_data = data
                 subclass_data.pop("_type")
                 return subclass._from_json(subclass_data)
 

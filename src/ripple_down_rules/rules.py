@@ -14,7 +14,8 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseFactoryMetaData, CaseQuery
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_an_updated_case_copy
+from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_an_updated_case_copy, \
+    get_type_from_string
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
@@ -615,19 +616,9 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         # so the top rule that is already initialized is passed in the data instead of its json serialization.
         if data['refinement'] is not None:
             data['refinement']['top_rule'] = loaded_rule
-        loaded_rule.refinement = SubclassJSONSerializer.from_json(data["refinement"])
+            data_type = get_type_from_string(data["refinement"]["_type"])
+            loaded_rule.refinement = data_type.from_json(data["refinement"])
         loaded_rule.alternative = MultiClassTopRule.from_json(data["alternative"])
-        if loaded_rule.refinement is not None:
-            loaded_rule.refinement.top_rule = loaded_rule
-        alternative = loaded_rule.alternative
-        while alternative:
-            if alternative.refinement:
-                alternative.refinement.top_rule = alternative
-                refinement_alternative = alternative.refinement.alternative
-                while refinement_alternative:
-                    refinement_alternative.top_rule = alternative
-                    refinement_alternative = refinement_alternative.alternative
-            alternative = alternative.alternative
         return loaded_rule
 
     def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[str, str]:
