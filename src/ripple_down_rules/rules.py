@@ -14,8 +14,8 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseFactoryMetaData, CaseQuery
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_an_updated_case_copy, \
-    get_type_from_string
+from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_type_from_string
+from .helpers import get_an_updated_case_copy
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
@@ -373,6 +373,9 @@ class HasAlternativeRule:
     def alternative(self) -> Optional[Rule]:
         return self._alternative
 
+    def set_immediate_alternative(self, alternative: Optional[Rule]):
+        self._alternative = alternative
+
     @alternative.setter
     def alternative(self, new_rule: Rule):
         """
@@ -626,8 +629,6 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         conclusion_str = func_call.replace("return ", "").strip()
 
         statement = f"{parent_indent}    conclusions.update(make_set({conclusion_str}))\n"
-        if self.alternative is None:
-            statement += f"{parent_indent}return conclusions\n"
         return func, statement
 
     def _if_statement_source_code_clause(self) -> str:

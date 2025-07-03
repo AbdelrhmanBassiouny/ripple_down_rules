@@ -29,7 +29,7 @@ from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode
 from .experts import Expert, Human
-from .helpers import is_matching, general_rdr_classify
+from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule, MultiClassRefinementRule, \
     MultiClassFilterRule
 
@@ -501,25 +501,51 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         conclusion_func_names = [f'conclusion_{rid}' for rid in rules_dict.keys()
                                  if not isinstance(rules_dict[rid], MultiClassStopRule)]
         all_func_names = condition_func_names + conclusion_func_names
+        rule_tree_file_path = f"{model_dir}/{self.generated_python_file_name}.py"
         filepath = f"{model_dir}/{self.generated_python_defs_file_name}.py"
         cases_path = f"{model_dir}/{self.generated_python_cases_file_name}.py"
         cases_import_path = get_import_path_from_path(model_dir)
         cases_import_path = f"{cases_import_path}.{self.generated_python_cases_file_name}" if cases_import_path \
             else self.generated_python_cases_file_name
         functions_source = extract_function_source(filepath, all_func_names, include_signature=False)
+        python_rule_tree_source = ""
+        with open(rule_tree_file_path, "r") as rule_tree_source:
+            python_rule_tree_source = rule_tree_source.read()
         # get the scope from the imports in the file
         scope = extract_imports(filepath, package_name=package_name)
+        rules_not_found = set()
         for rule in [self.start_rule] + list(self.start_rule.descendants):
             if rule.conditions is not None:
-                rule.conditions.user_input = functions_source[f"conditions_{rule.uid}"]
+                conditions_name = rule.generated_conditions_function_name
+                if conditions_name not in functions_source or conditions_name not in python_rule_tree_source:
+                    rules_not_found.add(rule)
+                    continue
+                rule.conditions.user_input = functions_source[conditions_name]
                 rule.conditions.scope = scope
                 if os.path.exists(cases_path):
                     module = importlib.import_module(cases_import_path, package=package_name)
                     importlib.reload(module)
                     rule.corner_case_metadata = module.__dict__.get(f"corner_case_{rule.uid}", None)
-            if rule.conclusion is not None and not isinstance(rule, MultiClassStopRule):
-                rule.conclusion.user_input = functions_source[f"conclusion_{rule.uid}"]
+            if not isinstance(rule, MultiClassStopRule):
+                conclusion_name = rule.generated_conclusion_function_name
+                if conclusion_name not in functions_source or conclusion_name not in python_rule_tree_source:
+                    rules_not_found.add(rule)
+                rule.conclusion.user_input = functions_source[conclusion_name]
                 rule.conclusion.scope = scope
+        for rule in rules_not_found:
+            if isinstance(rule, MultiClassTopRule):
+                import pdb; pdb.set_trace()
+                rule.parent.set_immediate_alternative(rule.alternative)
+                if rule.refinement is not None:
+                    ref_rules = [ref_rule for ref_rule in [rule.refinement] + list(rule.refinement.descendants)]
+                    for ref_rule in ref_rules:
+                        del ref_rule
+            else:
+                rule.parent.refinement = rule.alternative
+            if rule.alternative is not None:
+                rule.alternative = None
+            rule.parent = None
+            del rule
 
     @abstractmethod
     def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = "",
@@ -598,7 +624,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         """
         pass
 
-    def _get_types_to_import(self) -> Tuple[Set[Type], Set[Type], Set[Type]]:
+    def _get_types_to_import(self) -> Tuple[Set[Union[Type, Callable]], Set[Type], Set[Type]]:
         """
         :return: The types of the main, defs, and corner cases files of the RDR classifier that will be imported.
         """
@@ -931,6 +957,9 @@ class MultiClassRDR(RDRWithCodeWriter):
             if rule.alternative:
                 self.write_rules_as_source_code_to_file(rule.alternative, filename, parent_indent, defs_file=defs_file,
                                                         cases_file=cases_file, package_name=package_name)
+            elif isinstance(rule, MultiClassTopRule):
+                with open(filename, "a") as file:
+                    file.write(f"{parent_indent}return conclusions\n")
 
     @property
     def conclusion_type_hint(self) -> str:
@@ -940,8 +969,9 @@ class MultiClassRDR(RDRWithCodeWriter):
         else:
             return f"Set[Union[{', '.join(conclusion_types)}]]"
 
-    def _get_types_to_import(self) -> Tuple[Set[Type], Set[Type], Set[Type]]:
+    def _get_types_to_import(self) -> Tuple[Set[Union[Type, Callable]], Set[Type], Set[Type]]:
         main_types, defs_types, cases_types = super()._get_types_to_import()
+        main_types.add(get_an_updated_case_copy)
         main_types.update({Set, make_set})
         defs_types.update({List, Set})
         return main_types, defs_types, cases_types
@@ -976,13 +1006,13 @@ class MultiClassRDR(RDRWithCodeWriter):
         stop: bool = False
         add_filter_rule: bool = False
         if is_value_conflicting(rule_conclusion, case_query.target_value):
-            stop = True
-        elif make_set(case_query.core_attribute_type).issubset(make_set(evaluated_rule.conclusion.conclusion_type)):
-            if len(case_query.target_value) == 0 and len(rule_conclusion) > 0:
+            if make_set(case_query.target_value).issubset(rule_conclusion):
+                add_filter_rule = True
+            else:
                 stop = True
-            elif 0 < len(case_query.target_value) < len(rule_conclusion):
-                if len(make_set(case_query.target_value).intersection(make_set(rule_conclusion))) > 0:
-                    add_filter_rule = True
+        elif make_set(case_query.core_attribute_type).issubset(make_set(evaluated_rule.conclusion.conclusion_type)):
+            if make_set(case_query.target_value).issubset(rule_conclusion):
+                add_filter_rule = True
 
         if not stop:
             self.add_conclusion(rule_conclusion)
