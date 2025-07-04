@@ -534,7 +534,6 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                 rule.conclusion.scope = scope
         for rule in rules_not_found:
             if isinstance(rule, MultiClassTopRule):
-                import pdb; pdb.set_trace()
                 rule.parent.set_immediate_alternative(rule.alternative)
                 if rule.refinement is not None:
                     ref_rules = [ref_rule for ref_rule in [rule.refinement] + list(rule.refinement.descendants)]
