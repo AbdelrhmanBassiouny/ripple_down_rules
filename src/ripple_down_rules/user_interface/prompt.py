@@ -70,7 +70,7 @@ class UserPrompt:
             conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
             callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
                                                      scope=case_query.scope,
-                                                      mutually_exclusive=case_query.mutually_exclusive)
+                                                     mutually_exclusive=case_query.mutually_exclusive)
             try:
                 result = callable_expression(case_query.case)
                 if len(make_list(result)) == 0 and (user_input_to_modify is not None

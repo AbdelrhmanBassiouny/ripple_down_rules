@@ -215,20 +215,21 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             new_function_name = f"def {self.generated_conclusion_function_name}"
             conclusion_lines[0] = re.sub(r"def (\w+)", new_function_name, conclusion_lines[0])
             # add type hint
-            if len(self.conclusion.conclusion_type) == 1:
-                hint = self.conclusion.conclusion_type[0].__name__
-            else:
-                if (all(t in self.conclusion.conclusion_type for t in [list, set])
-                        and len(self.conclusion.conclusion_type) > 2):
-                    type_names = [t.__name__ for t in self.conclusion.conclusion_type if t not in [list, set]]
-                    hint = f"List[{', '.join(type_names)}]"
+            if not self.conclusion.mutually_exclusive:
+                type_names = [t.__name__ for t in self.conclusion.conclusion_type if t not in [list, set]]
+                if len(type_names) == 1:
+                    hint = f"List[{type_names[0]}]"
                 else:
-                    if NoneType in self.conclusion.conclusion_type:
-                        type_names = [t.__name__ for t in self.conclusion.conclusion_type if t is not NoneType]
-                        hint = f"Optional[{', '.join(type_names)}]"
-                    else:
-                        type_names = [t.__name__ for t in self.conclusion.conclusion_type]
-                        hint = f"Union[{', '.join(type_names)}]"
+                    hint = f"List[Union[{', '.join(type_names)}]]"
+            else:
+                if NoneType in self.conclusion.conclusion_type:
+                    type_names = [t.__name__ for t in self.conclusion.conclusion_type if t is not NoneType]
+                    hint = f"Optional[{', '.join(type_names)}]"
+                elif len(self.conclusion.conclusion_type) == 1:
+                    hint = self.conclusion.conclusion_type[0].__name__
+                else:
+                    type_names = [t.__name__ for t in self.conclusion.conclusion_type]
+                    hint = f"Union[{', '.join(type_names)}]"
             conclusion_lines[0] = conclusion_lines[0].replace("):", f") -> {hint}:")
             func_call = f"{parent_indent}    return {new_function_name.replace('def ', '')}(case)\n"
             return "\n".join(conclusion_lines).strip(' '), func_call
