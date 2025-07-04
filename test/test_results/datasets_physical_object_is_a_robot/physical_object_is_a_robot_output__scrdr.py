@@ -1,5 +1,5 @@
-from typing_extensions import Optional
 from types import NoneType
+from typing_extensions import Optional
 from ripple_down_rules.datastructures.case import Case, create_case
 from .physical_object_is_a_robot_output__scrdr_defs import *
 

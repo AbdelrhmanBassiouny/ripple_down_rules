@@ -5,7 +5,6 @@ import codecs
 import copyreg
 import importlib
 import json
-import logging
 import os
 import re
 import shutil
@@ -25,7 +24,7 @@ from types import NoneType
 
 import six
 from sqlalchemy.exc import NoInspectionAvailable
-from src.pycram.ros import logwarn
+from . import logger
 
 try:
     import matplotlib
@@ -36,13 +35,13 @@ except ImportError as e:
     matplotlib = None
     plt = None
     Figure = None
-    logging.debug(f"{e}: matplotlib is not installed")
+    logger.debug(f"{e}: matplotlib is not installed")
 
 try:
     import networkx as nx
 except ImportError as e:
     nx = None
-    logging.debug(f"{e}: networkx is not installed")
+    logger.debug(f"{e}: networkx is not installed")
 
 import requests
 from anytree import Node, RenderTree, PreOrderIter
@@ -51,7 +50,6 @@ from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQ
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
     get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Iterable
-from . import logger
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
@@ -140,7 +138,7 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                     module = importlib.import_module(module_name, package=package_name)
                     scope[asname] = getattr(module, name)
                 except (ImportError, AttributeError) as e:
-                    logging.warning(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
+                    logger.warning(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
 
     return scope
 
@@ -182,7 +180,7 @@ def extract_function_source(file_path: str,
             if (len(functions_source) >= len(function_names)) and (not len(function_names) == 0):
                 break
     if len(functions_source) < len(function_names):
-        logwarn(f"Could not find all functions in {file_path}: {function_names} not found, "
+        logger.warning(f"Could not find all functions in {file_path}: {function_names} not found, "
                 f"functions not found: {set(function_names) - set(functions_source.keys())}")
     if return_line_numbers:
         return functions_source, line_numbers
@@ -1294,7 +1292,7 @@ def copy_orm_instance(instance: SQLTable) -> SQLTable:
         try:
             new_instance = deepcopy(instance)
         except Exception as e:
-            logging.debug(e)
+            logger.debug(e)
             new_instance = instance
     return new_instance
 
@@ -1314,7 +1312,7 @@ def copy_orm_instance_with_relationships(instance: SQLTable) -> SQLTable:
             try:
                 setattr(instance_cp, rel.key, related_obj_cp)
             except Exception as e:
-                logging.debug(e)
+                logger.debug(e)
     return instance_cp
 
 
@@ -1915,7 +1913,7 @@ class FilteredDotExporter(object):
             os.remove(dotfilename)
         except Exception:  # pragma: no cover
             msg = 'Could not remove temporary file %s' % dotfilename
-            logging.getLogger(__name__).warn(msg)
+            logger.warning(msg)
 
     @staticmethod
     def esc(value):
