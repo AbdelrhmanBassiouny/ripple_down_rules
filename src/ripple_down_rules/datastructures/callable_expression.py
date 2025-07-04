@@ -95,7 +95,7 @@ class CallableExpression(SubclassJSONSerializer):
     encapsulating_function_name: str = "_get_value"
 
     def __init__(self, user_input: Optional[str] = None,
-                 conclusion_type: Optional[Tuple[Type]] = None,
+                 conclusion_type: Optional[Tuple[Type, ...]] = None,
                  expression_tree: Optional[AST] = None,
                  scope: Optional[Dict[str, Any]] = None,
                  conclusion: Optional[Any] = None,
@@ -176,7 +176,8 @@ class CallableExpression(SubclassJSONSerializer):
         new_user_input = (f"{cond1_user_input}\n"
                           f"{cond2_user_input}\n"
                           f"return _cond1(case) and _cond2(case)")
-        return CallableExpression(new_user_input, conclusion_type=self.conclusion_type)
+        return CallableExpression(new_user_input, conclusion_type=self.conclusion_type,
+         mutually_exclusive=self.mutually_exclusive)
 
     def update_user_input_from_file(self, file_path: str, function_name: str):
         """

@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import threading
 import uuid
@@ -21,10 +22,10 @@ from subprocess import check_call
 from tempfile import NamedTemporaryFile
 from textwrap import dedent
 from types import NoneType
-import shutil
 
 import six
 from sqlalchemy.exc import NoInspectionAvailable
+from src.pycram.ros import logwarn
 
 try:
     import matplotlib
@@ -45,7 +46,6 @@ except ImportError as e:
 
 import requests
 from anytree import Node, RenderTree, PreOrderIter
-from anytree.exporter import DotExporter
 from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
@@ -182,8 +182,8 @@ def extract_function_source(file_path: str,
             if (len(functions_source) >= len(function_names)) and (not len(function_names) == 0):
                 break
     if len(functions_source) < len(function_names):
-        raise ValueError(f"Could not find all functions in {file_path}: {function_names} not found,"
-                         f"functions not found: {set(function_names) - set(functions_source.keys())}")
+        logwarn(f"Could not find all functions in {file_path}: {function_names} not found, "
+                f"functions not found: {set(function_names) - set(functions_source.keys())}")
     if return_line_numbers:
         return functions_source, line_numbers
     return functions_source
@@ -287,7 +287,7 @@ def update_case(case_query: CaseQuery, conclusions: Dict[str, Any]):
         case_query.case.update(conclusions)
 
 
-def is_conflicting(conclusion: Any, target: Any) -> bool:
+def is_value_conflicting(conclusion: Any, target: Any) -> bool:
     """
     :param conclusion: The conclusion to check.
     :param target: The target to compare the conclusion with.
@@ -847,10 +847,12 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     imported_file_name = Path(imported_module_path).name
     target_file_name = Path(target_file_path).name
     if package_name is not None:
-        target_path = Path(get_path_starting_from_latest_encounter_of(str(target_path), package_name, [target_file_name]))
+        target_path = Path(
+            get_path_starting_from_latest_encounter_of(str(target_path), package_name, [target_file_name]))
     imported_path = Path(imported_module_path).resolve()
     if package_name is not None:
-        imported_path = Path(get_path_starting_from_latest_encounter_of(str(imported_path), package_name, [imported_file_name]))
+        imported_path = Path(
+            get_path_starting_from_latest_encounter_of(str(imported_path), package_name, [imported_file_name]))
 
     # Compute relative path from target to imported module
     rel_path = os.path.relpath(imported_path.parent, target_path.parent)
@@ -927,8 +929,8 @@ def get_imports_from_types(type_objs: Iterable[Type],
                 continue
             if name == "NoneType":
                 module = "types"
-            if module is None or module == 'builtins' or module.startswith('_')\
-                or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
+            if module is None or module == 'builtins' or module.startswith('_') \
+                    or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
                     or name in exclueded_names:
                 continue
             if module == "typing":
@@ -1218,7 +1220,8 @@ class SubclassJSONSerializer:
             return cls._from_json(data)
         for subclass in recursive_subclasses(SubclassJSONSerializer):
             if get_full_class_name(subclass) == data["_type"]:
-                subclass_data = deepcopy(data)
+                # subclass_data = deepcopy(data)
+                subclass_data = data
                 subclass_data.pop("_type")
                 return subclass._from_json(subclass_data)
 
@@ -1414,7 +1417,7 @@ def table_rows_as_str(row_dicts: List[Dict[str, Any]], columns_per_row: int = 20
     terminal_width = shutil.get_terminal_size((80, 20)).columns
     # Step 2: Dynamically calculate max width per column (simple approximation)
     max_col_width = terminal_width // len(row_values[0])
-    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=max_col_width)#[max_line_sze] * 2)
+    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=max_col_width)  # [max_line_sze] * 2)
     all_table_rows.append(table)
     return "\n".join(all_table_rows)
 
@@ -1640,6 +1643,8 @@ def edge_attr_setter(parent, child):
 
 
 _RE_ESC = re.compile(r'["\\]')
+
+
 class FilteredDotExporter(object):
 
     def __init__(self, node, include_nodes=None, graph="digraph", name="tree", options=None,

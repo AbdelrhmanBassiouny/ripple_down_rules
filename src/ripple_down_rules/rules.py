@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import re
 from abc import ABC, abstractmethod
-from pathlib import Path
 from types import NoneType
 from uuid import uuid4
 
@@ -15,13 +14,18 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseFactoryMetaData, CaseQuery
 from .datastructures.enums import RDREdge, Stop
-from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_imports_from_types
+from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_type_from_string
+from .helpers import get_an_updated_case_copy
 
 
 class Rule(NodeMixin, SubclassJSONSerializer, ABC):
     fired: Optional[bool] = None
     """
     Whether the rule has fired or not.
+    """
+    mutually_exclusive: bool
+    """
+    Whether the rule is mutually exclusive with other rules.
     """
 
     def __init__(self, conditions: Optional[CallableExpression] = None,
@@ -60,6 +64,14 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self.evaluated: bool = False
         self._user_defined_name: Optional[str] = None
 
+    def get_an_updated_case_copy(self, case: Case) -> Case:
+        """
+        :param case: The case to copy and update.
+        :return: A copy of the case updated with this rule conclusion.
+        """
+        return get_an_updated_case_copy(case, self.conclusion, self.conclusion_name, self.conclusion.conclusion_type,
+                                        self.mutually_exclusive)
+
     @property
     def color(self) -> str:
         if self.evaluated:
@@ -78,22 +90,27 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         if self._user_defined_name is None:
             if self.conditions and self.conditions.user_input and "def " in self.conditions.user_input:
                 # If the conditions have a user input, use it as the name
-                self._user_defined_name = self.conditions.user_input.split('(')[0].replace('def ', '').strip()
+                func_name = self.conditions.user_input.split('(')[0].replace('def ', '').strip()
+                if func_name == self.conditions.encapsulating_function_name:
+                    self._user_defined_name = str(self.conditions)
+                else:
+                    self._user_defined_name = func_name
             else:
                 self._user_defined_name = f"Rule_{self.uid}"
         return self._user_defined_name
 
     @classmethod
-    def from_case_query(cls, case_query: CaseQuery) -> Rule:
+    def from_case_query(cls, case_query: CaseQuery, parent: Optional[Rule] = None) -> Rule:
         """
         Create a SingleClassRule from a CaseQuery.
 
         :param case_query: The CaseQuery to create the rule from.
+        :param parent: The parent rule of this rule.
         :return: A SingleClassRule instance.
         """
         corner_case_metadata = CaseFactoryMetaData.from_case_query(case_query)
         return cls(conditions=case_query.conditions, conclusion=case_query.target,
-                   corner_case=case_query.case, parent=None,
+                   corner_case=case_query.case, parent=parent,
                    corner_case_metadata=corner_case_metadata,
                    conclusion_name=case_query.attribute_name)
 
@@ -175,6 +192,14 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
                 f.write(conclusion_func.strip() + "\n\n\n")
         return conclusion_func_call
 
+    @property
+    def generated_conclusion_function_name(self) -> str:
+        return f"conclusion_{self.uid}"
+
+    @property
+    def generated_conditions_function_name(self) -> str:
+        return f"conditions_{self.uid}"
+
     def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
         """
         Convert the conclusion of a rule to source code.
@@ -187,23 +212,24 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             # This means the conclusion is a definition that should be written and then called
             conclusion_lines = conclusion.split('\n')
             # use regex to replace the function name
-            new_function_name = f"def conclusion_{self.uid}"
+            new_function_name = f"def {self.generated_conclusion_function_name}"
             conclusion_lines[0] = re.sub(r"def (\w+)", new_function_name, conclusion_lines[0])
             # add type hint
-            if len(self.conclusion.conclusion_type) == 1:
-                hint = self.conclusion.conclusion_type[0].__name__
-            else:
-                if (all(t in self.conclusion.conclusion_type for t in [list, set])
-                        and len(self.conclusion.conclusion_type) > 2):
-                    type_names = [t.__name__ for t in self.conclusion.conclusion_type if t not in [list, set]]
-                    hint = f"List[{', '.join(type_names)}]"
+            if not self.conclusion.mutually_exclusive:
+                type_names = [t.__name__ for t in self.conclusion.conclusion_type if t not in [list, set]]
+                if len(type_names) == 1:
+                    hint = f"List[{type_names[0]}]"
                 else:
-                    if NoneType in self.conclusion.conclusion_type:
-                        type_names = [t.__name__ for t in self.conclusion.conclusion_type if t is not NoneType]
-                        hint = f"Optional[{', '.join(type_names)}]"
-                    else:
-                        type_names = [t.__name__ for t in self.conclusion.conclusion_type]
-                        hint = f"Union[{', '.join(type_names)}]"
+                    hint = f"List[Union[{', '.join(type_names)}]]"
+            else:
+                if NoneType in self.conclusion.conclusion_type:
+                    type_names = [t.__name__ for t in self.conclusion.conclusion_type if t is not NoneType]
+                    hint = f"Optional[{', '.join(type_names)}]"
+                elif len(self.conclusion.conclusion_type) == 1:
+                    hint = self.conclusion.conclusion_type[0].__name__
+                else:
+                    type_names = [t.__name__ for t in self.conclusion.conclusion_type]
+                    hint = f"Union[{', '.join(type_names)}]"
             conclusion_lines[0] = conclusion_lines[0].replace("):", f") -> {hint}:")
             func_call = f"{parent_indent}    return {new_function_name.replace('def ', '')}(case)\n"
             return "\n".join(conclusion_lines).strip(' '), func_call
@@ -225,7 +251,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
             # This means the conditions are a definition that should be written and then called
             conditions_lines = self.conditions.user_input.split('\n')
             # use regex to replace the function name
-            new_function_name = f"def conditions_{self.uid}"
+            new_function_name = f"def {self.generated_conditions_function_name}"
             conditions_lines[0] = re.sub(r"def (\w+)", new_function_name, conditions_lines[0])
             # add type hint
             conditions_lines[0] = conditions_lines[0].replace('):', ') -> bool:')
@@ -307,10 +333,11 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         Get the name of the expression, which is the user input of the expression if it exists,
         otherwise it is the conclusion or conditions of the rule.
         """
-        if expression.user_defined_name is not None:
+        if expression.user_defined_name is not None and expression.user_defined_name != expression.encapsulating_function_name:
             return expression.user_defined_name.strip()
-        elif expression.user_input and "def " in expression.user_input:
-            return expression.user_input.split('(')[0].replace('def ', '').strip()
+        func_name = expression.user_input.split('(')[0].replace('def ', '').strip() if "def " in expression.user_input else None
+        if func_name is not None and func_name != expression.encapsulating_function_name:
+            return func_name
         elif expression.user_input:
             return expression.user_input.strip()
         else:
@@ -347,6 +374,9 @@ class HasAlternativeRule:
     def alternative(self) -> Optional[Rule]:
         return self._alternative
 
+    def set_immediate_alternative(self, alternative: Optional[Rule]):
+        self._alternative = alternative
+
     @alternative.setter
     def alternative(self, new_rule: Rule):
         """
@@ -382,12 +412,11 @@ class HasRefinementRule:
         """
         if new_rule is None:
             return
-        new_rule.top_rule = self
         if self.refinement:
             self.refinement.alternative = new_rule
         else:
             new_rule.parent = self
-            new_rule.weight = RDREdge.Refinement.value
+            new_rule.weight = RDREdge.Refinement.value if not isinstance(new_rule, MultiClassFilterRule) else new_rule.weight
             self._refinement = new_rule
 
 
@@ -395,6 +424,8 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
     """
     A rule in the SingleClassRDR classifier, it can have a refinement or an alternative rule or both.
     """
+
+    mutually_exclusive: bool = True
 
     def evaluate_next_rule(self, x: Case) -> SingleClassRule:
         if self.fired:
@@ -431,21 +462,47 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         return "elif" if self.weight == RDREdge.Alternative.value else "if"
 
 
-class MultiClassStopRule(Rule, HasAlternativeRule):
+class MultiClassRefinementRule(Rule, HasAlternativeRule, ABC):
     """
-    A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
-    the conclusion of the rule is a Stop category meant to stop the parent conclusion from being made.
+    A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule.
     """
     top_rule: Optional[MultiClassTopRule] = None
     """
     The top rule of the rule, which is the nearest ancestor that fired and this rule is a refinement of.
     """
+    mutually_exclusive: bool = False
+
+    def _to_json(self) -> Dict[str, Any]:
+        self.json_serialization = {**Rule._to_json(self),
+                                   "alternative": self.alternative.to_json() if self.alternative is not None else None}
+        return self.json_serialization
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> MultiClassRefinementRule:
+        loaded_rule = super(MultiClassRefinementRule, cls)._from_json(data)
+        # The following is done to prevent re-initialization of the top rule,
+        # so the top rule that is already initialized is passed in the data instead of its json serialization.
+        loaded_rule.top_rule = data['top_rule']
+        if data['alternative'] is not None:
+            data['alternative']['top_rule'] = data['top_rule']
+            loaded_rule.alternative = SubclassJSONSerializer.from_json(data["alternative"])
+        return loaded_rule
+
+    def _if_statement_source_code_clause(self) -> str:
+        return "elif" if self.weight == RDREdge.Alternative.value else "if"
+
+
+class MultiClassStopRule(MultiClassRefinementRule):
+    """
+    A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
+    the conclusion of the rule is a Stop category meant to stop the parent conclusion from being made.
+    """
 
     def __init__(self, *args, **kwargs):
-        super(MultiClassStopRule, self).__init__(*args, **kwargs)
+        super(MultiClassRefinementRule, self).__init__(*args, **kwargs)
         self.conclusion = CallableExpression(conclusion_type=(Stop,), conclusion=Stop.stop)
 
-    def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, MultiClassTopRule]]:
+    def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassRefinementRule, MultiClassTopRule]]:
         if self.fired:
             self.top_rule.fired = False
             return self.top_rule.alternative
@@ -454,33 +511,73 @@ class MultiClassStopRule(Rule, HasAlternativeRule):
         else:
             return self.top_rule.alternative
 
-    def _to_json(self) -> Dict[str, Any]:
-        self.json_serialization = {**Rule._to_json(self),
-                                   "alternative": self.alternative.to_json() if self.alternative is not None else None}
-        return self.json_serialization
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any]) -> MultiClassStopRule:
-        loaded_rule = super(MultiClassStopRule, cls)._from_json(data)
-        # The following is done to prevent re-initialization of the top rule,
-        # so the top rule that is already initialized is passed in the data instead of its json serialization.
-        loaded_rule.top_rule = data['top_rule']
-        if data['alternative'] is not None:
-            data['alternative']['top_rule'] = data['top_rule']
-        loaded_rule.alternative = MultiClassStopRule.from_json(data["alternative"])
-        return loaded_rule
-
     def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[None, str]:
         return None, f"{parent_indent}{' ' * 4}pass\n"
 
-    def _if_statement_source_code_clause(self) -> str:
-        return "elif" if self.weight == RDREdge.Alternative.value else "if"
+
+class MultiClassFilterRule(MultiClassRefinementRule, HasRefinementRule):
+    """
+    A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
+    the conclusion of the rule is a Filter category meant to filter the parent conclusion.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(MultiClassRefinementRule, self).__init__(*args, **kwargs)
+        self.weight = RDREdge.Filter.value
+
+    def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassRefinementRule, MultiClassTopRule]]:
+        if self.fired:
+            if self.refinement:
+                case_cp = x
+                if isinstance(self.refinement, MultiClassFilterRule):
+                    case_cp = self.get_an_updated_case_copy(case_cp)
+                return self.refinement(case_cp)
+            else:
+                return self.top_rule.alternative
+        elif self.alternative:
+            return self.alternative(x)
+        else:
+            return self.top_rule.alternative
+
+    def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[None, str]:
+        func, func_call = super().get_conclusion_as_source_code(str(conclusion), parent_indent=parent_indent)
+        conclusion_str = func_call.replace("return ", "").strip()
+        conclusion_str = conclusion_str.replace("(case)", "(case_cp)")
+
+        parent_to_filter = self.get_parent_to_filter()
+        statement = (
+            f"\n{parent_indent}    case_cp = get_an_updated_case_copy(case, {parent_to_filter.generated_conclusion_function_name},"
+            f" attribute_name, conclusion_type, mutually_exclusive)")
+        statement += f"\n{parent_indent}    conclusions.update(make_set({conclusion_str}))\n"
+        return func, statement
+
+    def get_parent_to_filter(self, parent: Union[None, MultiClassRefinementRule, MultiClassTopRule] = None) \
+            -> Union[MultiClassFilterRule, MultiClassTopRule]:
+        parent = self.parent if parent is None else parent
+        if isinstance(parent, (MultiClassFilterRule, MultiClassTopRule)) and parent.fired:
+            return parent
+        else:
+            return parent.parent
+
+    def _to_json(self) -> Dict[str, Any]:
+        self.json_serialization = super(MultiClassFilterRule, self)._to_json()
+        self.json_serialization['refinement'] = self.refinement.to_json() if self.refinement is not None else None
+        return self.json_serialization
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any]) -> MultiClassFilterRule:
+        loaded_rule = super(MultiClassFilterRule, cls)._from_json(data)
+        if data['refinement'] is not None:
+            data['refinement']['top_rule'] = data['top_rule']
+        loaded_rule.refinement = cls.from_json(data["refinement"]) if data["refinement"] is not None else None
+        return loaded_rule
 
 
 class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
     """
     A rule in the MultiClassRDR classifier, it can have a refinement and a next rule.
     """
+    mutually_exclusive: bool = False
 
     def __init__(self, *args, **kwargs):
         super(MultiClassTopRule, self).__init__(*args, **kwargs)
@@ -488,16 +585,27 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
 
     def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, MultiClassTopRule]]:
         if self.fired and self.refinement:
-            return self.refinement(x)
+            case_cp = x
+            if isinstance(self.refinement, MultiClassFilterRule):
+                case_cp = self.get_an_updated_case_copy(case_cp)
+            return self.refinement(case_cp)
         elif self.alternative:  # Here alternative refers to next rule in MultiClassRDR
             return self.alternative
+        return None
 
-    def fit_rule(self, case_query: CaseQuery):
+    def fit_rule(self, case_query: CaseQuery, refinement_type: Optional[Type[MultiClassRefinementRule]] = None):
         if self.fired and case_query.target != self.conclusion:
-            self.refinement = MultiClassStopRule(case_query.conditions, corner_case=case_query.case, parent=self)
+            if refinement_type in [None, MultiClassStopRule]:
+                new_rule = MultiClassStopRule(case_query.conditions, corner_case=case_query.case,
+                                                     parent=self)
+            elif refinement_type is MultiClassFilterRule:
+                new_rule = MultiClassFilterRule.from_case_query(case_query, parent=self)
+            else:
+                raise ValueError(f"Unknown refinement type {refinement_type}")
+            new_rule.top_rule = self
+            self.refinement = new_rule
         elif not self.fired:
-            self.alternative = MultiClassTopRule(case_query.conditions, case_query.target,
-                                                 corner_case=case_query.case, parent=self)
+            self.alternative = MultiClassTopRule.from_case_query(case_query, parent=self)
 
     def _to_json(self) -> Dict[str, Any]:
         self.json_serialization = {**Rule._to_json(self),
@@ -512,7 +620,8 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         # so the top rule that is already initialized is passed in the data instead of its json serialization.
         if data['refinement'] is not None:
             data['refinement']['top_rule'] = loaded_rule
-        loaded_rule.refinement = MultiClassStopRule.from_json(data["refinement"])
+            data_type = get_type_from_string(data["refinement"]["_type"])
+            loaded_rule.refinement = data_type.from_json(data["refinement"])
         loaded_rule.alternative = MultiClassTopRule.from_json(data["alternative"])
         return loaded_rule
 
@@ -521,8 +630,6 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         conclusion_str = func_call.replace("return ", "").strip()
 
         statement = f"{parent_indent}    conclusions.update(make_set({conclusion_str}))\n"
-        if self.alternative is None:
-            statement += f"{parent_indent}return conclusions\n"
         return func, statement
 
     def _if_statement_source_code_clause(self) -> str:
