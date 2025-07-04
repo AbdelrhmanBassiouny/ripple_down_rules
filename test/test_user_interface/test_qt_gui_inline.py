@@ -1,11 +1,13 @@
 import os.path
 import unittest
 
+from ripple_down_rules import logger
+
 try:
     from PyQt6.QtWidgets import QApplication
     from ripple_down_rules.user_interface.gui import RDRCaseViewer, style
 except ImportError as e:
-    print(f"Skipping GUI tests due to missing PyQt6: {e}")
+    logger.warning(f"Skipping GUI tests due to missing PyQt6: {e}")
     QApplication = None
     RDRCaseViewer = None
     style = None
@@ -30,7 +32,6 @@ class GUITestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        print("Setting up GUI test case...")
         cls.app = QApplication([])
         cls.cases, cls.targets = load_zoo_dataset(cache_file=f"{os.path.dirname(__file__)}/../test_results/zoo")
         cls.cq = CaseQuery(cls.cases[0], "species", (Species,), True, _target=cls.targets[0])
