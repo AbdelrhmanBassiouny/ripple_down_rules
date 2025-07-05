@@ -274,11 +274,9 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         if self.start_rule is not None and self.start_rule.parent is None:
             if self.input_node is None:
-                self.input_node = type(self.start_rule)(
-                    # conditions=CallableExpression(conclusion_type=(bool,), conclusion=True),
-                    # conclusion=CallableExpression(conclusion_type=(type(None),), conclusion=None),
-                    parent=None, uid='0')
-                self.input_node.evaluated = True
+                self.input_node = type(self.start_rule)(parent=None, uid='0')
+                self.input_node.evaluated = False
+                self.input_node.fired = False
             self.start_rule.parent = self.input_node
             self.start_rule.weight = ""
         if self.input_node is not None:

@@ -36,6 +36,8 @@ class UserPrompt:
         :param viewer: The RDRCaseViewer instance to use for prompting the user.
         """
         self.viewer = viewer
+        if RDRCaseViewer is not None and viewer is None:
+            self.viewer = RDRCaseViewer()
         self.print_func = print if viewer is None else viewer.print
 
 
