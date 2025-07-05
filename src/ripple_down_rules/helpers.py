@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import os
 from types import ModuleType
+from typing import Tuple
 
-from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
-
-from .datastructures.case import create_case
-from .datastructures.dataclasses import CaseQuery
 from typing_extensions import Type, Optional, Callable, Any, Dict, TYPE_CHECKING, Union
 
-from .utils import get_func_rdr_model_name, copy_case, make_set, update_case
+from .datastructures.case import create_case, Case
+from .datastructures.dataclasses import CaseQuery
 from .utils import calculate_precision_and_recall
+from .utils import get_func_rdr_model_name, copy_case, make_set, update_case
 
 if TYPE_CHECKING:
     from .rdr import RippleDownRules
@@ -55,12 +54,14 @@ def general_rdr_classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDow
             if attribute_name in new_conclusions:
                 temp_case_query = CaseQuery(case_cp, attribute_name, rdr.conclusion_type, rdr.mutually_exclusive)
                 update_case(temp_case_query, new_conclusions)
-        if len(new_conclusions) == 0 or len(classifiers_dict) == 1 and list(classifiers_dict.values())[0].mutually_exclusive:
+        if len(new_conclusions) == 0 or len(classifiers_dict) == 1 and list(classifiers_dict.values())[
+            0].mutually_exclusive:
             break
     return conclusions
 
 
-def is_matching(classifier: Callable[[Any], Any], case_query: CaseQuery, pred_cat: Optional[Dict[str, Any]] = None) -> bool:
+def is_matching(classifier: Callable[[Any], Any], case_query: CaseQuery,
+                pred_cat: Optional[Dict[str, Any]] = None) -> bool:
     """
     :param classifier: The RDR classifier to check the prediction of.
     :param case_query: The case query to check.
@@ -95,3 +96,23 @@ def load_or_create_func_rdr_model(func, model_dir: str, rdr_type: Type[RippleDow
     else:
         rdr = rdr_type(**rdr_kwargs)
     return rdr
+
+
+def get_an_updated_case_copy(case: Case, conclusion: Callable, attribute_name: str, conclusion_type: Tuple[Type, ...],
+                             mutually_exclusive: bool) -> Case:
+    """
+    :param case: The case to copy and update.
+    :param conclusion: The conclusion to add to the case.
+    :param attribute_name: The name of the attribute to update.
+    :param conclusion_type: The type of the conclusion to update.
+    :param mutually_exclusive: Whether the rule belongs to a mutually exclusive RDR.
+    :return: A copy of the case updated with the given conclusion.
+    """
+    case_cp = copy_case(case)
+    temp_case_query = CaseQuery(case_cp, attribute_name, conclusion_type,
+                                mutually_exclusive=mutually_exclusive)
+    output = conclusion(case_cp)
+    if not isinstance(output, Dict):
+        output = {attribute_name: output}
+    update_case(temp_case_query, output)
+    return case_cp

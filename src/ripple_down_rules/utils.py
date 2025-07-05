@@ -5,9 +5,9 @@ import codecs
 import copyreg
 import importlib
 import json
-import logging
 import os
 import re
+import shutil
 import sys
 import threading
 import uuid
@@ -24,6 +24,7 @@ from types import NoneType
 
 import six
 from sqlalchemy.exc import NoInspectionAvailable
+from . import logger
 
 try:
     import matplotlib
@@ -34,17 +35,16 @@ except ImportError as e:
     matplotlib = None
     plt = None
     Figure = None
-    logging.debug(f"{e}: matplotlib is not installed")
+    logger.debug(f"{e}: matplotlib is not installed")
 
 try:
     import networkx as nx
 except ImportError as e:
     nx = None
-    logging.debug(f"{e}: networkx is not installed")
+    logger.debug(f"{e}: networkx is not installed")
 
 import requests
 from anytree import Node, RenderTree, PreOrderIter
-from anytree.exporter import DotExporter
 from sqlalchemy import MetaData, inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
@@ -138,7 +138,7 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                     module = importlib.import_module(module_name, package=package_name)
                     scope[asname] = getattr(module, name)
                 except (ImportError, AttributeError) as e:
-                    logging.warning(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
+                    logger.warning(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
 
     return scope
 
@@ -180,8 +180,8 @@ def extract_function_source(file_path: str,
             if (len(functions_source) >= len(function_names)) and (not len(function_names) == 0):
                 break
     if len(functions_source) < len(function_names):
-        raise ValueError(f"Could not find all functions in {file_path}: {function_names} not found,"
-                         f"functions not found: {set(function_names) - set(functions_source.keys())}")
+        logger.warning(f"Could not find all functions in {file_path}: {function_names} not found, "
+                f"functions not found: {set(function_names) - set(functions_source.keys())}")
     if return_line_numbers:
         return functions_source, line_numbers
     return functions_source
@@ -285,7 +285,7 @@ def update_case(case_query: CaseQuery, conclusions: Dict[str, Any]):
         case_query.case.update(conclusions)
 
 
-def is_conflicting(conclusion: Any, target: Any) -> bool:
+def is_value_conflicting(conclusion: Any, target: Any) -> bool:
     """
     :param conclusion: The conclusion to check.
     :param target: The target to compare the conclusion with.
@@ -845,10 +845,12 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     imported_file_name = Path(imported_module_path).name
     target_file_name = Path(target_file_path).name
     if package_name is not None:
-        target_path = Path(get_path_starting_from_latest_encounter_of(str(target_path), package_name, [target_file_name]))
+        target_path = Path(
+            get_path_starting_from_latest_encounter_of(str(target_path), package_name, [target_file_name]))
     imported_path = Path(imported_module_path).resolve()
     if package_name is not None:
-        imported_path = Path(get_path_starting_from_latest_encounter_of(str(imported_path), package_name, [imported_file_name]))
+        imported_path = Path(
+            get_path_starting_from_latest_encounter_of(str(imported_path), package_name, [imported_file_name]))
 
     # Compute relative path from target to imported module
     rel_path = os.path.relpath(imported_path.parent, target_path.parent)
@@ -925,8 +927,8 @@ def get_imports_from_types(type_objs: Iterable[Type],
                 continue
             if name == "NoneType":
                 module = "types"
-            if module is None or module == 'builtins' or module.startswith('_')\
-                or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
+            if module is None or module == 'builtins' or module.startswith('_') \
+                    or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
                     or name in exclueded_names:
                 continue
             if module == "typing":
@@ -1216,7 +1218,8 @@ class SubclassJSONSerializer:
             return cls._from_json(data)
         for subclass in recursive_subclasses(SubclassJSONSerializer):
             if get_full_class_name(subclass) == data["_type"]:
-                subclass_data = deepcopy(data)
+                # subclass_data = deepcopy(data)
+                subclass_data = data
                 subclass_data.pop("_type")
                 return subclass._from_json(subclass_data)
 
@@ -1289,7 +1292,7 @@ def copy_orm_instance(instance: SQLTable) -> SQLTable:
         try:
             new_instance = deepcopy(instance)
         except Exception as e:
-            logging.debug(e)
+            logger.debug(e)
             new_instance = instance
     return new_instance
 
@@ -1309,7 +1312,7 @@ def copy_orm_instance_with_relationships(instance: SQLTable) -> SQLTable:
             try:
                 setattr(instance_cp, rel.key, related_obj_cp)
             except Exception as e:
-                logging.debug(e)
+                logger.debug(e)
     return instance_cp
 
 
@@ -1408,7 +1411,11 @@ def table_rows_as_str(row_dicts: List[Dict[str, Any]], columns_per_row: int = 20
     row_values = [list(map(lambda v: v[:max_line_sze] + '...' if len(v) > max_line_sze else v, row)) for row in
                   row_values]
     row_values = [list(map(lambda v: v.lower() if v in ["True", "False"] else v, row)) for row in row_values]
-    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=[max_line_sze] * 2)
+    # Step 1: Get terminal size
+    terminal_width = shutil.get_terminal_size((80, 20)).columns
+    # Step 2: Dynamically calculate max width per column (simple approximation)
+    max_col_width = terminal_width // len(row_values[0])
+    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=max_col_width)  # [max_line_sze] * 2)
     all_table_rows.append(table)
     return "\n".join(all_table_rows)
 
@@ -1628,12 +1635,14 @@ def edge_attr_setter(parent, child):
     """
     Set the edge attributes for the dot exporter.
     """
-    if child and hasattr(child, "weight") and child.weight:
+    if child and hasattr(child, "weight") and child.weight is not None:
         return f'style="bold", label=" {child.weight}"'
     return ""
 
 
 _RE_ESC = re.compile(r'["\\]')
+
+
 class FilteredDotExporter(object):
 
     def __init__(self, node, include_nodes=None, graph="digraph", name="tree", options=None,
@@ -1904,7 +1913,7 @@ class FilteredDotExporter(object):
             os.remove(dotfilename)
         except Exception:  # pragma: no cover
             msg = 'Could not remove temporary file %s' % dotfilename
-            logging.getLogger(__name__).warn(msg)
+            logger.warning(msg)
 
     @staticmethod
     def esc(value):
@@ -1924,7 +1933,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     :param show_in_console: Whether to print the tree to the console.
     """
     if not root:
-        logging.warning("No rules to render")
+        logger.warning("No rules to render")
         return
     if show_in_console:
         for pre, _, node in RenderTree(root):
@@ -1941,7 +1950,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
                                  nodeattrfunc=lambda node: f'style=filled, fillcolor={node.color}'
                                  )
         de.to_dotfile(f"{filename}{'.dot'}")
-        de.to_picture(f"{filename}{'.png'}")
+        # de.to_picture(f"{filename}{'.png'}")
 
 
 def draw_tree(root: Node, fig: Figure):

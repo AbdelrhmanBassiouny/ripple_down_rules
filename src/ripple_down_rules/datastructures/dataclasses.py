@@ -31,7 +31,7 @@ class CaseQuery:
     """
     The name of the attribute.
     """
-    _attribute_types: Tuple[Type]
+    _attribute_types: Tuple[Type, ...]
     """
     The type(s) of the attribute.
     """
@@ -139,7 +139,7 @@ class CaseQuery:
             attribute_types_str = f"Union[{', '.join([t.__name__ for t in self.core_attribute_type])}]"
         else:
             attribute_types_str = self.core_attribute_type[0].__name__
-        if all(t in self.attribute_type for t in [list, set]) and len(self.core_attribute_type) > 2:
+        if not self.mutually_exclusive:
             return f"List[{attribute_types_str}]"
         else:
             return attribute_types_str

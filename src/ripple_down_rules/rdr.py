@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 from abc import ABC, abstractmethod
 from copy import copy
+from dataclasses import is_dataclass
 from types import NoneType
 
 from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
@@ -27,15 +29,16 @@ from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode
 from .experts import Expert, Human
-from .helpers import is_matching, general_rdr_classify
-from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule
+from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy
+from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule, MultiClassRefinementRule, \
+    MultiClassFilterRule
 
 try:
     from .user_interface.gui import RDRCaseViewer
 except ImportError as e:
     RDRCaseViewer = None
 from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_type_from_string, \
-    is_conflicting, extract_function_source, extract_imports, get_full_class_name, \
+    is_value_conflicting, extract_function_source, extract_imports, get_full_class_name, \
     is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree
 
 
@@ -127,7 +130,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         if self.start_rule is None:
             return None
-        start_rule = self.start_rule if self.input_node is None else self.input_node
+        start_rule = self.start_rule
         evaluated_rule_tree = [r for r in [start_rule] + list(start_rule.descendants) if r.evaluated]
         return evaluated_rule_tree
 
@@ -272,6 +275,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param case_query: The case query containing the case to classify and the target category to compare the case with.
         :return: The category that the case belongs to.
         """
+        if self.start_rule is not None:
+            for rule in [self.start_rule] + list(self.start_rule.descendants):
+                rule.evaluated = False
+                rule.fired = False
         if self.start_rule is not None and self.start_rule.parent is None:
             if self.input_node is None:
                 self.input_node = type(self.start_rule)(parent=None, uid='0')
@@ -280,7 +287,11 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             self.start_rule.parent = self.input_node
             self.start_rule.weight = ""
         if self.input_node is not None:
-            self.input_node.name = f"{case}"
+            data = case.__dict__ if is_dataclass(case) else case
+            if hasattr(case, "items"):
+                self.input_node.name = json.dumps({k: str(v) for k, v in data.items()}, indent=4)
+            else:
+                self.input_node.name = str(data)
         return self._classify(case, modify_case=modify_case, case_query=case_query)
 
     @abstractmethod
@@ -490,25 +501,50 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         conclusion_func_names = [f'conclusion_{rid}' for rid in rules_dict.keys()
                                  if not isinstance(rules_dict[rid], MultiClassStopRule)]
         all_func_names = condition_func_names + conclusion_func_names
+        rule_tree_file_path = f"{model_dir}/{self.generated_python_file_name}.py"
         filepath = f"{model_dir}/{self.generated_python_defs_file_name}.py"
         cases_path = f"{model_dir}/{self.generated_python_cases_file_name}.py"
         cases_import_path = get_import_path_from_path(model_dir)
         cases_import_path = f"{cases_import_path}.{self.generated_python_cases_file_name}" if cases_import_path \
             else self.generated_python_cases_file_name
         functions_source = extract_function_source(filepath, all_func_names, include_signature=False)
+        python_rule_tree_source = ""
+        with open(rule_tree_file_path, "r") as rule_tree_source:
+            python_rule_tree_source = rule_tree_source.read()
         # get the scope from the imports in the file
         scope = extract_imports(filepath, package_name=package_name)
+        rules_not_found = set()
         for rule in [self.start_rule] + list(self.start_rule.descendants):
             if rule.conditions is not None:
-                rule.conditions.user_input = functions_source[f"conditions_{rule.uid}"]
+                conditions_name = rule.generated_conditions_function_name
+                if conditions_name not in functions_source or conditions_name not in python_rule_tree_source:
+                    rules_not_found.add(rule)
+                    continue
+                rule.conditions.user_input = functions_source[conditions_name]
                 rule.conditions.scope = scope
                 if os.path.exists(cases_path):
                     module = importlib.import_module(cases_import_path, package=package_name)
                     importlib.reload(module)
                     rule.corner_case_metadata = module.__dict__.get(f"corner_case_{rule.uid}", None)
-            if rule.conclusion is not None and not isinstance(rule, MultiClassStopRule):
-                rule.conclusion.user_input = functions_source[f"conclusion_{rule.uid}"]
+            if not isinstance(rule, MultiClassStopRule):
+                conclusion_name = rule.generated_conclusion_function_name
+                if conclusion_name not in functions_source or conclusion_name not in python_rule_tree_source:
+                    rules_not_found.add(rule)
+                rule.conclusion.user_input = functions_source[conclusion_name]
                 rule.conclusion.scope = scope
+        for rule in rules_not_found:
+            if isinstance(rule, MultiClassTopRule):
+                rule.parent.set_immediate_alternative(rule.alternative)
+                if rule.refinement is not None:
+                    ref_rules = [ref_rule for ref_rule in [rule.refinement] + list(rule.refinement.descendants)]
+                    for ref_rule in ref_rules:
+                        del ref_rule
+            else:
+                rule.parent.refinement = rule.alternative
+            if rule.alternative is not None:
+                rule.alternative = None
+            rule.parent = None
+            del rule
 
     @abstractmethod
     def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = "",
@@ -587,7 +623,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         """
         pass
 
-    def _get_types_to_import(self) -> Tuple[Set[Type], Set[Type], Set[Type]]:
+    def _get_types_to_import(self) -> Tuple[Set[Union[Type, Callable]], Set[Type], Set[Type]]:
         """
         :return: The types of the main, defs, and corner cases files of the RDR classifier that will be imported.
         """
@@ -920,6 +956,9 @@ class MultiClassRDR(RDRWithCodeWriter):
             if rule.alternative:
                 self.write_rules_as_source_code_to_file(rule.alternative, filename, parent_indent, defs_file=defs_file,
                                                         cases_file=cases_file, package_name=package_name)
+            elif isinstance(rule, MultiClassTopRule):
+                with open(filename, "a") as file:
+                    file.write(f"{parent_indent}return conclusions\n")
 
     @property
     def conclusion_type_hint(self) -> str:
@@ -929,8 +968,9 @@ class MultiClassRDR(RDRWithCodeWriter):
         else:
             return f"Set[Union[{', '.join(conclusion_types)}]]"
 
-    def _get_types_to_import(self) -> Tuple[Set[Type], Set[Type], Set[Type]]:
+    def _get_types_to_import(self) -> Tuple[Set[Union[Type, Callable]], Set[Type], Set[Type]]:
         main_types, defs_types, cases_types = super()._get_types_to_import()
+        main_types.add(get_an_updated_case_copy)
         main_types.update({Set, make_set})
         defs_types.update({List, Set})
         return main_types, defs_types, cases_types
@@ -962,28 +1002,43 @@ class MultiClassRDR(RDRWithCodeWriter):
         Stop a wrong conclusion by adding a stopping rule.
         """
         rule_conclusion = evaluated_rule.conclusion(case_query.case)
-        if is_conflicting(rule_conclusion, case_query.target_value):
-            self.stop_conclusion(case_query, expert, evaluated_rule)
-        else:
-            self.add_conclusion(rule_conclusion)
+        stop: bool = False
+        add_filter_rule: bool = False
+        if is_value_conflicting(rule_conclusion, case_query.target_value):
+            if make_set(case_query.target_value).issubset(rule_conclusion):
+                add_filter_rule = True
+            else:
+                stop = True
+        elif make_set(case_query.core_attribute_type).issubset(make_set(evaluated_rule.conclusion.conclusion_type)):
+            if make_set(case_query.target_value).issubset(rule_conclusion):
+                add_filter_rule = True
 
-    def stop_conclusion(self, case_query: CaseQuery,
-                        expert: Expert, evaluated_rule: MultiClassTopRule):
+        if not stop:
+            self.add_conclusion(rule_conclusion)
+        if stop or add_filter_rule:
+            refinement_type = MultiClassStopRule if stop else MultiClassFilterRule
+            self.stop_or_filter_conclusion(case_query, expert, evaluated_rule, refinement_type=refinement_type)
+
+    def stop_or_filter_conclusion(self, case_query: CaseQuery,
+                                  expert: Expert, evaluated_rule: MultiClassTopRule,
+                                  refinement_type: Type[MultiClassRefinementRule] = MultiClassStopRule):
         """
         Stop a conclusion by adding a stopping rule.
 
         :param case_query: The case query to stop the conclusion for.
         :param expert: The expert to ask for differentiating features as new rule conditions.
         :param evaluated_rule: The evaluated rule to ask the expert about.
+        :param refinement_type: The refinement type to use.
         """
         conditions = expert.ask_for_conditions(case_query, evaluated_rule)
-        evaluated_rule.fit_rule(case_query)
-        if self.mode == MCRDRMode.StopPlusRule:
-            self.stop_rule_conditions = conditions
-        if self.mode == MCRDRMode.StopPlusRuleCombined:
-            new_top_rule_conditions = conditions.combine_with(evaluated_rule.conditions)
-            case_query.conditions = new_top_rule_conditions
-            self.add_top_rule(case_query)
+        evaluated_rule.fit_rule(case_query, refinement_type=refinement_type)
+        if refinement_type is MultiClassStopRule:
+            if self.mode == MCRDRMode.StopPlusRule:
+                self.stop_rule_conditions = conditions
+            if self.mode == MCRDRMode.StopPlusRuleCombined:
+                new_top_rule_conditions = conditions.combine_with(evaluated_rule.conditions)
+                case_query.conditions = new_top_rule_conditions
+                self.add_top_rule(case_query)
 
     def add_rule_for_case(self, case_query: CaseQuery, expert: Expert):
         """

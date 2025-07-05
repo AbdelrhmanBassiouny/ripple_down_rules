@@ -6,7 +6,7 @@ from typing_extensions import List
 from .datasets import load_zoo_dataset
 from ripple_down_rules.datastructures.dataclasses import Case
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
-from ripple_down_rules.utils import make_set, flatten_list, serialize_dataclass, deserialize_dataclass
+from ripple_down_rules.utils import make_set, flatten_list, serialize_dataclass, deserialize_dataclass, render_tree
 from .test_helpers.helpers import get_fit_mcrdr, get_fit_scrdr, get_fit_grdr
 
 
@@ -42,12 +42,17 @@ class TestJSONSerialization(TestCase):
             self.assertEqual(cat, target)
 
     def test_mcrdr_json_serialization(self):
-        mcrdr = get_fit_mcrdr(self.all_cases, self.targets)
+        mcrdr_original = get_fit_mcrdr(self.all_cases, self.targets)
         filename = f"{self.cache_dir}/mcrdr.json"
-        mcrdr.to_json_file(filename)
+        mcrdr_original.to_json_file(filename)
         mcrdr = MultiClassRDR.from_json_file(filename)
         for case, target in zip(self.all_cases, self.targets):
             cat = mcrdr.classify(case)
+            cat_original = mcrdr_original.classify(case)
+            render_tree(mcrdr_original.start_rule, use_dot_exporter=True,
+                        filename=self.cache_dir + f"/mcrdr_before_json")
+            render_tree(mcrdr.start_rule, use_dot_exporter=True,
+                        filename=self.cache_dir + f"/mcrdr_after_json")
             self.assertEqual(make_set(cat), make_set(target))
 
     def test_grdr_json_serialization(self):
