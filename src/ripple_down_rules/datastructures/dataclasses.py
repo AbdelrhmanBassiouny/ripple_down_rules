@@ -5,15 +5,20 @@ import typing
 from dataclasses import dataclass, field
 
 import typing_extensions
+from colorama import Fore
 from omegaconf import MISSING
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, get_origin, Set, Callable
+from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, get_origin, Set, Callable, TYPE_CHECKING
 
+from build.lib.ripple_down_rules.utils import render_tree
 from ..utils import get_method_name, get_function_import_data, get_function_representation
 from .callable_expression import CallableExpression
 from .case import create_case, Case
 from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, get_value_type_from_type_hint, \
     typing_to_python_type
+
+if TYPE_CHECKING:
+    from ..rdr import RippleDownRules
 
 
 @dataclass
@@ -92,6 +97,38 @@ class CaseQuery:
     """
     The type hints of the function arguments. This is used to recreate the function signature.
     """
+    rdr: Optional[RippleDownRules] = None
+    """
+    The Ripple Down Rules that was used to answer the case query.
+    """
+
+    def render_rule_tree(self, filepath: Optional[str] = None):
+        if self.rdr is None:
+            return
+        render_tree(self.rdr.start_rule, use_dot_exporter=True, filename=filepath)
+
+    @property
+    def current_value_str(self):
+        return (f"{Fore.MAGENTA}Current value of {Fore.CYAN}{self.name}{Fore.MAGENTA} of type(s) "
+         f"{Fore.CYAN}({', '.join(map(lambda x: x.__name__, self.core_attribute_type))}){Fore.MAGENTA}: "
+         f"{Fore.WHITE}{self.current_value}")
+
+    @property
+    def current_value(self) -> Any:
+        """
+        :return: The current value of the attribute.
+        """
+        if not hasattr(self.case, self.attribute_name):
+            return None
+
+        attr_value = getattr(self.case, self.attribute_name)
+
+        if attr_value is None:
+            return attr_value
+        elif self.mutually_exclusive:
+            return attr_value
+        else:
+            return list({v for v in make_list(attr_value) if isinstance(v, self.core_attribute_type)})
 
     @property
     def case_type(self) -> Type:

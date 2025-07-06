@@ -1,7 +1,8 @@
-from  __future__ import annotations
+from __future__ import annotations
 
 import inspect
 import logging
+import os.path
 from types import MethodType
 
 try:
@@ -9,7 +10,8 @@ try:
     from PyQt6.QtGui import QPixmap, QPainter, QPalette
     from PyQt6.QtWidgets import (
         QWidget, QVBoxLayout, QLabel, QScrollArea,
-        QSizePolicy, QToolButton, QHBoxLayout, QPushButton, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
+        QSizePolicy, QToolButton, QHBoxLayout, QPushButton, QMainWindow, QGraphicsView, QGraphicsScene,
+        QGraphicsPixmapItem
     )
     from qtconsole.inprocess import QtInProcessKernelManager
     from qtconsole.rich_jupyter_widget import RichJupyterWidget
@@ -120,7 +122,7 @@ class BackgroundWidget(QWidget):
 
 
 class CollapsibleBox(QWidget):
-    def __init__(self, title="", parent=None, viewer: Optional[RDRCaseViewer]=None, chain_name: Optional[str] = None,
+    def __init__(self, title="", parent=None, viewer: Optional[RDRCaseViewer] = None, chain_name: Optional[str] = None,
                  main_obj: Optional[Dict[str, Any]] = None):
         super().__init__(parent)
 
@@ -259,12 +261,14 @@ def color_name_to_html(color_name):
         'g': 'green',
         'b': 'blue',
         'o': 'orange',
+        'm': 'magenta',
     }
     color_map = {
         'red': '#d6336c',
         'green': '#2eb872',
         'blue': '#007acc',
         'orange': '#FFA07A',
+        'magenta': '#a22bcf',
     }
     if len(color_name) == 1:
         color_name = single_char_to_name.get(color_name, color_name)
@@ -285,16 +289,10 @@ class RDRCaseViewer(QMainWindow):
     instances: List[RDRCaseViewer] = []
     exit_status: ExitStatus = ExitStatus.CLOSE
 
-    def __init__(self, parent=None,
-                 save_dir: Optional[str] = None,
-                 save_model_name: Optional[str] = None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.exit_status = ExitStatus.CLOSE
         self.instances.clear()
         self.instances.append(self)
-        self.save_dir = save_dir
-        self.save_model_name = save_model_name
-
         self.setWindowTitle("RDR Case Viewer")
 
         self.setBaseSize(1600, 600)  # or your preferred initial size
@@ -333,35 +331,28 @@ class RDRCaseViewer(QMainWindow):
         main_layout.addWidget(middle_widget, stretch=2)
         main_layout.addWidget(self.obj_diagram_viewer, stretch=2)
 
-    def set_save_function(self, save_function: Callable[[str, str], None]) -> None:
-        """
-        Set the function to save the file.
-
-        :param save_function: The function to save the file.
-        """
-        self.save_function = save_function
-        self.save_btn.clicked.connect(lambda: self.save_function(self.save_dir, self.save_model_name))
-
     def print(self, msg):
         """
         Print a message to the console.
         """
         self.ipython_console._append_plain_text(msg + '\n', True)
 
-    def update_for_case_query(self, case_query: CaseQuery, title_txt: Optional[str] = None,
-                              prompt_for: Optional[PromptFor] = None, code_to_modify: Optional[str] = None):
+    def update_for_case_query(self, case_query: CaseQuery, prompt_str: Optional[str] = None,
+                              prompt_for: Optional[PromptFor] = None, code_to_modify: Optional[str] = None,
+                              title: Optional[str] = None):
         self.case_query = case_query
         self.prompt_for = prompt_for
         self.code_to_modify = code_to_modify
-        title_text = title_txt or ""
+        title_text = title or ""
         case_attr_type = ', '.join([t.__name__ for t in case_query.core_attribute_type])
         case_attr_type = style(f"{case_attr_type}", 'g', 28, 'bold')
         case_name = style(f"{case_query.name}", 'b', 28, 'bold')
         title_text = style(f"{title_text} {case_name} of type {case_attr_type}", 'o', 28, 'bold')
-        self.update_for_object(case_query.case, case_query.case_name, case_query.scope, title_text)
+        self.update_for_object(case_query.case, case_query.case_name, scope=case_query.scope, title_text=title_text,
+                               header=prompt_str)
 
     def update_for_object(self, obj: Any, name: str, scope: Optional[dict] = None,
-                          title_text: Optional[str] = None):
+                          title_text: Optional[str] = None, header: Optional[str] = None):
         self.update_main_obj(obj, name)
         title_text = title_text or style(f"{name}", 'o', 28, 'bold')
         scope = scope or {}
@@ -370,6 +361,9 @@ class RDRCaseViewer(QMainWindow):
         self.update_attribute_layout(obj, name)
         self.title_label.setText(title_text)
         self.ipython_console.update_namespace(scope)
+        if header is not None and len(header) > 0:
+            self.ipython_console.print(header)
+        self.exit_status = ExitStatus.CLOSE
 
     def update_main_obj(self, obj, name):
         self.main_obj = {name: obj}
@@ -441,8 +435,6 @@ class RDRCaseViewer(QMainWindow):
                 if isinstance(item.widget(), CollapsibleBox):
                     self.expand_collapse_all(item.widget(), expand=True, curr_depth=curr_depth + 1, max_depth=max_depth)
 
-
-
     def create_buttons_widget(self):
         button_widget = QWidget()
         button_widget_layout = QVBoxLayout(button_widget)
@@ -466,13 +458,19 @@ class RDRCaseViewer(QMainWindow):
         load_btn.clicked.connect(self._load)
         load_btn.setStyleSheet(f"background-color: {color_name_to_html('b')}; color: white;")  # Blue button
 
-        self.save_btn = QPushButton("Save")
-        self.save_btn.setStyleSheet(f"background-color: {color_name_to_html('b')}; color: white;")  # Blue button
+        current_value_btn = QPushButton("Current Value")
+        current_value_btn.clicked.connect(self._show_current_value)
+        current_value_btn.setStyleSheet(f"background-color: {color_name_to_html('m')}; color: white;")
+
+        rule_tree_btn = QPushButton("Rule Tree")
+        rule_tree_btn.clicked.connect(self._show_rule_tree)  # Placeholder for rule tree functionality
+        rule_tree_btn.setStyleSheet(f"background-color: {color_name_to_html('r')}; color: white;")
 
         row_1_button_widget_layout.addWidget(edit_btn)
         row_1_button_widget_layout.addWidget(load_btn)
-        row_1_button_widget_layout.addWidget(accept_btn)
-        row_2_button_widget_layout.addWidget(self.save_btn)
+        row_1_button_widget_layout.addWidget(current_value_btn)
+        row_2_button_widget_layout.addWidget(rule_tree_btn)
+        row_2_button_widget_layout.addWidget(accept_btn)
         return button_widget
 
     def _accept(self):
@@ -481,16 +479,15 @@ class RDRCaseViewer(QMainWindow):
         self.close()
 
     def _edit(self):
-        self.template_file_creator = TemplateFileCreator(self.case_query, self.prompt_for, self.code_to_modify,
-                                                         self.print)
+        self.template_file_creator = self.create_template_file_creator()
         self.template_file_creator.edit()
 
     def _load(self):
         if not self.template_file_creator:
             return
         self.code_lines, updates = self.template_file_creator.load(self.template_file_creator.temp_file_path,
-                                                                    self.template_file_creator.func_name,
-                                                                    self.template_file_creator.print_func)
+                                                                   self.template_file_creator.func_name,
+                                                                   self.template_file_creator.print_func)
         self.ipython_console.kernel.shell.user_ns.update(updates)
         if self.code_lines is not None:
             self.user_input = encapsulate_code_lines_into_a_function(
@@ -498,7 +495,27 @@ class RDRCaseViewer(QMainWindow):
                 self.template_file_creator.function_signature,
                 self.template_file_creator.func_doc, self.case_query)
             self.case_query.scope.update(updates)
-        self.template_file_creator = None
+
+    def _show_current_value(self):
+        self.ipython_console.print(self.case_query.current_value_str)
+
+    def _show_rule_tree(self):
+        if self.case_query is None:
+            self.ipython_console.print("No case query provided.")
+            return
+        if not self.case_query.rdr:
+            self.ipython_console.print("No rule tree available for this case query.")
+            return
+        file_path = os.path.join(os.getcwd(), "rule_tree")
+        self.case_query.render_rule_tree(file_path)
+        template_file_creator = self.template_file_creator
+        if template_file_creator is None:
+            template_file_creator = self.create_template_file_creator()
+        template_file_creator.open_file_in_editor(file_path + ".svg")
+
+    def create_template_file_creator(self) -> TemplateFileCreator:
+        return TemplateFileCreator(self.case_query, self.prompt_for, self.code_to_modify,
+                                   self.print)
 
     def update_attribute_layout(self, obj, name: str):
         # Clear the existing layout
@@ -547,7 +564,8 @@ class RDRCaseViewer(QMainWindow):
             attr = f"{attr}"
             try:
                 if is_iterable(value) or hasattr(value, "__dict__") and not inspect.isfunction(value):
-                    self.add_collapsible(attr, value, layout, current_depth + 1, max_depth, chain_name=f"{chain_name}.{attr}")
+                    self.add_collapsible(attr, value, layout, current_depth + 1, max_depth,
+                                         chain_name=f"{chain_name}.{attr}")
                 else:
                     self.add_non_collapsible(attr, value, layout)
             except Exception as e:
@@ -559,7 +577,7 @@ class RDRCaseViewer(QMainWindow):
         type_name = type(value) if not isinstance(value, type) else value
         collapsible = CollapsibleBox(
             f'<b><span style="color:#FFA07A;">{attr}</span></b> {python_colored_repr(type_name)}', viewer=self,
-        chain_name=chain_name, main_obj=self.main_obj)
+            chain_name=chain_name, main_obj=self.main_obj)
         self.add_attributes(value, attr, collapsible.content_layout, current_depth, max_depth, chain_name=chain_name)
         layout.addWidget(collapsible)
 
@@ -587,7 +605,6 @@ class IPythonConsole(RichJupyterWidget):
 
         # Monkey patch its run_cell method
         def custom_run_cell(this, raw_cell, **kwargs):
-            print(raw_cell)
             if contains_return_statement(raw_cell) and 'def ' not in raw_cell:
                 if self.parent.template_file_creator and self.parent.template_file_creator.func_name in raw_cell:
                     self.command_log = self.parent.code_lines
@@ -601,7 +618,6 @@ class IPythonConsole(RichJupyterWidget):
 
         original_run_cell = self.kernel.shell.run_cell
         self.kernel.shell.run_cell = MethodType(custom_run_cell, self.kernel.shell)
-
         self.kernel_client = self.kernel_manager.client()
         self.kernel_client.start_channels()
 
@@ -630,7 +646,7 @@ class IPythonConsole(RichJupyterWidget):
     .in-prompt { font-weight: bold; color: %(in_prompt_color)s }
     .out-prompt-number { font-weight: bold; color: %(out_prompt_number_color)s }
     .out-prompt { font-weight: bold; color: %(out_prompt_color)s }
-'''%dict(
+''' % dict(
             bgcolor='#0b0d0b', fgcolor='#47d9cc', select="#555",
             in_prompt_number_color='lime', in_prompt_color='lime',
             out_prompt_number_color='red', out_prompt_color='red'
@@ -647,6 +663,12 @@ class IPythonConsole(RichJupyterWidget):
         Update the user namespace with new variables.
         """
         self.kernel.shell.user_ns.update(namespace)
+
+    def print(self, msg):
+        """
+        Custom print function to append messages to the command log.
+        """
+        self.execute(f"print(\"\\n\\n{msg}\")", hidden=True)
 
     def execute(self, source=None, hidden=False, interactive=False):
         # Log the command before execution

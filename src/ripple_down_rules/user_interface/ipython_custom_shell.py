@@ -6,9 +6,9 @@ from IPython.terminal.embed import InteractiveShellEmbed
 from colorama import Fore, Style
 from traitlets.config import Config
 
+from .template_file_creator import TemplateFileCreator
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import PromptFor
-from .template_file_creator import TemplateFileCreator
 from ..utils import contains_return_statement, extract_dependencies, encapsulate_code_lines_into_a_function
 
 
@@ -20,6 +20,7 @@ class MyMagics(Magics):
                  prompt_for: Optional[PromptFor] = None,
                  case_query: Optional[CaseQuery] = None):
         super().__init__(shell)
+        self.case_query: Optional[CaseQuery] = case_query
         self.rule_editor = TemplateFileCreator(case_query, prompt_for=prompt_for, code_to_modify=code_to_modify)
         self.all_code_lines: Optional[List[str]] = None
 
@@ -35,6 +36,16 @@ class MyMagics(Magics):
         self.shell.user_ns.update(updates)
 
     @line_magic
+    def current_value(self, line):
+        """
+        Display the current value of the attribute of the case.
+        """
+        if self.case_query is None:
+            print(f"{Fore.RED}No case query provided.{Style.RESET_ALL}")
+            return
+        print(self.case_query.current_value_str)
+
+    @line_magic
     def help(self, line):
         """
         Display help information for the Ipython shell.
@@ -48,6 +59,8 @@ Opens a temporary file in PyCharm for editing a function (conclusion or conditio
 {Fore.MAGENTA}Usage: %load{Style.RESET_ALL}
 Loads the function defined in the temporary file into the user namespace, that can then be used inside the
  Ipython shell. You can then do `{Fore.GREEN}return {Fore.RESET}function_name(case)`.
+{Fore.MAGENTA}Usage: %current_value{Style.RESET_ALL}
+Shows the current value of the case attribute on which the rule are being fit.
         """
         print(help_text)
 
@@ -144,7 +157,7 @@ class IPythonShell:
                 self.user_input = None
             else:
                 self.user_input = encapsulate_code_lines_into_a_function(self.all_code_lines,
-                                                       function_name=self.shell.my_magics.rule_editor.func_name,
-                                                       function_signature=self.shell.my_magics.rule_editor.function_signature,
-                                                       func_doc=self.shell.my_magics.rule_editor.func_doc,
-                                                       case_query=self.case_query)
+                                                                         function_name=self.shell.my_magics.rule_editor.func_name,
+                                                                         function_signature=self.shell.my_magics.rule_editor.function_signature,
+                                                                         func_doc=self.shell.my_magics.rule_editor.func_doc,
+                                                                         case_query=self.case_query)

@@ -4,6 +4,7 @@ import ast
 import json
 import logging
 import os
+import sys
 import uuid
 from abc import ABC, abstractmethod
 from textwrap import dedent, indent
@@ -49,12 +50,13 @@ class Expert(ABC):
                  answers_save_path: Optional[str] = None):
         self.all_expert_answers = []
         self.use_loaded_answers = use_loaded_answers
-        self.append = True
         self.answers_save_path = answers_save_path
         if answers_save_path is not None and os.path.exists(answers_save_path + '.py'):
             if use_loaded_answers:
                 self.load_answers(answers_save_path)
-            os.remove(answers_save_path + '.py')
+            if not append:
+                os.remove(answers_save_path + '.py')
+        self.append = True
 
     @abstractmethod
     def ask_for_conditions(self, case_query: CaseQuery, last_evaluated_rule: Optional[Rule] = None) \
@@ -248,8 +250,8 @@ class Human(Expert):
                 self.convert_json_answer_to_python_answer(case_query, user_input, condition, PromptFor.Conditions)
         else:
             user_input, condition = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conditions, prompt_str=data_to_show)
-        if user_input == 'exit':
-            exit()
+        if user_input in ['exit', 'quit']:
+            sys.exit()
         if not self.use_loaded_answers:
             self.all_expert_answers.append((condition.scope, user_input))
             if self.answers_save_path is not None:
@@ -260,7 +262,6 @@ class Human(Expert):
     def convert_json_answer_to_python_answer(self, case_query: CaseQuery, user_input: str,
                                              callable_expression: CallableExpression,
                                              prompt_for: PromptFor):
-        case_query.scope['case'] = case_query.case
         tfc = TemplateFileCreator(case_query, prompt_for=prompt_for)
         code = tfc.build_boilerplate_code()
         if user_input.startswith('def'):
@@ -303,11 +304,11 @@ class Human(Expert):
                                                                                    prompt_str=data_to_show)
             if expert_input is None:
                 self.all_expert_answers.append(({}, None))
-            elif expert_input != 'exit':
+            elif expert_input not in ['exit', 'quit']:
                 self.all_expert_answers.append((expression.scope, expert_input))
-            if self.answers_save_path is not None and expert_input != 'exit':
+            if self.answers_save_path is not None and expert_input not in ['exit', 'quit']:
                 self.save_answers()
-        if expert_input == 'exit':
-            exit()
+        if expert_input in ['exit', 'quit']:
+            sys.exit()
         case_query.target = expression
         return expression

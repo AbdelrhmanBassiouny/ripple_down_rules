@@ -35,7 +35,7 @@ class GUITestCase(unittest.TestCase):
         cls.app = QApplication([])
         cls.cases, cls.targets = load_zoo_dataset(cache_file=f"{os.path.dirname(__file__)}/../test_results/zoo")
         cls.cq = CaseQuery(cls.cases[0], "species", (Species,), True, _target=cls.targets[0])
-        cls.viewer = RDRCaseViewer(save_dir=f"{os.path.dirname(__file__)}/../test_results/grdr_viewer")
+        cls.viewer = RDRCaseViewer()
         cls.person = Person("Ahmed", Address("Cairo"))
 
     def test_change_title_text(self):
@@ -60,16 +60,3 @@ class GUITestCase(unittest.TestCase):
         self.viewer.update_for_object(self.person, "Person")
         self.viewer.show()
         self.app.exec()
-
-    def test_save_button(self):
-        file_path = f"{os.path.dirname(__file__)}/../test_results/grdr_viewer.json"
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        grdr, _ = get_fit_grdr(self.cases, self.targets)
-        grdr.set_viewer(self.viewer)
-        self.viewer.title_label.setText(style("Press `Save` To Test", "o", 28, 'bold'))
-        self.viewer.show()
-        self.app.exec()
-        grdr_viewer_dir = f"{os.path.dirname(__file__)}/../test_results/grdr_viewer"
-        self.assertTrue(os.path.exists(f"{grdr_viewer_dir}/{grdr.model_name}/rdr_metadata/{grdr.model_name}.json"))
-

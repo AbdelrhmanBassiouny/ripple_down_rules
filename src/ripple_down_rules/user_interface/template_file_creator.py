@@ -109,20 +109,21 @@ class TemplateFileCreator:
 
         self.open_file_in_editor()
 
-    def open_file_in_editor(self):
+    def open_file_in_editor(self, file_path: Optional[str] = None):
         """
         Open the file in the available editor.
         """
+        file_path = file_path or self.temp_file_path
         if self.editor_cmd is not None:
-            subprocess.Popen([self.editor_cmd, self.temp_file_path],
+            subprocess.Popen([self.editor_cmd, file_path],
                              stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL)
         elif self.editor == Editor.Pycharm:
-            subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), self.temp_file_path],
+            subprocess.Popen(["pycharm", "--line", str(self.user_edit_line), file_path],
                              stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL)
         elif self.editor == Editor.Code:
-            subprocess.Popen(["code", self.temp_file_path])
+            subprocess.Popen(["code", file_path])
         elif self.editor == Editor.CodeServer:
             try:
                 subprocess.check_output(["pgrep", "-f", "code-server"])
@@ -134,7 +135,8 @@ class TemplateFileCreator:
             except (subprocess.CalledProcessError, ValueError) as e:
                 self.process = start_code_server(self.workspace)
             self.print_func(f"Open code-server in your browser at http://localhost:{self.port}?folder={self.workspace}")
-        self.print_func(f"Edit the file: {Fore.MAGENTA}{self.temp_file_path}")
+        if file_path.endswith('.py'):
+            self.print_func(f"Edit the file: {Fore.MAGENTA}{file_path}")
 
     def build_boilerplate_code(self):
         imports = self.get_imports()
@@ -183,7 +185,7 @@ class TemplateFileCreator:
             func_args = ', '.join([f"{k}: {v}" if str(v) not in ["NoneType", "None"] else str(k)
                                    for k, v in func_args.items()])
         else:
-            func_args = f"case: {self.case_type.__name__}"
+            func_args = f"case: {self.case_query.case_type.__name__}"
         return func_args
 
     def write_to_file(self, code: str):
@@ -212,7 +214,7 @@ class TemplateFileCreator:
                 else:
                     case_type_imports.append(v)
         else:
-            case_type_imports.append(self.case_type)
+            case_type_imports.append(self.case_query.case_type)
         if self.output_type is None:
             output_type_imports = [Any]
         else:
@@ -302,7 +304,7 @@ class TemplateFileCreator:
                 exec(source, scope, exec_globals)
                 user_function = exec_globals[func_name]
                 updates[func_name] = user_function
-                print_func(f"{Fore.BLUE}Loaded `{func_name}` function into user namespace.{Style.RESET_ALL}")
+                print_func(f"\n{Fore.WHITE}Loaded the following function into user namespace:\n{Fore.GREEN}{func_name}{Style.RESET_ALL}")
                 break
         if updates:
             all_code_lines = extract_function_source(file_path,

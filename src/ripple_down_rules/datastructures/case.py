@@ -20,19 +20,20 @@ if TYPE_CHECKING:
 
 class Case(UserDict, SubclassJSONSerializer):
     """
-    A collection of attributes that represents a set of constraints on a case. This is a dictionary where the keys are
-    the names of the attributes and the values are the attributes. All are stored in lower case.
+    A collection of attributes that represents a set of attributes of a case. This is a dictionary where the keys are
+    the names of the attributes and the values are the attributes. All are stored in lower case, and can be accessed
+    using the dot notation as well as the dictionary access notation.
     """
 
     def __init__(self, _obj_type: Type, _id: Optional[Hashable] = None,
                  _name: Optional[str] = None, original_object: Optional[Any] = None, **kwargs):
         """
-        Create a new row.
+        Create a new case.
 
-        :param _obj_type: The type of the object that the row represents.
-        :param _id: The id of the row.
-        :param _name: The semantic name that describes the row.
-        :param kwargs: The attributes of the row.
+        :param _obj_type: The original type of the object that the case represents.
+        :param _id: The id of the case.
+        :param _name: The semantic name that describes the case.
+        :param kwargs: The attributes of the case.
         """
         super().__init__(kwargs)
         self._original_object = original_object
@@ -43,12 +44,12 @@ class Case(UserDict, SubclassJSONSerializer):
     @classmethod
     def from_obj(cls, obj: Any, obj_name: Optional[str] = None, max_recursion_idx: int = 3) -> Case:
         """
-        Create a row from an object.
+        Create a case from an object.
 
-        :param obj: The object to create a row from.
+        :param obj: The object to create a case from.
         :param max_recursion_idx: The maximum recursion index to prevent infinite recursion.
         :param obj_name: The name of the object.
-        :return: The row of the object.
+        :return: The case that represents the object.
         """
         return create_case(obj, max_recursion_idx=max_recursion_idx, obj_name=obj_name)
 
@@ -129,7 +130,7 @@ class Case(UserDict, SubclassJSONSerializer):
 @dataclass
 class CaseAttributeValue(SubclassJSONSerializer):
     """
-    A column value is a value in a column.
+    Encapsulates a single value of a case attribute, it adds an id to the value.
     """
     id: Hashable
     """

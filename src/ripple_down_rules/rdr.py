@@ -13,7 +13,6 @@ from . import logger
 
 try:
     from matplotlib import pyplot as plt
-
     Figure = plt.Figure
 except ImportError as e:
     logger.debug(f"{e}: matplotlib is not installed")
@@ -96,16 +95,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.viewer: Optional[RDRCaseViewer] = RDRCaseViewer.instances[0]\
             if RDRCaseViewer and any(RDRCaseViewer.instances) else None
         self.input_node: Optional[Rule] = None
-
-    @property
-    def viewer(self):
-        return self._viewer
-
-    @viewer.setter
-    def viewer(self, viewer):
-        self._viewer = viewer
-        if viewer:
-            viewer.set_save_function(self.save)
 
     def render_evaluated_rule_tree(self, filename: str, show_full_tree: bool = False) -> None:
         if show_full_tree:
@@ -195,16 +184,6 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         is required in case of relative imports in the generated python file.
         """
         pass
-
-    def set_viewer(self, viewer: RDRCaseViewer):
-        """
-        Set the viewer for the classifier.
-
-        :param viewer: The viewer to set.
-        """
-        self.viewer = viewer
-        if self.viewer is not None:
-            self.viewer.set_save_function(self.save)
 
     def fit(self, case_queries: List[CaseQuery],
             expert: Optional[Expert] = None,
@@ -332,6 +311,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.case_type = case_query.case_type if self.case_type is None else self.case_type
         self.case_name = case_query.case_name if self.case_name is None else self.case_name
         case_query.scenario = scenario if case_query.scenario is None else case_query.scenario
+        case_query.rdr = self
 
         expert = expert or Human(answers_save_path=self.save_dir + '/expert_answers'
                                  if self.save_dir else None)

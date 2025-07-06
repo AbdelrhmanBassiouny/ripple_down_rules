@@ -1,6 +1,9 @@
 import ast
 import logging
+import sys
 from _ast import AST
+
+from .. import logger
 
 try:
     from PyQt6.QtWidgets import QApplication
@@ -51,18 +54,19 @@ class UserPrompt:
         callable_expression: Optional[CallableExpression] = None
         while True:
             with self.shell_lock:
-                user_input, expression_tree = self.prompt_user_about_case(case_query, prompt_for, prompt_str, code_to_modify=prev_user_input)
+                user_input, expression_tree = self.prompt_user_about_case(case_query, prompt_for, prompt_str,
+                                                                          code_to_modify=prev_user_input)
             if user_input is None:
                 if prompt_for == PromptFor.Conclusion:
-                    self.print_func(f"{Fore.YELLOW}No conclusion provided. Exiting.{Style.RESET_ALL}")
+                    self.print_func(f"\n{Fore.YELLOW}No conclusion provided. Exiting.{Style.RESET_ALL}")
                     return None, None
                 else:
-                    self.print_func(f"{Fore.RED}Conditions must be provided. Please try again.{Style.RESET_ALL}")
+                    self.print_func(f"\n{Fore.RED}Conditions must be provided. Please try again.{Style.RESET_ALL}")
                     continue
-            elif user_input == "exit":
-                self.print_func(f"{Fore.YELLOW}Exiting.{Style.RESET_ALL}")
+            elif user_input in ["exit", 'quit']:
+                self.print_func(f"\n{Fore.YELLOW}Exiting.{Style.RESET_ALL}")
                 return user_input, None
-                
+
             prev_user_input = '\n'.join(user_input.split('\n')[2:-1])
             conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
             callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
@@ -73,15 +77,15 @@ class UserPrompt:
                 if len(make_list(result)) == 0 and (user_input_to_modify is not None
                                                     and (prev_user_input != user_input_to_modify)):
                     user_input_to_modify = prev_user_input
-                    self.print_func(f"{Fore.YELLOW}The given expression gave an empty result for case {case_query.name}."
-                          f" Please accept or modify!{Style.RESET_ALL}")
+                    self.print_func(
+                        f"{Fore.YELLOW}The given expression gave an empty result for case {case_query.name}."
+                        f" Please accept or modify!{Style.RESET_ALL}")
                     continue
                 break
             except Exception as e:
                 logging.error(e)
                 self.print_func(f"{Fore.RED}{e}{Style.RESET_ALL}")
         return user_input, callable_expression
-
 
     def prompt_user_about_case(self, case_query: CaseQuery, prompt_for: PromptFor,
                                prompt_str: Optional[str] = None,
@@ -95,7 +99,7 @@ class UserPrompt:
         :param code_to_modify: The code to modify. If given will be used as a start for user to modify.
         :return: The user input, and the executable expression that was parsed from the user input.
         """
-        self.print_func("Entered shell")
+        logger.debug("Entered shell")
         initial_prompt_str = f"{prompt_str}\n" if prompt_str is not None else ''
         if prompt_for == PromptFor.Conclusion:
             prompt_for_str = f"Give possible value(s) for:"
@@ -103,20 +107,20 @@ class UserPrompt:
             prompt_for_str = f"Give conditions for:"
         case_query.scope.update({'case': case_query.case})
         shell = None
+
         if self.viewer is None:
+            prompt_for_str = prompt_for_str.replace(":", f" {case_query.name}:")
             prompt_str = f"{Fore.WHITE}{initial_prompt_str}{Fore.MAGENTA}{prompt_for_str}"
             prompt_str = self.construct_prompt_str_for_shell(case_query, prompt_for, prompt_str)
             shell = IPythonShell(header=prompt_str, prompt_for=prompt_for, case_query=case_query,
-                                    code_to_modify=code_to_modify)
+                                 code_to_modify=code_to_modify)
         else:
-            prompt_str = initial_prompt_str + prompt_for_str
-            self.viewer.update_for_case_query(case_query, prompt_str,
-                                                prompt_for=prompt_for, code_to_modify=code_to_modify)
+            prompt_str = case_query.current_value_str
+            self.viewer.update_for_case_query(case_query, prompt_for=prompt_for, code_to_modify=code_to_modify,
+                                              title=prompt_for_str, prompt_str=prompt_str)
         user_input, expression_tree = self.prompt_user_input_and_parse_to_expression(shell=shell)
-        self.print_func("Exited shell")
+        logger.debug("Exited shell")
         return user_input, expression_tree
-
-
 
     def construct_prompt_str_for_shell(self, case_query: CaseQuery, prompt_for: PromptFor,
                                        prompt_str: Optional[str] = None) -> str:
@@ -127,8 +131,7 @@ class UserPrompt:
         :param prompt_for: The type of information the user should provide for the given case.
         :param prompt_str: The prompt string to display to the user.
         """
-        prompt_str += (f"\n{Fore.CYAN}{case_query.name}{Fore.MAGENTA} of type(s) "
-                       f"{Fore.CYAN}({', '.join(map(lambda x: x.__name__, case_query.core_attribute_type))}){Fore.MAGENTA}")
+        prompt_str += '\n' + case_query.current_value_str
         if prompt_for == PromptFor.Conditions:
             prompt_str += (f"\ne.g. `{Fore.GREEN}return {Fore.BLUE}len{Fore.RESET}(case.attribute) > {Fore.BLUE}0` "
                            f"{Fore.MAGENTA}\nOR `{Fore.GREEN}return {Fore.YELLOW}True`{Fore.MAGENTA} (If you want the"
@@ -137,7 +140,6 @@ class UserPrompt:
 
         prompt_str = f"{Fore.MAGENTA}{prompt_str}{Fore.YELLOW}\n(Write %help for guide){Fore.RESET}\n"
         return prompt_str
-
 
     def prompt_user_input_and_parse_to_expression(self, shell: Optional[IPythonShell] = None,
                                                   user_input: Optional[str] = None) \
@@ -152,17 +154,18 @@ class UserPrompt:
         while True:
             if user_input is None:
                 user_input = self.start_shell_and_get_user_input(shell=shell)
-                if user_input is None or user_input == 'exit':
+                if user_input is None or user_input in ['exit', 'quit']:
                     return user_input, None
-                self.print_func(f"{Fore.GREEN}Captured User input: {Style.RESET_ALL}")
-                highlighted_code = highlight(user_input, PythonLexer(), TerminalFormatter())
-                self.print_func(highlighted_code)
+                if logger.level <= logging.DEBUG:
+                    self.print_func(f"\n{Fore.GREEN}Captured User input: {Style.RESET_ALL}")
+                    highlighted_code = highlight(user_input, PythonLexer(), TerminalFormatter())
+                    self.print_func(highlighted_code)
             try:
                 return user_input, parse_string_to_expression(user_input)
             except Exception as e:
                 msg = f"Error parsing expression: {e}"
                 logging.error(msg)
-                self.print_func(f"{Fore.RED}{msg}{Style.RESET_ALL}")
+                self.print_func(f"\n{Fore.RED}{msg}{Style.RESET_ALL}")
                 user_input = None
 
     def start_shell_and_get_user_input(self, shell: Optional[IPythonShell] = None) -> Optional[str]:
@@ -185,6 +188,6 @@ class UserPrompt:
             self.viewer.show()
             app.exec()
             if self.viewer.exit_status == ExitStatus.CLOSE:
-                exit(0)
+                sys.exit()
             user_input = self.viewer.user_input
         return user_input

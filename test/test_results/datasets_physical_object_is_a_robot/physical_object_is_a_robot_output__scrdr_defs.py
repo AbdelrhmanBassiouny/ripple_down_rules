@@ -1,6 +1,6 @@
-from typing_extensions import Dict, Optional, Union
-from types import NoneType
 from ...datasets import PhysicalObject, Robot
+from types import NoneType
+from typing_extensions import Dict, Optional, Union
 
 
 def conditions_226969243620390858682731042391766665817(case) -> bool:
