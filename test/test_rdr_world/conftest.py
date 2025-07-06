@@ -3,7 +3,7 @@ import sys
 from os.path import dirname
 
 import pytest
-from typing_extensions import Callable
+from typing_extensions import Callable, Type
 
 try:
     from PyQt6.QtWidgets import QApplication
@@ -15,7 +15,7 @@ except ImportError as e:
 from ..conf.world.handles_and_containers import HandlesAndContainersWorld
 from ..datasets import *
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from ripple_down_rules.experts import Human
+from ripple_down_rules.experts import Human, Expert, AI
 from ripple_down_rules.helpers import is_matching
 from ripple_down_rules.rdr import GeneralRDR
 
@@ -55,6 +55,7 @@ def drawer_case_queries() -> List[CaseQuery]:
 class ExpertConfig:
     filename: str
     use_loaded_answers: bool
+    expert_type: Type[Expert] = field(default=Human)
 
 
 @pytest.fixture
@@ -65,7 +66,7 @@ def expert():
 
         :param conf: ExpertConfig object containing configuration for the expert.
         """
-        human = Human(use_loaded_answers=conf.use_loaded_answers)
+        human = conf.expert_type(use_loaded_answers=conf.use_loaded_answers)
         filename = os.path.join(dirname(__file__), "../test_expert_answers", conf.filename)
         human.load_answers(filename)
         return human
@@ -74,11 +75,19 @@ def expert():
 
 
 @pytest.fixture
-def drawer_cabinet_expert(expert) -> Human:
+def drawer_cabinet_human_expert(expert) -> Human:
     """
     Fixture to create an expert for drawer and cabinet views.
     """
-    conf = ExpertConfig("drawer_cabinet_expert_answers_fit", use_loaded_answers=True)
+    conf = ExpertConfig("drawer_cabinet_human_expert_answers_fit", use_loaded_answers=False)
+    return expert(conf)
+
+@pytest.fixture
+def drawer_cabinet_ai_expert(expert) -> Human:
+    """
+    Fixture to create an expert for drawer and cabinet views.
+    """
+    conf = ExpertConfig("drawer_cabinet_ai_expert_answers_fit", use_loaded_answers=False, expert_type=AI)
     return expert(conf)
 
 
@@ -106,12 +115,12 @@ def possibilities_rdr_verification(rdr: GeneralRDR, case_query: CaseQuery) -> No
 
 
 @pytest.fixture
-def drawer_rdr(drawer_case_query, drawer_cabinet_expert) -> GeneralRDR:
+def drawer_rdr(drawer_case_query, drawer_cabinet_human_expert) -> GeneralRDR:
     """
     Fixture to create a GeneralRDR for drawer views.
     """
     rdr = GeneralRDR()
-    rdr.fit_case(drawer_case_query, expert=drawer_cabinet_expert)
+    rdr.fit_case(drawer_case_query, expert=drawer_cabinet_human_expert)
     possibilities_rdr_verification(rdr, drawer_case_query)
     return rdr
 
@@ -127,12 +136,12 @@ def get_method_object_from_pytest_request(request) -> Callable:
     return func
 
 @pytest.fixture
-def drawer_cabinet_rdr(request, drawer_cabinet_expert) -> GeneralRDR:
+def drawer_cabinet_rdr(request, drawer_cabinet_human_expert) -> GeneralRDR:
     world = handles_and_containers_world()
     rdr = GeneralRDR()
     for view in [Drawer, Cabinet]:
         rdr.fit_case(CaseQuery(world, "views", (view,), False, case_factory=handles_and_containers_world),
-                     expert=drawer_cabinet_expert, scenario=get_method_object_from_pytest_request(request))
+                     expert=drawer_cabinet_human_expert, scenario=get_method_object_from_pytest_request(request))
     found_views = rdr.classify(world)
     for view in [Drawer, Cabinet]:
         assert len([v for v in found_views["views"] if isinstance(v, view)]) > 0

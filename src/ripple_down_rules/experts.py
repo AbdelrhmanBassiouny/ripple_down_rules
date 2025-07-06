@@ -205,6 +205,28 @@ class Expert(ABC):
             self.all_expert_answers.append((scope, function_source))
 
 
+class AI(Expert):
+    """
+    The AI Expert class, an expert that uses AI to provide differentiating features and conclusions.
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize the AI expert.
+        """
+        super().__init__(**kwargs)
+        self.user_prompt = UserPrompt()
+
+    def ask_for_conditions(self, case_query: CaseQuery,
+                           last_evaluated_rule: Optional[Rule] = None) \
+            -> CallableExpression:
+        ...
+
+    def ask_for_conclusion(self, case_query: CaseQuery) -> Optional[CallableExpression]:
+        ...
+
+
+
 class Human(Expert):
     """
     The Human Expert class, an expert that asks the human to provide differentiating features and conclusions.

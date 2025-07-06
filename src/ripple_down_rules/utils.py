@@ -1935,7 +1935,8 @@ class FilteredDotExporter(object):
 
 
 def render_tree(root: Node, use_dot_exporter: bool = False,
-                filename: str = "scrdr", only_nodes: List[Node] = None, show_in_console: bool = False):
+                filename: str = "scrdr", only_nodes: List[Node] = None, show_in_console: bool = False,
+                color_map: Optional[Callable[[Node], str]] = None) -> None:
     """
     Render the tree using the console and optionally export it to a dot file.
 
@@ -1944,6 +1945,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     :param filename: The name of the file to export the tree to.
     :param only_nodes: A list of nodes to include in the dot export.
     :param show_in_console: Whether to print the tree to the console.
+    :param color_map: A function that returns a color for certain nodes.
     """
     if not root:
         logger.warning("No rules to render")
@@ -1960,10 +1962,11 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
                                  include_nodes=only_nodes,
                                  nodenamefunc=unique_node_names,
                                  edgeattrfunc=edge_attr_setter,
-                                 nodeattrfunc=lambda node: f'style=filled, fillcolor={node.color}'
+                                 nodeattrfunc=lambda node: f'style=filled,'
+                                                           f' fillcolor={color_map(node) if color_map else node.color}',
                                  )
         de.to_dotfile(f"{filename}{'.dot'}")
-        # de.to_picture(f"{filename}{'.png'}")
+        de.to_picture(f"{filename}{'.svg'}")
 
 
 def draw_tree(root: Node, fig: Figure):

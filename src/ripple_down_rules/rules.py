@@ -63,6 +63,8 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self.uid: str = uid if uid else str(uuid4().int)
         self.evaluated: bool = False
         self._user_defined_name: Optional[str] = None
+        self.last_conclusion: Optional[Any] = None
+        self.contributed: bool = False
 
     def get_an_updated_case_copy(self, case: Case) -> Case:
         """
@@ -318,6 +320,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         """
         Get the name of the conditions of the rule, which is the user input of the conditions.
         """
+        import pdb;pdb.set_trace()
         return self.expression_name(self.conditions)
 
     @property

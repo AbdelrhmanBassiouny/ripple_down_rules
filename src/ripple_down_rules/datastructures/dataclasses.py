@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import typing
+import uuid
 from dataclasses import dataclass, field
 
 import typing_extensions
@@ -10,15 +11,14 @@ from omegaconf import MISSING
 from sqlalchemy.orm import DeclarativeBase as SQLTable
 from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, get_origin, Set, Callable, TYPE_CHECKING
 
-from build.lib.ripple_down_rules.utils import render_tree
-from ..utils import get_method_name, get_function_import_data, get_function_representation
 from .callable_expression import CallableExpression
 from .case import create_case, Case
 from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, get_value_type_from_type_hint, \
-    typing_to_python_type
+    typing_to_python_type, render_tree, get_method_name, get_function_import_data, get_function_representation
 
 if TYPE_CHECKING:
     from ..rdr import RippleDownRules
+    from ..rules import Rule
 
 
 @dataclass
@@ -105,7 +105,10 @@ class CaseQuery:
     def render_rule_tree(self, filepath: Optional[str] = None):
         if self.rdr is None:
             return
-        render_tree(self.rdr.start_rule, use_dot_exporter=True, filename=filepath)
+        contributing_rules = [r for r in self.rdr.get_contributing_rules()
+                              if any(make_set(r.last_conclusion).intersection(make_set(self.current_value)))]
+        render_tree(self.rdr.start_rule, use_dot_exporter=True, filename=filepath,
+                    color_map=lambda x: 'orange' if x in contributing_rules else x.color)
 
     @property
     def current_value_str(self):
@@ -284,7 +287,7 @@ class CaseQuery:
                          conditions=self.conditions, is_function=self.is_function,
                          function_args_type_hints=self.function_args_type_hints,
                          case_factory=self.case_factory, case_factory_idx=self.case_factory_idx,
-                         case_conf=self.case_conf, scenario=self.scenario)
+                         case_conf=self.case_conf, scenario=self.scenario, rdr=self.rdr)
 
 
 @dataclass
@@ -322,3 +325,39 @@ class CaseFactoryMetaData:
 
     def __str__(self):
         return self.__repr__()
+
+
+@dataclass
+class RDRConclusion:
+    """
+    This dataclass represents a conclusion of a Ripple Down Rule.
+    It contains the conclusion expression, the type of the conclusion, and the scope in which it is evaluated.
+    """
+    value: Any
+    """
+    The conclusion value.
+    """
+    frozen_case: Any
+    """
+    The frozen case that the conclusion was made for.
+    """
+    rule: Rule
+    """
+    The rule that gave this conclusion.
+    """
+    rdr: RippleDownRules
+    """
+    The Ripple Down Rules that classified the case and produced this conclusion.
+    """
+    id: int = field(default_factory=lambda: uuid.uuid4().int)
+    """
+    The unique identifier of the conclusion.
+    """
+
+    def __hash__(self):
+        return hash(self.id)
+
+    def __eq__(self, other):
+        if not isinstance(other, RDRConclusion):
+            return False
+        return self.id == other.id

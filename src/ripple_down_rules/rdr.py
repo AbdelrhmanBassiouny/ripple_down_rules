@@ -106,6 +106,26 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                 render_tree(evaluated_rules[0], use_dot_exporter=True, filename=filename,
                             only_nodes=evaluated_rules)
 
+    def get_contributing_rules(self) -> Optional[List[Rule]]:
+        """
+        Get the contributing rules of the classifier.
+
+        :return: The contributing rules.
+        """
+        if self.start_rule is None:
+            return None
+        return [r for r in self.get_fired_rule_tree() if r.contributed]
+
+    def get_fired_rule_tree(self) -> Optional[List[Rule]]:
+        """
+        Get the fired rule tree of the classifier.
+
+        :return: The fired rule tree.
+        """
+        if self.start_rule is None:
+            return None
+        return [r for r in self.get_evaluated_rule_tree() if r.fired]
+
     def get_evaluated_rule_tree(self) -> Optional[List[Rule]]:
         """
         Get the evaluated rule tree of the classifier.
@@ -751,6 +771,9 @@ class SingleClassRDR(RDRWithCodeWriter):
         """
         pred = self.evaluate(case)
         conclusion = pred.conclusion(case) if pred is not None and pred.fired else self.default_conclusion
+        if pred is not None and pred.fired:
+            pred.contributed = True
+            pred.last_conclusion = conclusion
         if pred is not None and pred.fired and case_query is not None:
             if pred.corner_case_metadata is None and conclusion is not None \
                     and type(conclusion) in case_query.core_attribute_type:
@@ -868,6 +891,9 @@ class MultiClassRDR(RDRWithCodeWriter):
                             and any(
                         ct in case_query.core_attribute_type for ct in map(type, make_list(rule_conclusion))):
                         evaluated_rule.corner_case_metadata = CaseFactoryMetaData.from_case_query(case_query)
+                if rule_conclusion is not None and any(make_list(rule_conclusion)):
+                    evaluated_rule.contributed = True
+                    evaluated_rule.last_conclusion = rule_conclusion
                 self.add_conclusion(rule_conclusion)
             evaluated_rule = next_rule
         return make_set(self.conclusions)
