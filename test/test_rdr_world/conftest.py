@@ -21,8 +21,9 @@ from ripple_down_rules.rdr import GeneralRDR
 
 app: Optional[QApplication] = None
 viewer: Optional[RDRCaseViewer] = None
+use_gui: bool = False
 
-if RDRCaseViewer is not None and QApplication is not None:
+if RDRCaseViewer is not None and QApplication is not None and use_gui:
     app = QApplication(sys.argv)
     viewer = RDRCaseViewer(save_dir="./test_generated_rdrs")
 
@@ -64,7 +65,7 @@ def expert():
 
         :param conf: ExpertConfig object containing configuration for the expert.
         """
-        human = Human(use_loaded_answers=conf.use_loaded_answers, viewer=viewer)
+        human = Human(use_loaded_answers=conf.use_loaded_answers)
         filename = os.path.join(dirname(__file__), "../test_expert_answers", conf.filename)
         human.load_answers(filename)
         return human

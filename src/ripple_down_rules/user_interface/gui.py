@@ -21,7 +21,7 @@ except ImportError as e:
 from typing_extensions import Optional, Any, List, Dict, Callable
 
 from ..datastructures.dataclasses import CaseQuery
-from ..datastructures.enums import PromptFor
+from ..datastructures.enums import PromptFor, ExitStatus
 from .template_file_creator import TemplateFileCreator
 from ..utils import is_iterable, contains_return_statement, encapsulate_code_lines_into_a_function
 from .object_diagram import generate_object_graph
@@ -283,11 +283,13 @@ class RDRCaseViewer(QMainWindow):
     attributes_widget: Optional[QWidget] = None
     save_function: Optional[Callable[str, str], None] = None
     instances: List[RDRCaseViewer] = []
+    exit_status: ExitStatus = ExitStatus.CLOSE
 
     def __init__(self, parent=None,
                  save_dir: Optional[str] = None,
                  save_model_name: Optional[str] = None):
         super().__init__(parent)
+        self.exit_status = ExitStatus.CLOSE
         self.instances.clear()
         self.instances.append(self)
         self.save_dir = save_dir
@@ -328,7 +330,7 @@ class RDRCaseViewer(QMainWindow):
 
         # Add both to main layout
         main_layout.addWidget(self.attributes_widget, stretch=1)
-        main_layout.addWidget(middle_widget, stretch=1)
+        main_layout.addWidget(middle_widget, stretch=2)
         main_layout.addWidget(self.obj_diagram_viewer, stretch=2)
 
     def set_save_function(self, save_function: Callable[[str, str], None]) -> None:
@@ -474,6 +476,7 @@ class RDRCaseViewer(QMainWindow):
         return button_widget
 
     def _accept(self):
+        self.exit_status = ExitStatus.SUCCESS
         # close the window
         self.close()
 

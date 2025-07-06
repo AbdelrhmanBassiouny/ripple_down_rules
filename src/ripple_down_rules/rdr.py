@@ -83,23 +83,18 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     Whether the output of the classification of this rdr allows only one possible conclusion or not.
     """
 
-    def __init__(self, start_rule: Optional[Rule] = None, viewer: Optional[RDRCaseViewer] = None,
+    def __init__(self, start_rule: Optional[Rule] = None,
                  save_dir: Optional[str] = None, model_name: Optional[str] = None):
         """
         :param start_rule: The starting rule for the classifier.
-        :param viewer: The viewer gui to use for the classifier. If None, no viewer is used.
         :param save_dir: The directory to save the classifier to.
         """
         self.model_name: Optional[str] = model_name
         self.save_dir = save_dir
         self.start_rule = start_rule
         self.fig: Optional[Figure] = None
-        self.viewer: Optional[RDRCaseViewer] = viewer
-        if viewer is None and RDRCaseViewer is not None:
-            if len(RDRCaseViewer.instances) > 0:
-                self.viewer = RDRCaseViewer.instances[0]
-                logger.error("No viewer was provided, but there is already an existing viewer. "
-                             "Using the existing viewer.")
+        self.viewer: Optional[RDRCaseViewer] = RDRCaseViewer.instances[0]\
+            if RDRCaseViewer and any(RDRCaseViewer.instances) else None
         self.input_node: Optional[Rule] = None
 
     @property
@@ -107,10 +102,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         return self._viewer
 
     @viewer.setter
-    def viewer(self, value):
-        self._viewer = value
-        if value is not None:
-            value.set_save_function(self.save)
+    def viewer(self, viewer):
+        self._viewer = viewer
+        if viewer:
+            viewer.set_save_function(self.save)
 
     def render_evaluated_rule_tree(self, filename: str, show_full_tree: bool = False) -> None:
         if show_full_tree:
@@ -335,8 +330,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.case_name = case_query.case_name if self.case_name is None else self.case_name
         case_query.scenario = scenario if case_query.scenario is None else case_query.scenario
 
-        expert = expert or Human(viewer=self.viewer,
-                                 answers_save_path=self.save_dir + '/expert_answers'
+        expert = expert or Human(answers_save_path=self.save_dir + '/expert_answers'
                                  if self.save_dir else None)
         if case_query.target is None:
             case_query_cp = copy(case_query)

@@ -213,14 +213,12 @@ class Human(Expert):
     The Human Expert class, an expert that asks the human to provide differentiating features and conclusions.
     """
 
-    def __init__(self, viewer: Optional[RDRCaseViewer] = None, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize the Human expert.
-
-        :param viewer: The RDRCaseViewer instance to use for prompting the user.
         """
         super().__init__(**kwargs)
-        self.user_prompt = UserPrompt(viewer)
+        self.user_prompt = UserPrompt()
 
     def ask_for_conditions(self, case_query: CaseQuery,
                            last_evaluated_rule: Optional[Rule] = None) \

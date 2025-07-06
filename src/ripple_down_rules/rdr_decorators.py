@@ -96,8 +96,7 @@ class RDRDecorator:
                 if len(self.parsed_output_type) == 0:
                     self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
                 if self.expert is None:
-                    self.expert = Human(viewer=self.viewer,
-                                        answers_save_path=self.rdr_models_dir + f'/{self.model_name}/expert_answers')
+                    self.expert = Human(answers_save_path=self.rdr_models_dir + f'/{self.model_name}/expert_answers')
                 case_query = self.create_case_query_from_method(func, func_output,
                                                                 self.parsed_output_type,
                                                                 self.mutual_exclusive,

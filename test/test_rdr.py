@@ -52,7 +52,7 @@ class TestRDR(TestCase):
         use_loaded_answers = True
         save_answers = False
         filename = self.expert_answers_dir + "/scrdr_expert_answers_classify"
-        expert = Human(use_loaded_answers=use_loaded_answers, viewer=self.viewer)
+        expert = Human(use_loaded_answers=use_loaded_answers)
         if use_loaded_answers:
             expert.load_answers(filename)
 

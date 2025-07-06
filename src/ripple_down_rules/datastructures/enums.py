@@ -7,6 +7,19 @@ from typing_extensions import List, Dict, Any, Type
 from ripple_down_rules.utils import SubclassJSONSerializer
 
 
+class ExitStatus(Enum):
+    """
+    Describes the status at exit of the user interface.
+    """
+    CLOSE = auto()
+    """
+    The user wants to stop the program.
+    """
+    SUCCESS = auto()
+    """
+    The user completed the task successfully.
+    """
+
 class InteractionMode(Enum):
     """
     The interaction mode of the RDR.

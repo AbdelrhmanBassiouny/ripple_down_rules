@@ -21,8 +21,9 @@ from ripple_down_rules.rdr import GeneralRDR
 
 app: Optional[QApplication] = None
 viewer: Optional[RDRCaseViewer] = None
+use_gui: bool = False
 
-if RDRCaseViewer is not None and QApplication is not None:
+if RDRCaseViewer is not None and QApplication is not None and use_gui:
     app = QApplication(sys.argv)
     viewer = RDRCaseViewer(save_dir="./test_generated_rdrs")
 
@@ -69,7 +70,7 @@ def view_rdr(handles_and_containers_world, views=(Drawer, Cabinet),
              save_answers: bool = False,
              append: bool = False) -> GeneralRDR:
     world = handles_and_containers_world
-    expert = Human(use_loaded_answers=use_loaded_answers, append=append, viewer=viewer)
+    expert = Human(use_loaded_answers=use_loaded_answers, append=append)
     filename = os.path.join(os.getcwd(), "test_expert_answers/view_rdr_expert_answers_fit")
     if use_loaded_answers:
         expert.load_answers(filename)

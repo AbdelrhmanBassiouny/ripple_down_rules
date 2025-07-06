@@ -4,7 +4,7 @@ from _ast import AST
 
 try:
     from PyQt6.QtWidgets import QApplication
-    from .gui import RDRCaseViewer
+    from .gui import RDRCaseViewer, style
 except ImportError:
     QApplication = None
     RDRCaseViewer = None
@@ -17,7 +17,7 @@ from typing_extensions import Optional, Tuple
 
 from ..datastructures.callable_expression import CallableExpression, parse_string_to_expression
 from ..datastructures.dataclasses import CaseQuery
-from ..datastructures.enums import PromptFor
+from ..datastructures.enums import PromptFor, ExitStatus
 from .ipython_custom_shell import IPythonShell
 from ..utils import make_list
 from threading import RLock
@@ -29,17 +29,12 @@ class UserPrompt:
     """
     shell_lock: RLock = RLock()  # To ensure that only one thread can access the shell at a time
 
-    def __init__(self, viewer: Optional[RDRCaseViewer] = None):
+    def __init__(self):
         """
         Initialize the UserPrompt class.
-
-        :param viewer: The RDRCaseViewer instance to use for prompting the user.
         """
-        self.viewer = viewer
-        if RDRCaseViewer is not None and viewer is None:
-            self.viewer = RDRCaseViewer()
-        self.print_func = print if viewer is None else viewer.print
-
+        self.viewer = RDRCaseViewer.instances[0] if RDRCaseViewer and any(RDRCaseViewer.instances) else None
+        self.print_func = self.viewer.print if self.viewer else print
 
     def prompt_user_for_expression(self, case_query: CaseQuery, prompt_for: PromptFor, prompt_str: Optional[str] = None) \
             -> Tuple[Optional[str], Optional[CallableExpression]]:
@@ -101,19 +96,20 @@ class UserPrompt:
         :return: The user input, and the executable expression that was parsed from the user input.
         """
         self.print_func("Entered shell")
-        prompt_str = f"{Fore.WHITE}{prompt_str}" if prompt_str is not None else ''
+        initial_prompt_str = f"{prompt_str}\n" if prompt_str is not None else ''
         if prompt_for == PromptFor.Conclusion:
-            prompt_str += f"\n{Fore.MAGENTA}Give possible value(s) for:"
+            prompt_for_str = f"Give possible value(s) for:"
         else:
-            prompt_str += f"\n{Fore.MAGENTA}Give conditions on when can the rule be evaluated for:"
+            prompt_for_str = f"Give conditions for:"
         case_query.scope.update({'case': case_query.case})
         shell = None
         if self.viewer is None:
+            prompt_str = f"{Fore.WHITE}{initial_prompt_str}{Fore.MAGENTA}{prompt_for_str}"
             prompt_str = self.construct_prompt_str_for_shell(case_query, prompt_for, prompt_str)
             shell = IPythonShell(header=prompt_str, prompt_for=prompt_for, case_query=case_query,
                                     code_to_modify=code_to_modify)
         else:
-
+            prompt_str = initial_prompt_str + prompt_for_str
             self.viewer.update_for_case_query(case_query, prompt_str,
                                                 prompt_for=prompt_for, code_to_modify=code_to_modify)
         user_input, expression_tree = self.prompt_user_input_and_parse_to_expression(shell=shell)
@@ -178,6 +174,8 @@ class UserPrompt:
         """
         if self.viewer is None:
             shell = IPythonShell() if shell is None else shell
+            if not hasattr(shell.shell, "auto_match"):
+                shell.shell.auto_match = True  # or True, depending on your preference
             shell.run()
             user_input = shell.user_input
         else:
@@ -186,5 +184,7 @@ class UserPrompt:
                 raise RuntimeError("QApplication instance is None. Please run the application first.")
             self.viewer.show()
             app.exec()
+            if self.viewer.exit_status == ExitStatus.CLOSE:
+                exit(0)
             user_input = self.viewer.user_input
         return user_input
