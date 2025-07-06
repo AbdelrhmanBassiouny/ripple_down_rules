@@ -146,7 +146,8 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
 def extract_function_source(file_path: str,
                             function_names: List[str], join_lines: bool = True,
                             return_line_numbers: bool = False,
-                            include_signature: bool = True) \
+                            include_signature: bool = True,
+                            as_list: bool = False) \
         -> Union[Dict[str, Union[str, List[str]]],
         Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]]]:
     """
@@ -157,6 +158,8 @@ def extract_function_source(file_path: str,
     :param join_lines: Whether to join the lines of the function.
     :param return_line_numbers: Whether to return the line numbers of the function.
     :param include_signature: Whether to include the function signature in the source code.
+    :param as_list: Whether to return a list of function sources instead of dict (useful when there is multiple
+     functions with same name).
     :return: A dictionary mapping function names to their source code as a string if join_lines is True,
      otherwise as a list of strings.
     """
@@ -167,7 +170,9 @@ def extract_function_source(file_path: str,
     tree = ast.parse(source)
     function_names = make_list(function_names)
     functions_source: Dict[str, Union[str, List[str]]] = {}
+    functions_source_list: List[Union[str, List[str]]] = []
     line_numbers: Dict[str, Tuple[int, int]] = {}
+    line_numbers_list: List[Tuple[int, int]] = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and (node.name in function_names or len(function_names) == 0):
             # Get the line numbers of the function
@@ -175,16 +180,24 @@ def extract_function_source(file_path: str,
             func_lines = lines[node.lineno - 1:node.end_lineno]
             if not include_signature:
                 func_lines = func_lines[1:]
-            line_numbers[node.name] = (node.lineno, node.end_lineno)
-            functions_source[node.name] = dedent("\n".join(func_lines)) if join_lines else func_lines
-            if (len(functions_source) >= len(function_names)) and (not len(function_names) == 0):
-                break
-    if len(functions_source) < len(function_names):
+            if as_list:
+                line_numbers_list.append((node.lineno, node.end_lineno))
+            else:
+                line_numbers[node.name] = (node.lineno, node.end_lineno)
+            parsed_function = dedent("\n".join(func_lines)) if join_lines else func_lines
+            if as_list:
+                functions_source_list.append(parsed_function)
+            else:
+                functions_source[node.name] = parsed_function
+            if len(function_names) > 0:
+                if len(functions_source) >= len(function_names) or len(functions_source_list) >= len(function_names):
+                    break
+    if len(functions_source) < len(function_names) and len(functions_source_list) < len(function_names):
         logger.warning(f"Could not find all functions in {file_path}: {function_names} not found, "
                 f"functions not found: {set(function_names) - set(functions_source.keys())}")
     if return_line_numbers:
-        return functions_source, line_numbers
-    return functions_source
+        return functions_source if not as_list else functions_source_list, line_numbers if not as_list else line_numbers_list
+    return functions_source if not as_list else functions_source_list
 
 
 def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optional[str] = None) -> str:

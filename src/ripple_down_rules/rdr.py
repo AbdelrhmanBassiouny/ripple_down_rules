@@ -230,7 +230,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         num_rules: int = 0
         while not stop_iterating:
             for case_query in case_queries:
-                pred_cat = self.fit_case(case_query, expert=expert, **kwargs_for_fit_case)
+                pred_cat = self.fit_case(case_query, expert=expert, clear_expert_answers=False,
+                                         **kwargs_for_fit_case)
                 if case_query.target is None:
                     continue
                 target = {case_query.attribute_name: case_query.target(case_query.case)}
@@ -308,6 +309,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                  update_existing_rules: bool = True,
                  scenario: Optional[Callable] = None,
                  ask_now: Callable = lambda _: True,
+                 clear_expert_answers: bool = True,
                  **kwargs) \
             -> Union[CallableExpression, Dict[str, CallableExpression]]:
         """
@@ -319,7 +321,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param update_existing_rules: Whether to update the existing same conclusion type rules that already gave
         some conclusions with the type required by the case query.
         :param scenario: The scenario at which the case was created, this is used to recreate the case if needed.
-        :ask_now: Whether to ask the expert for refinements or alternatives.
+        :param ask_now: Whether to ask the expert for refinements or alternatives.
+        :param clear_expert_answers: Whether to clear expert answers after saving the new rule.
         :return: The category that the case belongs to.
         """
         if case_query is None:
@@ -348,7 +351,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
 
         if self.save_dir is not None:
             self.save()
-            expert.clear_answers()
+            if clear_expert_answers:
+                expert.clear_answers()
 
         return fit_case_result
 

@@ -23,7 +23,7 @@ def get_fit_scrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
                   case_factory: Callable = load_zoo_cases,
                   scenario: Optional[Callable] = None) -> Tuple[SingleClassRDR, List[CaseQuery]]:
     filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
-    expert = Human(use_loaded_answers=load_answers)
+    expert = Human(use_loaded_answers=load_answers, answers_save_path=filename)
     if load_answers:
         expert.load_answers(filename)
 
@@ -53,7 +53,7 @@ def get_fit_mcrdr(cases: List[Any], targets: List[Any], attribute_name: str = "s
                   case_factory: Callable = load_zoo_cases,
                   scenario: Optional[Callable] = None) -> MultiClassRDR:
     filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
-    expert = Human(use_loaded_answers=load_answers)
+    expert = Human(use_loaded_answers=load_answers, answers_save_path=filename)
     if load_answers:
         expert.load_answers(filename)
     targets = [None for _ in cases] if targets is None or len(targets) == 0 else targets
@@ -80,7 +80,7 @@ def get_fit_grdr(cases: List[Any], targets: List[Any], expert_answers_dir: str =
                  case_factory: Callable = load_zoo_cases,
                  scenario: Optional[Callable] = None) -> Tuple[GeneralRDR, List[dict]]:
     filename = os.path.join(os.path.dirname(__file__), '..', expert_answers_dir, expert_answers_file)
-    expert = Human(use_loaded_answers=load_answers, append=append)
+    expert = Human(use_loaded_answers=load_answers, append=append, answers_save_path=filename)
     if load_answers:
         expert.load_answers(filename)
 

@@ -120,7 +120,9 @@ class CallableExpression(SubclassJSONSerializer):
             self.user_defined_name = user_input.split('(')[0].replace('def ', '')
         else:
             self.user_defined_name = user_input
-        self._user_input: str = encapsulate_user_input(user_input, self.get_encapsulating_function())
+        if f"def {self.encapsulating_function_name}" not in user_input:
+            user_input = encapsulate_user_input(user_input, self.get_encapsulating_function())
+        self._user_input: str = user_input
         if conclusion_type is not None:
             if is_iterable(conclusion_type):
                 conclusion_type = tuple(conclusion_type)
@@ -308,7 +310,7 @@ def parse_string_to_expression(expression_str: str) -> AST:
     :param expression_str: The string which will be parsed.
     :return: The parsed expression.
     """
-    if not expression_str.startswith(CallableExpression.get_encapsulating_function()):
+    if not expression_str.startswith(f"def {CallableExpression.encapsulating_function_name}"):
         expression_str = encapsulate_user_input(expression_str, CallableExpression.get_encapsulating_function())
     mode = 'exec' if expression_str.startswith('def') else 'eval'
     tree = ast.parse(expression_str, mode=mode)
