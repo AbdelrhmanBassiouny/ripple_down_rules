@@ -320,7 +320,6 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         """
         Get the name of the conditions of the rule, which is the user input of the conditions.
         """
-        import pdb;pdb.set_trace()
         return self.expression_name(self.conditions)
 
     @property

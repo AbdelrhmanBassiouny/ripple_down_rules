@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import json
-import logging
 import os
 import sys
-import uuid
 from abc import ABC, abstractmethod
+from dataclasses import is_dataclass
 from textwrap import dedent, indent
 from typing import Tuple, Dict
 
 from typing_extensions import Optional, TYPE_CHECKING, List
 
 from .datastructures.callable_expression import CallableExpression
-from .datastructures.enums import PromptFor
-from .datastructures.dataclasses import CaseQuery
 from .datastructures.case import show_current_and_corner_cases
+from .datastructures.dataclasses import CaseQuery
+from .datastructures.enums import PromptFor
 from .user_interface.template_file_creator import TemplateFileCreator
-from .utils import extract_imports, extract_function_source, get_imports_from_scope, encapsulate_user_input
+from .utils import extract_imports, extract_function_source, get_imports_from_scope, get_class_file_path
 
 try:
     from .user_interface.gui import RDRCaseViewer
@@ -89,7 +89,7 @@ class Expert(ABC):
         """
         if path is None and self.answers_save_path is None:
             raise ValueError("No path provided to clear expert answers, either provide a path or set the "
-                                "answers_save_path attribute.")
+                             "answers_save_path attribute.")
         if path is None:
             path = self.answers_save_path
         if os.path.exists(path + '.py'):
@@ -108,7 +108,7 @@ class Expert(ABC):
             return
         if path is None and self.answers_save_path is None:
             raise ValueError("No path provided to save expert answers, either provide a path or set the "
-                                "answers_save_path attribute.")
+                             "answers_save_path attribute.")
         if path is None:
             path = self.answers_save_path
         self._save_to_python(path, expert_answers=expert_answers)
@@ -165,7 +165,7 @@ class Expert(ABC):
         """
         if path is None and self.answers_save_path is None:
             raise ValueError("No path provided to load expert answers from, either provide a path or set the "
-                                "answers_save_path attribute.")
+                             "answers_save_path attribute.")
         if path is None:
             path = self.answers_save_path
         if os.path.exists(path + '.py'):
@@ -220,11 +220,64 @@ class AI(Expert):
     def ask_for_conditions(self, case_query: CaseQuery,
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
-        ...
+        prompt_str = self.get_prompt_for_ai(case_query, PromptFor.Conditions)
+        print(prompt_str)
+        sys.exit()
 
     def ask_for_conclusion(self, case_query: CaseQuery) -> Optional[CallableExpression]:
-        ...
+        prompt_str = self.get_prompt_for_ai(case_query, PromptFor.Conclusion)
+        output_type_source = self.get_output_type_class_source(case_query)
+        prompt_str = f"\n\n\nOutput type(s) class source:\n{output_type_source}\n\n" + prompt_str
+        print(prompt_str)
+        sys.exit()
 
+    def get_output_type_class_source(self, case_query: CaseQuery) -> str:
+        """
+        Get the output type class source for the AI expert.
+
+        :param case_query: The case query containing the case to classify.
+        :return: The output type class source.
+        """
+        output_types = case_query.core_attribute_type
+
+        def get_class_source(cls):
+            cls_source_file = get_class_file_path(cls)
+            found_class_source = extract_function_source(cls_source_file, function_names=[cls.__name__],
+                                        is_class=True,
+                                        as_list=True)[0]
+            class_signature = found_class_source.split('\n')[0]
+            if '(' in class_signature:
+                parent_class_names = list(map(lambda x: x.strip(),
+                                              class_signature.split('(')[1].split(')')[0].split(',')))
+                parent_classes = [importlib.import_module(cls.__module__).__dict__.get(cls_name.strip())
+                                  for cls_name in parent_class_names]
+            else:
+                parent_classes = []
+            if is_dataclass(cls):
+                found_class_source = f"@dataclass\n{found_class_source}"
+            return '\n'.join([get_class_source(pcls) for pcls in parent_classes] + [found_class_source])
+
+        found_class_sources = []
+        for output_type in output_types:
+            found_class_sources.append(get_class_source(output_type))
+        found_class_sources = '\n\n\n'.join(found_class_sources)
+        return found_class_sources
+
+    def get_prompt_for_ai(self, case_query: CaseQuery, prompt_for: PromptFor) -> str:
+        """
+        Get the prompt for the AI expert.
+
+        :param case_query: The case query containing the case to classify.
+        :param prompt_for: The type of prompt to get.
+        :return: The prompt for the AI expert.
+        """
+        # data_to_show = show_current_and_corner_cases(case_query.case)
+        data_to_show = f"\nCase ({case_query.case_name}):\n {case_query.case.__dict__}"
+        template_file_creator = TemplateFileCreator(case_query, prompt_for=prompt_for)
+        boilerplate_code = template_file_creator.build_boilerplate_code()
+        initial_prompt_str = data_to_show + "\n\n" + boilerplate_code + "\n\n"
+        return self.user_prompt.build_prompt_str_for_ai(case_query, prompt_for=prompt_for,
+                                                        initial_prompt_str=initial_prompt_str)
 
 
 class Human(Expert):
@@ -244,8 +297,9 @@ class Human(Expert):
             -> CallableExpression:
         data_to_show = None
         if (not self.use_loaded_answers or len(self.all_expert_answers) == 0) and self.user_prompt.viewer is None:
-            data_to_show = show_current_and_corner_cases(case_query.case, {case_query.attribute_name: case_query.target_value},
-                                          last_evaluated_rule=last_evaluated_rule)
+            data_to_show = show_current_and_corner_cases(case_query.case,
+                                                         {case_query.attribute_name: case_query.target_value},
+                                                         last_evaluated_rule=last_evaluated_rule)
         return self._get_conditions(case_query, data_to_show)
 
     def _get_conditions(self, case_query: CaseQuery, data_to_show: Optional[str] = None) \
@@ -271,7 +325,8 @@ class Human(Expert):
             if self.answers_save_path is not None and not any(loaded_scope):
                 self.convert_json_answer_to_python_answer(case_query, user_input, condition, PromptFor.Conditions)
         else:
-            user_input, condition = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conditions, prompt_str=data_to_show)
+            user_input, condition = self.user_prompt.prompt_user_for_expression(case_query, PromptFor.Conditions,
+                                                                                prompt_str=data_to_show)
         if user_input in ['exit', 'quit']:
             sys.exit()
         if not self.use_loaded_answers:

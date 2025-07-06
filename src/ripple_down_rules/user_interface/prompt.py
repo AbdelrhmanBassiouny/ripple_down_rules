@@ -32,7 +32,7 @@ class UserPrompt:
     """
     shell_lock: RLock = RLock()  # To ensure that only one thread can access the shell at a time
 
-    def __init__(self):
+    def __init__(self, prompt_user: bool = True):
         """
         Initialize the UserPrompt class.
         """
@@ -121,6 +121,18 @@ class UserPrompt:
         user_input, expression_tree = self.prompt_user_input_and_parse_to_expression(shell=shell)
         logger.debug("Exited shell")
         return user_input, expression_tree
+
+    def build_prompt_str_for_ai(self, case_query: CaseQuery, prompt_for: PromptFor,
+                                initial_prompt_str: Optional[str] = None) -> str:
+        initial_prompt_str = f"{initial_prompt_str}\n" if initial_prompt_str is not None else ''
+        if prompt_for == PromptFor.Conclusion:
+            prompt_for_str = f"Give possible value(s) for:"
+        else:
+            prompt_for_str = f"Give conditions for:"
+        prompt_for_str = prompt_for_str.replace(":", f" {case_query.name}:")
+        prompt_str = f"{Fore.WHITE}{initial_prompt_str}{Fore.MAGENTA}{prompt_for_str}"
+        prompt_str += '\n' + case_query.current_value_str
+        return prompt_str
 
     def construct_prompt_str_for_shell(self, case_query: CaseQuery, prompt_for: PromptFor,
                                        prompt_str: Optional[str] = None) -> str:

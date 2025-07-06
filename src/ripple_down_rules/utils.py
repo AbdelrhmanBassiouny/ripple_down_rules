@@ -21,6 +21,7 @@ from subprocess import check_call
 from tempfile import NamedTemporaryFile
 from textwrap import dedent
 from types import NoneType
+import inspect
 
 import six
 from sqlalchemy.exc import NoInspectionAvailable
@@ -45,7 +46,7 @@ except ImportError as e:
 
 import requests
 from anytree import Node, RenderTree, PreOrderIter
-from sqlalchemy import MetaData, inspect
+from sqlalchemy import MetaData, inspect as sql_inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
@@ -147,7 +148,8 @@ def extract_function_source(file_path: str,
                             function_names: List[str], join_lines: bool = True,
                             return_line_numbers: bool = False,
                             include_signature: bool = True,
-                            as_list: bool = False) \
+                            as_list: bool = False,
+                            is_class: bool = False) \
         -> Union[Dict[str, Union[str, List[str]]],
         Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]]]:
     """
@@ -160,6 +162,7 @@ def extract_function_source(file_path: str,
     :param include_signature: Whether to include the function signature in the source code.
     :param as_list: Whether to return a list of function sources instead of dict (useful when there is multiple
      functions with same name).
+    :param is_class: Whether to also look for class definitions
     :return: A dictionary mapping function names to their source code as a string if join_lines is True,
      otherwise as a list of strings.
     """
@@ -173,8 +176,13 @@ def extract_function_source(file_path: str,
     functions_source_list: List[Union[str, List[str]]] = []
     line_numbers: Dict[str, Tuple[int, int]] = {}
     line_numbers_list: List[Tuple[int, int]] = []
+    if is_class:
+        look_for_type = ast.ClassDef
+    else:
+        look_for_type = ast.FunctionDef
+
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and (node.name in function_names or len(function_names) == 0):
+        if isinstance(node, look_for_type) and (node.name in function_names or len(function_names) == 0):
             # Get the line numbers of the function
             lines = source.splitlines()
             func_lines = lines[node.lineno - 1:node.end_lineno]
@@ -804,6 +812,13 @@ def get_import_path_from_path(path: str) -> Optional[str]:
     return package_name
 
 
+def get_class_file_path(cls):
+    """
+    Get the file path of a class.
+    """
+    return os.path.abspath(inspect.getfile(cls))
+
+
 def get_function_import_data(func: Callable) -> Tuple[str, str]:
     """
     Get the import path of a function.
@@ -1294,7 +1309,7 @@ def copy_orm_instance(instance: SQLTable) -> SQLTable:
     :return: The copied instance.
     """
     try:
-        session: Session = inspect(instance).session
+        session: Session = sql_inspect(instance).session
     except NoInspectionAvailable:
         session = None
     if session is not None:

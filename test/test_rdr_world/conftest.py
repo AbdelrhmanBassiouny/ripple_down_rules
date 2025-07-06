@@ -79,7 +79,7 @@ def drawer_cabinet_human_expert(expert) -> Human:
     """
     Fixture to create an expert for drawer and cabinet views.
     """
-    conf = ExpertConfig("drawer_cabinet_human_expert_answers_fit", use_loaded_answers=False)
+    conf = ExpertConfig("drawer_cabinet_expert_answers_fit", use_loaded_answers=True)
     return expert(conf)
 
 @pytest.fixture
@@ -138,10 +138,23 @@ def get_method_object_from_pytest_request(request) -> Callable:
 @pytest.fixture
 def drawer_cabinet_rdr(request, drawer_cabinet_human_expert) -> GeneralRDR:
     world = handles_and_containers_world()
+    rdr = get_drawer_cabinet_rdr(world, drawer_cabinet_human_expert, get_method_object_from_pytest_request(request))
+    return rdr
+
+@pytest.fixture
+def drawer_cabinet_ai_rdr(request, drawer_cabinet_ai_expert) -> GeneralRDR:
+    world = handles_and_containers_world()
+    rdr = get_drawer_cabinet_rdr(world, drawer_cabinet_ai_expert, get_method_object_from_pytest_request(request))
+    return rdr
+
+def get_drawer_cabinet_rdr(world: World, expert: Expert, scenario: Callable) -> GeneralRDR:
+    """
+    Fixture to create a GeneralRDR for drawer and cabinet views.
+    """
     rdr = GeneralRDR()
     for view in [Drawer, Cabinet]:
         rdr.fit_case(CaseQuery(world, "views", (view,), False, case_factory=handles_and_containers_world),
-                     expert=drawer_cabinet_human_expert, scenario=get_method_object_from_pytest_request(request))
+                     expert=expert, scenario=scenario)
     found_views = rdr.classify(world)
     for view in [Drawer, Cabinet]:
         assert len([v for v in found_views["views"] if isinstance(v, view)]) > 0
