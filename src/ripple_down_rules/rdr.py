@@ -89,8 +89,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param save_dir: The directory to save the classifier to.
         """
         self.model_name: Optional[str] = model_name
-        self.save_dir = save_dir
-        self.start_rule = start_rule
+        self.save_dir: Optional[str] = save_dir
+        self.start_rule: Optional[Rule] = start_rule
         self.fig: Optional[Figure] = None
         self.viewer: Optional[RDRCaseViewer] = RDRCaseViewer.instances[0]\
             if RDRCaseViewer and any(RDRCaseViewer.instances) else None
@@ -272,8 +272,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         """
         if self.start_rule is not None:
             for rule in [self.start_rule] + list(self.start_rule.descendants):
-                rule.evaluated = False
-                rule.fired = False
+                rule.reset()
         if self.start_rule is not None and self.start_rule.parent is None:
             if self.input_node is None:
                 self.input_node = type(self.start_rule)(parent=None, uid='0')
@@ -774,6 +773,8 @@ class SingleClassRDR(RDRWithCodeWriter):
         if pred is not None and pred.fired:
             pred.contributed = True
             pred.last_conclusion = conclusion
+            if case_query is not None:
+                pred.contributed_to_case_query = True
         if pred is not None and pred.fired and case_query is not None:
             if pred.corner_case_metadata is None and conclusion is not None \
                     and type(conclusion) in case_query.core_attribute_type:
@@ -894,6 +895,10 @@ class MultiClassRDR(RDRWithCodeWriter):
                 if rule_conclusion is not None and any(make_list(rule_conclusion)):
                     evaluated_rule.contributed = True
                     evaluated_rule.last_conclusion = rule_conclusion
+                    if case_query is not None:
+                        rule_conclusion_types = set(map(type, make_list(rule_conclusion)))
+                        if any(rule_conclusion_types.intersection(set(case_query.core_attribute_type))):
+                            evaluated_rule.contributed_to_case_query = True
                 self.add_conclusion(rule_conclusion)
             evaluated_rule = next_rule
         return make_set(self.conclusions)
@@ -988,7 +993,7 @@ class MultiClassRDR(RDRWithCodeWriter):
         """
         if not self.start_rule:
             conditions = expert.ask_for_conditions(case_query)
-            self.start_rule = MultiClassTopRule.from_case_query(case_query)
+            self.start_rule: MultiClassTopRule = MultiClassTopRule.from_case_query(case_query)
 
     @property
     def last_top_rule(self) -> Optional[MultiClassTopRule]:

@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional, List
 
 from IPython.core.magic import magics_class, Magics, line_magic
@@ -46,6 +47,19 @@ class MyMagics(Magics):
         print(self.case_query.current_value_str)
 
     @line_magic
+    def show_rule_tree(self, line):
+        """
+        Display the rule tree for the current case query.
+        """
+        if self.case_query is None:
+            print(f"{Fore.RED}No case query provided.{Style.RESET_ALL}")
+            return
+        if self.case_query.rdr is None:
+            print(f"{Fore.RED}No RDR available for the current case query.{Style.RESET_ALL}")
+            return
+        self.case_query.render_rule_tree(view=True)
+
+    @line_magic
     def help(self, line):
         """
         Display help information for the Ipython shell.
@@ -53,14 +67,16 @@ class MyMagics(Magics):
         help_text = f"""
 Directly write python code in the shell, and then `{Fore.GREEN}return {Fore.RESET}output`. Or use 
 the magic commands to write the code in a temporary file and edit it in PyCharm:
-{Fore.MAGENTA}Usage: %edit{Style.RESET_ALL}
+{Fore.MAGENTA}%edit{Style.RESET_ALL}
 Opens a temporary file in PyCharm for editing a function (conclusion or conditions for case)
  that will be executed on the case object.
-{Fore.MAGENTA}Usage: %load{Style.RESET_ALL}
+{Fore.MAGENTA}%load{Style.RESET_ALL}
 Loads the function defined in the temporary file into the user namespace, that can then be used inside the
  Ipython shell. You can then do `{Fore.GREEN}return {Fore.RESET}function_name(case)`.
-{Fore.MAGENTA}Usage: %current_value{Style.RESET_ALL}
+{Fore.MAGENTA}%current_value{Style.RESET_ALL}
 Shows the current value of the case attribute on which the rule are being fit.
+{Fore.MAGENTA}%show_rule_tree{Style.RESET_ALL}
+Displays the rule tree for the current case query.
         """
         print(help_text)
 

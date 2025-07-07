@@ -5,6 +5,8 @@ import logging
 import os.path
 from types import MethodType
 
+from graphviz import Digraph, Source
+
 try:
     from PyQt6.QtCore import Qt
     from PyQt6.QtGui import QPixmap, QPainter, QPalette
@@ -506,12 +508,7 @@ class RDRCaseViewer(QMainWindow):
         if not self.case_query.rdr:
             self.ipython_console.print("No rule tree available for this case query.")
             return
-        file_path = os.path.join(os.getcwd(), "rule_tree")
-        self.case_query.render_rule_tree(file_path)
-        template_file_creator = self.template_file_creator
-        if template_file_creator is None:
-            template_file_creator = self.create_template_file_creator()
-        template_file_creator.open_file_in_editor(file_path + ".svg")
+        self.case_query.render_rule_tree(view=True)
 
     def create_template_file_creator(self) -> TemplateFileCreator:
         return TemplateFileCreator(self.case_query, self.prompt_for, self.code_to_modify,

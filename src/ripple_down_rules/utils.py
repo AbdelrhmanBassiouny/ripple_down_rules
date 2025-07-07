@@ -24,6 +24,7 @@ from types import NoneType
 import inspect
 
 import six
+from graphviz import Source
 from sqlalchemy.exc import NoInspectionAvailable
 from . import logger
 
@@ -1861,6 +1862,24 @@ class FilteredDotExporter(object):
             yield node
         for edge in self.__iter_edges(indent, nodenamefunc, edgeattrfunc, edgetypefunc):
             yield edge
+        legend_dot_graph = """
+// Color legend as a subgraph
+subgraph cluster_legend {
+    label = "Legend";
+    style = dashed;
+    color = gray;
+
+    legend_green [label="Fired->Query Related Value", shape=box, style=filled, fillcolor=green, fontcolor=black, size=0.5];
+    legend_yellow [label="Fired->Some Value", shape=box, style=filled, fillcolor=yellow, fontcolor=black, size=0.5];
+    legend_orange [label="Fired->Empty Value", shape=box, style=filled, fillcolor=orange, fontcolor=black, size=0.5];
+    legend_red [label="Evaluated->Not Fired", shape=box, style=filled, fillcolor=red, fontcolor=black, size=0.5];
+    legend_white [label="Not Evaluated",  shape=box, style=filled, fillcolor=white, fontcolor=black, size=0.5];
+
+    // Invisible edges to arrange legend vertically
+    legend_white -> legend_red -> legend_orange -> legend_yellow -> legend_green [style=invis];
+}"""
+        for line in legend_dot_graph.splitlines():
+            yield "%s" % (line.strip())
         yield "}"
 
     def __iter_options(self, indent):
@@ -1943,6 +1962,12 @@ class FilteredDotExporter(object):
             msg = 'Could not remove temporary file %s' % dotfilename
             logger.warning(msg)
 
+    def to_source(self) -> Source:
+        """
+        Return the source code of the graph as a Source object.
+        """
+        return Source("\n".join(self), filename=self.name)
+
     @staticmethod
     def esc(value):
         """Escape Strings."""
@@ -1951,7 +1976,8 @@ class FilteredDotExporter(object):
 
 def render_tree(root: Node, use_dot_exporter: bool = False,
                 filename: str = "scrdr", only_nodes: List[Node] = None, show_in_console: bool = False,
-                color_map: Optional[Callable[[Node], str]] = None) -> None:
+                color_map: Optional[Callable[[Node], str]] = None,
+                view: bool = False) -> None:
     """
     Render the tree using the console and optionally export it to a dot file.
 
@@ -1961,6 +1987,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     :param only_nodes: A list of nodes to include in the dot export.
     :param show_in_console: Whether to print the tree to the console.
     :param color_map: A function that returns a color for certain nodes.
+    :param view: Whether to view the dot file in a viewer.
     """
     if not root:
         logger.warning("No rules to render")
@@ -1980,8 +2007,12 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
                                  nodeattrfunc=lambda node: f'style=filled,'
                                                            f' fillcolor={color_map(node) if color_map else node.color}',
                                  )
-        de.to_dotfile(f"{filename}{'.dot'}")
-        de.to_picture(f"{filename}{'.svg'}")
+        if view:
+            de.to_source().view()
+        else:
+            filename = filename or "rule_tree"
+            de.to_dotfile(f"{filename}{'.dot'}")
+            de.to_picture(f"{filename}{'.svg'}")
 
 
 def draw_tree(root: Node, fig: Figure):

@@ -1,20 +1,18 @@
 from __future__ import annotations
 
 import inspect
-import typing
 import uuid
 from dataclasses import dataclass, field
 
-import typing_extensions
-from colorama import Fore
+from colorama import Fore, Style
 from omegaconf import MISSING
 from sqlalchemy.orm import DeclarativeBase as SQLTable
-from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, get_origin, Set, Callable, TYPE_CHECKING
+from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, Set, Callable, TYPE_CHECKING
 
 from .callable_expression import CallableExpression
 from .case import create_case, Case
-from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, get_value_type_from_type_hint, \
-    typing_to_python_type, render_tree, get_method_name, get_function_import_data, get_function_representation
+from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, render_tree, \
+    get_function_representation
 
 if TYPE_CHECKING:
     from ..rdr import RippleDownRules
@@ -102,19 +100,16 @@ class CaseQuery:
     The Ripple Down Rules that was used to answer the case query.
     """
 
-    def render_rule_tree(self, filepath: Optional[str] = None):
+    def render_rule_tree(self, filepath: Optional[str] = None, view: bool = False):
         if self.rdr is None:
             return
-        contributing_rules = [r for r in self.rdr.get_contributing_rules()
-                              if any(make_set(r.last_conclusion).intersection(make_set(self.current_value)))]
-        render_tree(self.rdr.start_rule, use_dot_exporter=True, filename=filepath,
-                    color_map=lambda x: 'orange' if x in contributing_rules else x.color)
+        render_tree(self.rdr.start_rule, use_dot_exporter=True, filename=filepath, view=view)
 
     @property
     def current_value_str(self):
         return (f"{Fore.MAGENTA}Current value of {Fore.CYAN}{self.name}{Fore.MAGENTA} of type(s) "
-         f"{Fore.CYAN}({', '.join(map(lambda x: x.__name__, self.core_attribute_type))}){Fore.MAGENTA}: "
-         f"{Fore.WHITE}{self.current_value}")
+                f"{Fore.CYAN}({self.core_attribute_type_str}){Fore.MAGENTA}: "
+                f"{Fore.WHITE}{self.current_value}{Style.RESET_ALL}")
 
     @property
     def current_value(self) -> Any:
@@ -185,7 +180,14 @@ class CaseQuery:
             return attribute_types_str
 
     @property
-    def core_attribute_type(self) -> Tuple[Type]:
+    def core_attribute_type_str(self) -> str:
+        """
+        :return: The names of the core types of the attribute.
+        """
+        return ','.join([t.__name__ for t in self.core_attribute_type])
+
+    @property
+    def core_attribute_type(self) -> Tuple[Type, ...]:
         """
         :return: The core type of the attribute.
         """

@@ -65,6 +65,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         self._user_defined_name: Optional[str] = None
         self.last_conclusion: Optional[Any] = None
         self.contributed: bool = False
+        self.contributed_to_case_query: bool = False
 
     def get_an_updated_case_copy(self, case: Case) -> Case:
         """
@@ -74,11 +75,22 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
         return get_an_updated_case_copy(case, self.conclusion, self.conclusion_name, self.conclusion.conclusion_type,
                                         self.mutually_exclusive)
 
+    def reset(self):
+        self.evaluated = False
+        self.fired = False
+        self.contributed = False
+        self.contributed_to_case_query = False
+        self.last_conclusion = None
+
     @property
     def color(self) -> str:
         if self.evaluated:
-            if self.fired:
+            if self.contributed_to_case_query:
                 return "green"
+            elif self.contributed:
+                return "yellow"
+            elif self.fired:
+                return "orange"
             else:
                 return "red"
         else:
