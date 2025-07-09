@@ -1,0 +1,7 @@
+fastapi==0.116.0
+huggingface_hub==0.33.2
+pydantic==2.11.7
+smolagents==1.19.0
+torch==2.7.0+cu128
+transformers==4.54.0.dev0
+uvicorn==0.35.0
