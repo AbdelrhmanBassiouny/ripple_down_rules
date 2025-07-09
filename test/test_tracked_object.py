@@ -31,10 +31,8 @@ def test_construct_class_composition_and_dependency():
     assert Cabinet.is_a(WorldEntity)
     assert not Cabinet.has(Handle)
     assert Cabinet.has(Handle, recursive=True)
-    assert not Cabinet.has(Body)
-    assert Cabinet.has(Body, recursive=True)
-    assert not Cabinet.has(WorldEntity)
-    assert Cabinet.has(WorldEntity, recursive=True)
+    assert Cabinet.has(Body)
+    assert Cabinet.has(WorldEntity)
     assert not Cabinet.has(Connection, recursive=True)
 
 

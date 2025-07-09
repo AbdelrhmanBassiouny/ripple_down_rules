@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 import inspect
 import uuid
 from dataclasses import dataclass, field, Field, fields
-from enum import Enum, IntEnum
-from functools import cached_property, lru_cache
+from enum import Enum
+from functools import lru_cache
 
 import pydot
 import rustworkx as rx
@@ -69,12 +70,11 @@ class TrackedObjectMixin:
     @lru_cache(maxsize=None)
     def has(cls, tracked_object_type: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
         neighbors = cls._dependency_graph.adj_direction(cls._my_graph_idx(), Direction.OUTBOUND.value)
-        neighbors = {n: e for n, e in neighbors.items() if e in [Relation.isA, Relation.has]}
-        edge_data = neighbors.get(tracked_object_type._my_graph_idx(), None)
-        curr_val = edge_data == Relation.has
+        curr_val = any(e == Relation.has and cls._dependency_graph.get_node_data(n).is_a(tracked_object_type)
+                       for n, e in neighbors.items())
         if recursive:
-            return curr_val or any(cls._dependency_graph.get_node_data(n).has(tracked_object_type, recursive=True)
-                                   or e == Relation.has and cls._dependency_graph.get_node_data(n).is_a(tracked_object_type)
+            return curr_val or any((e in [Relation.has, Relation.isA]
+                                   and cls._dependency_graph.get_node_data(n).has(tracked_object_type, recursive=True))
                                    for n, e in neighbors.items())
         else:
             return curr_val
@@ -116,7 +116,8 @@ class TrackedObjectMixin:
                 cls._add_class_to_dependency_graph(base)
                 if (clazz, base) in cls._inheritance_edges:
                     continue
-                cls._dependency_graph.add_edge(cls._class_graph_indices[clazz], cls._class_graph_indices[base], Relation.isA)
+                cls._dependency_graph.add_edge(cls._class_graph_indices[clazz], cls._class_graph_indices[base],
+                                               Relation.isA)
                 cls._inheritance_edges.append((clazz, base))
 
         if not composition:
