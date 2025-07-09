@@ -71,9 +71,10 @@ class TrackedObjectMixin:
     def has(cls, tracked_object_type: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
         neighbors = cls._dependency_graph.adj_direction(cls._my_graph_idx(), Direction.OUTBOUND.value)
         curr_val = any(e == Relation.has and cls._dependency_graph.get_node_data(n).is_a(tracked_object_type)
+                       or e == Relation.isA and cls._dependency_graph.get_node_data(n).has(tracked_object_type)
                        for n, e in neighbors.items())
         if recursive:
-            return curr_val or any((e in [Relation.has, Relation.isA]
+            return curr_val or any((e == Relation.has
                                    and cls._dependency_graph.get_node_data(n).has(tracked_object_type, recursive=True))
                                    for n, e in neighbors.items())
         else:
