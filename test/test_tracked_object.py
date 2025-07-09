@@ -4,20 +4,38 @@ from os.path import dirname
 import pytest
 
 from ripple_down_rules.rdr import GeneralRDR
-from .datasets import Drawer, Handle, Cabinet
+from .datasets import Drawer, Handle, Cabinet, View, WorldEntity, Body, Connection
+
 
 def test_construct_class_hierarchy():
-    Drawer.make_class_dependency_graph()
+    Drawer.make_class_dependency_graph(composition=False)
     assert len(Drawer._dependency_graph.nodes()) == 16
     assert len(Drawer._dependency_graph.edges()) == 14
     Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
 
-@pytest.mark.skip("Not Implemented yet")
+
+def test_construct_class_composition():
+    Drawer.make_class_dependency_graph(composition=True)
+    Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
+    assert len(Drawer._dependency_graph.nodes()) == 16
+    assert len(Drawer._dependency_graph.edges()) == 19
+    Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
+
+
+# @pytest.mark.skip("Not Implemented yet")
 def test_construct_class_composition_and_dependency():
-    assert Drawer.has_one(Handle)
-    assert Cabinet.has_many(Drawer)
-    assert Cabinet.depends_on(Drawer)
-    assert Cabinet.depends_on(Handle)
+    Drawer.make_class_dependency_graph(composition=True)
+    assert Drawer.has(Handle)
+    assert Cabinet.has(Drawer)
+    assert Cabinet.is_a(View)
+    assert Cabinet.is_a(WorldEntity)
+    assert not Cabinet.has(Handle)
+    assert Cabinet.has(Handle, recursive=True)
+    assert not Cabinet.has(Body)
+    assert Cabinet.has(Body, recursive=True)
+    assert not Cabinet.has(WorldEntity)
+    assert Cabinet.has(WorldEntity, recursive=True)
+    assert not Cabinet.has(Connection, recursive=True)
 
 
 @pytest.mark.skip("Not Implemented yet")

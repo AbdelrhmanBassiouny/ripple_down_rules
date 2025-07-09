@@ -1593,6 +1593,13 @@ def get_all_subclasses(cls: Type) -> Dict[str, Type]:
     return all_subclasses
 
 
+def make_tuple(value: Any) -> Any:
+    """
+    Make a tuple from a value.
+    """
+    return tuple(value) if is_iterable(value) else (value,)
+
+
 def make_set(value: Any) -> Set:
     """
     Make a set from a value.
