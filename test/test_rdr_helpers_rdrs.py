@@ -11,8 +11,7 @@ save_dir = join(dirname(__file__), '..', 'src', 'ripple_down_rules')
 # viewer = RDRCaseViewer(save_dir=save_dir)
 viewer = None
 rdr_decorator: RDRDecorator = RDRDecorator(save_dir, (bool,), True,
-                                           fit=False,
-                                           viewer=viewer)
+                                           fit=False)
 
 
 @rdr_decorator.decorator

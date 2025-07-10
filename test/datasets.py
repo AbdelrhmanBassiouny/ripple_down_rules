@@ -229,7 +229,7 @@ class MappedAnimal(MappedAsDataclass, Base):
     habitats: Mapped[Set[HabitatTable]] = relationship(default_factory=set)
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class WorldEntity(TrackedObjectMixin):
     world: Optional[World] = field(default=None, kw_only=True, repr=False, hash=False)
 
@@ -272,6 +272,9 @@ class World:
     connections: List[Connection] = field(default_factory=list)
     views: List[View] = field(default_factory=list, repr=False)
 
+    def __hash__(self):
+        return hash(self.id)
+
     def __eq__(self, other):
         if not isinstance(other, World):
             return False
@@ -283,11 +286,19 @@ class View(WorldEntity):
     ...
 
 
-@dataclass(unsafe_hash=True)
+@dataclass
 class Drawer(View):
     handle: Handle
     container: Container
     correct: Optional[bool] = None
+
+    def __hash__(self):
+        return hash((self.__class__.__name__, self.handle, self.container))
+
+    def __eq__(self, other):
+        if not isinstance(other, Drawer):
+            return False
+        return self.handle == other.handle and self.container == other.container and self.world == other.world
 
 
 @dataclass
@@ -297,5 +308,10 @@ class Cabinet(View):
 
     def __hash__(self):
         return hash((self.__class__.__name__, self.container))
+
+    def __eq__(self, other):
+        if not isinstance(other, Cabinet):
+            return False
+        return self.container == other.container and self.drawers == other.drawers and self.world == other.world
 
 

@@ -31,7 +31,6 @@ class RDRDecorator:
                  fit: bool = True,
                  expert: Optional[Expert] = None,
                  update_existing_rules: bool = True,
-                 viewer: Optional[RDRCaseViewer] = None,
                  package_name: Optional[str] = None,
                  use_generated_classifier: bool = False,
                  ask_now: Callable[Dict[str, Any], bool] = lambda _: True,
@@ -50,7 +49,6 @@ class RDRDecorator:
             expert will be used.
         :param update_existing_rules: If True, the function will update the existing RDR rules
          even if they gave an output.
-        :param viewer: The viewer to use for the RDR model. If None, no viewer will be used.
         :param package_name: The package name to use for relative imports in the RDR model.
         :param use_generated_classifier: If True, the function will use the generated classifier instead of the RDR model.
         :param ask_now: A callable that takes the case dictionary and returns True if the user should be asked for
@@ -68,7 +66,6 @@ class RDRDecorator:
         self.fit: bool = fit
         self.expert: Optional[Expert] = expert
         self.update_existing_rules = update_existing_rules
-        self.viewer = viewer
         self.package_name = package_name
         self.use_generated_classifier = use_generated_classifier
         self.generated_classifier: Optional[Callable] = None
@@ -181,9 +178,7 @@ class RDRDecorator:
         return Case(dict, id(case_dict), case_name, case_dict, **case_dict), case_dict
 
     def initialize_rdr_model_name_and_load(self, func: Callable) -> None:
-        self.viewer = RDRCaseViewer.instances[0] if RDRCaseViewer is not None and len(RDRCaseViewer.instances) > 0 else self.viewer
-        model_file_name = get_func_rdr_model_name(func, include_file_name=True)
-        self.model_name = str_to_snake_case(model_file_name)
+        self.model_name = get_func_rdr_model_name(func, include_file_name=True)
         self.load()
 
     @staticmethod

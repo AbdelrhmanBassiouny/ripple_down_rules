@@ -10,7 +10,6 @@ import pydot
 import rustworkx as rx
 from typing_extensions import Any, TYPE_CHECKING, Type, final, ClassVar, Dict, List, Optional, Tuple
 
-from .callable_expression import CallableExpression
 from .field_info import FieldInfo
 from .. import logger
 from ..utils import recursive_subclasses
@@ -44,7 +43,8 @@ class TrackedObjectMixin:
     """
     The Ripple Down Rules that classified the case and produced this conclusion.
     """
-    _rdr_tracked_object_id: int = field(init=False, repr=False, default_factory=lambda: uuid.uuid4().int)
+    _rdr_tracked_object_id: int = field(init=False, repr=False, hash=False,
+                                        compare=False, default_factory=lambda: uuid.uuid4().int)
     """
     The unique identifier of the conclusion.
     """
@@ -203,8 +203,9 @@ class TrackedObjectMixin:
             cls._class_graph_indices[class_to_add] = cls_idx
 
     def __getattribute__(self, name: str) -> Any:
-        if name not in [f.name for f in fields(TrackedObjectMixin)] + ['has', 'is_a', 'depends_on']:
-            self._record_dependency(name)
+        # if name not in [f.name for f in fields(TrackedObjectMixin)] + ['has', 'is_a', 'depends_on']\
+        #         and not name.startswith("_"):
+        #     self._record_dependency(name)
         return object.__getattribute__(self, name)
 
     def _record_dependency(self, attr_name):
@@ -215,9 +216,9 @@ class TrackedObjectMixin:
             if (
                     func_name == "__call__" and
                     local_self is not None and
-                    type(local_self) is CallableExpression
+                    type(local_self).__module__ == "callable_expression" and
+                    type(local_self).__name__ == "CallableExpression"
             ):
-                self._used_in_tracker = True
                 logger.debug("TrackedObject used inside CallableExpression")
                 break
 

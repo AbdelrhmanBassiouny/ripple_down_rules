@@ -646,18 +646,21 @@ def capture_variable_assignment(code: str, variable_name: str) -> Optional[str]:
     return assignment
 
 
-def get_func_rdr_model_path(func: Callable, model_dir: str) -> str:
+def get_func_rdr_model_path(func: Callable, model_dir: str, include_file_name: bool = False) -> str:
     """
     :param func: The function to get the model path for.
     :param model_dir: The directory to save the model to.
+    :param include_file_name: Whether to include the file name in the model name.
     :return: The path to the model file.
     """
-    return os.path.join(model_dir, f"{get_func_rdr_model_name(func)}.json")
+    return os.path.join(model_dir, get_func_rdr_model_name(func, include_file_name=include_file_name),
+                        f"{get_func_rdr_model_name(func)}_rdr.py")
 
 
 def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> str:
     """
     :param func: The function to get the model name for.
+    :param include_file_name: Whether to include the file name in the model name.
     :return: The name of the model.
     """
     func_name = get_method_name(func)
@@ -669,7 +672,7 @@ def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> 
         model_name = ''
     model_name += f"{func_class_name}_" if func_class_name else ""
     model_name += f"{func_name}"
-    return model_name
+    return str_to_snake_case(model_name)
 
 
 def stringify_hint(tp):
