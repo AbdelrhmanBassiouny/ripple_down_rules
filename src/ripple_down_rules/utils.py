@@ -22,6 +22,7 @@ from tempfile import NamedTemporaryFile
 from textwrap import dedent
 from types import NoneType
 import inspect
+from typing import Callable
 
 import six
 from graphviz import Source
@@ -1028,7 +1029,8 @@ def get_method_class_name_if_exists(method: Callable) -> Optional[str]:
             return method.__self__.__name__
         elif hasattr(method.__self__, "__class__"):
             return method.__self__.__class__.__name__
-    return method.__qualname__.split('.')[0] if hasattr(method, "__qualname__") else None
+    return (method.__qualname__.split('.')[0]
+            if hasattr(method, "__qualname__") and '.' in method.__qualname__ else None)
 
 
 def get_method_class_if_exists(method: Callable, *args) -> Optional[Type]:
@@ -2071,3 +2073,15 @@ def encapsulate_code_lines_into_a_function(code_lines: List[str], function_name:
     if f"return {function_name}({args})" not in code:
         code = code.strip() + f"\nreturn {function_name}({args})"
     return code
+
+
+def get_method_object_from_pytest_request(request) -> Callable:
+    test_module = request.module.__name__  # e.g., "test_my_module"
+    test_class = request.cls.__name__ if request.cls else None  # if inside a class
+    test_name = request.node.name
+    func = importlib.import_module(test_module)
+    if test_class:
+        func = getattr(getattr(func, test_class), test_name)
+    else:
+        func = getattr(func, test_name)
+    return func

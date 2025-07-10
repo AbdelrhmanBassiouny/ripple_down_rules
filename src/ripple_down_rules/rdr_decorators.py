@@ -9,7 +9,7 @@ from functools import wraps
 from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any, Self, get_type_hints, List, Union, Sequence
 
 from .datastructures.case import Case
-from .datastructures.dataclasses import CaseQuery
+from .datastructures.dataclasses import CaseQuery, CaseFactoryMetaData
 from .experts import Expert, Human
 from .rdr import GeneralRDR
 from . import logger
@@ -58,6 +58,7 @@ class RDRDecorator:
         :return: A decorator to use a GeneralRDR as a classifier that monitors and modifies the function's output.
         """
         self.rdr_models_dir = models_dir
+        self.rdr: Optional[GeneralRDR] = None
         self.model_name: Optional[str] = None
         self.output_type = output_type
         self.parsed_output_type: List[Type] = []
@@ -74,6 +75,8 @@ class RDRDecorator:
             lambda f: f  # Default to no fitting decorator
         self.generate_dot_file = generate_dot_file
         self.not_none_output_found: bool = False
+        # The following value will change dynamically each time the function is called.
+        self.case_factory_metadata: CaseFactoryMetaData = CaseFactoryMetaData()
         self.load()
 
     def decorator(self, func: Callable) -> Callable:
@@ -94,16 +97,18 @@ class RDRDecorator:
                     self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
                 if self.expert is None:
                     self.expert = Human(answers_save_path=self.rdr_models_dir + f'/{self.model_name}/expert_answers')
-                case_query = self.create_case_query_from_method(func, func_output,
-                                                                self.parsed_output_type,
-                                                                self.mutual_exclusive,
-                                                                case, case_dict,
-                                                                *args, **kwargs)
+                case_query = self.create_case_query_from_method(
+                                            func, func_output,
+                                            self.parsed_output_type,
+                                            self.mutual_exclusive,
+                                            args, kwargs,
+                                            case=case, case_dict=case_dict,
+                                            scenario=self.case_factory_metadata.scenario,
+                                            this_case_target_value=self.case_factory_metadata.this_case_target_value)
                 output = self.rdr.fit_case(case_query, expert=self.expert,
-                                           update_existing_rules=self.update_existing_rules,
-                                           viewer=self.viewer)
+                                           update_existing_rules=self.update_existing_rules)
                 return output
-            
+
             if self.fit and not self.use_generated_classifier and self.ask_now(case_dict):
                 output = fit()
             else:
@@ -117,7 +122,8 @@ class RDRDecorator:
                     if self.generate_dot_file:
                         eval_rule_tree = self.rdr.get_evaluated_rule_tree()
                         if not self.not_none_output_found or (eval_rule_tree and len(eval_rule_tree) > 1):
-                            self.rdr.render_evaluated_rule_tree(self.rdr_models_dir + f'/{self.model_name}', show_full_tree=True)
+                            self.rdr.render_evaluated_rule_tree(self.rdr_models_dir + f'/{self.model_name}',
+                                                                show_full_tree=True)
                         if eval_rule_tree and len(eval_rule_tree) > 1:
                             self.not_none_output_found = True
 
@@ -126,6 +132,8 @@ class RDRDecorator:
             else:
                 return func_output[self.output_name]
 
+        wrapper._rdr_decorator_instance = self
+
         return wrapper
 
     @staticmethod
@@ -133,9 +141,11 @@ class RDRDecorator:
                                       func_output: Dict[str, Any],
                                       output_type: Sequence[Type],
                                       mutual_exclusive: bool,
+                                      func_args: Tuple[Any, ...], func_kwargs: Dict[str, Any],
                                       case: Optional[Case] = None,
                                       case_dict: Optional[Dict[str, Any]] = None,
-                                      *args, **kwargs) -> CaseQuery:
+                                      scenario: Optional[Callable] = None,
+                                      this_case_target_value: Optional[Any] = None,) -> CaseQuery:
         """
         Create a CaseQuery from the function and its arguments.
 
@@ -143,20 +153,24 @@ class RDRDecorator:
         :param func_output: The output of the function as a dictionary, where the key is the output name.
         :param output_type: The type of the output as a sequence of types.
         :param mutual_exclusive: If True, the output types are mutually exclusive.
-        :param args: The positional arguments of the function.
-        :param kwargs: The keyword arguments of the function.
+        :param func_args: The positional arguments of the function.
+        :param func_kwargs: The keyword arguments of the function.
+        :param case: The case to create.
+        :param case_dict: The dictionary of the case.
+        :param scenario: The scenario that produced the given case.
+        :param this_case_target_value: The target value for the case.
         :return: A CaseQuery object representing the case.
         """
         output_type = make_set(output_type)
         if case is None or case_dict is None:
-            case, case_dict = RDRDecorator.create_case_from_method(func, func_output, *args, **kwargs)
+            case, case_dict = RDRDecorator.create_case_from_method(func, func_output, *func_args, **func_kwargs)
         scope = func.__globals__
         scope.update(case_dict)
         func_args_type_hints = get_type_hints(func)
         output_name = list(func_output.keys())[0]
         func_args_type_hints.update({output_name: Union[tuple(output_type)]})
         return CaseQuery(case, output_name, tuple(output_type),
-                         mutual_exclusive, scope=scope,
+                         mutual_exclusive, scope=scope, scenario=scenario, this_case_target_value=this_case_target_value,
                          is_function=True, function_args_type_hints=func_args_type_hints)
 
     @staticmethod
@@ -206,7 +220,6 @@ class RDRDecorator:
         """
         Load the RDR model from the specified directory.
         """
-        self.rdr = None
         if self.model_name is not None:
             model_path = os.path.join(self.rdr_models_dir, self.model_name + f"/rdr_metadata/{self.model_name}.json")
             if os.path.exists(os.path.join(self.rdr_models_dir, model_path)):
@@ -219,3 +232,11 @@ class RDRDecorator:
         Update the RDR model from a python file.
         """
         self.rdr.update_from_python(self.rdr_models_dir, package_name=self.package_name)
+
+
+def fit_rdr_func(scenario: Callable, rdr_decorated_func: Callable,
+                 target_value: Optional[Any] = None, *func_args, **func_kwargs) -> None:
+    rdr_decorated_func._rdr_decorator_instance.case_factory_metadata = CaseFactoryMetaData(
+                                                                        this_case_target_value=target_value,
+                                                                        scenario=scenario)
+    rdr_decorated_func(*func_args, **func_kwargs)

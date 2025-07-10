@@ -44,9 +44,7 @@ class Has(Predicate):
     """
     A predicate that checks if an object has a certain type.
     """
-    rdr: ClassVar[RDRDecorator] = RDRDecorator(Predicate.models_dir, (bool,), True, fit=True)
 
     @classmethod
-    @rdr.decorator
     def evaluate(cls, tracked_object_type: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
         pass

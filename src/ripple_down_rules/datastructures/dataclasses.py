@@ -12,7 +12,7 @@ from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, Set
 from .callable_expression import CallableExpression
 from .case import create_case, Case
 from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, render_tree, \
-    get_function_representation
+    get_function_representation, get_method_object_from_pytest_request
 
 if TYPE_CHECKING:
     from ..rdr import RippleDownRules
@@ -60,9 +60,14 @@ class CaseQuery:
     The executable scenario is the root callable that recreates the situation that the case is 
     created in, for example, when the case is created from a test function, this would be the test function itself.
     """
+    this_case_target_value: Optional[Any] = None
+    """
+    The non relational case query instance target value.
+    """
     _target: Optional[CallableExpression] = None
     """
-    The target expression of the attribute.
+    The relational target (the evaluatable conclusion of the rule) which is a callable expression that varies with
+     the case.
     """
     default_value: Optional[Any] = None
     """
@@ -306,6 +311,12 @@ class CaseFactoryMetaData:
     factory_idx: Optional[int] = None
     case_conf: Optional[CaseConf] = None
     scenario: Optional[Callable] = None
+    pytest_request: Optional[Callable] = field(hash=False, compare=False, default=None)
+    this_case_target_value: Optional[Any] = None
+
+    def __post_init__(self):
+        if self.pytest_request is not None and self.scenario is None:
+            self.scenario = get_method_object_from_pytest_request(self.pytest_request)
 
     @classmethod
     def from_case_query(cls, case_query: CaseQuery) -> CaseFactoryMetaData:
@@ -322,8 +333,9 @@ class CaseFactoryMetaData:
         return (f"CaseFactoryMetaData("
                 f"factory_method={factory_method_repr}, "
                 f"factory_idx={self.factory_idx}, "
-                f"case_conf={self.case_conf},"
-                f" scenario={scenario_repr})")
+                f"case_conf={self.case_conf}, "
+                f"scenario={scenario_repr}),"
+                f"this_case_target_value={self.this_case_target_value}")
 
     def __str__(self):
         return self.__repr__()

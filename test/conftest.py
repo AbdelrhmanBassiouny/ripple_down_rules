@@ -1,4 +1,3 @@
-import os
 import sys
 
 import pytest
@@ -108,3 +107,5 @@ def drawer_rdr(drawer_case_queries, use_loaded_answers: bool = True, save_answer
     for case_query in drawer_case_queries:
         assert is_matching(rdr.classify, case_query)
     return rdr
+
+

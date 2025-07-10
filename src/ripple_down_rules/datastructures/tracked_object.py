@@ -30,7 +30,7 @@ class Relation(str, Enum):
     dependsOn = "dependsOn"
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class TrackedObjectMixin:
     """
     A class that is used as a base class to all classes that needs to be tracked for RDR inference, and reasoning.
