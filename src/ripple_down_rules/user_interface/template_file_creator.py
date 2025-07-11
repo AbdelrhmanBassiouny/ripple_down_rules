@@ -277,22 +277,25 @@ class TemplateFileCreator:
         return case._obj_type if isinstance(case, Case) else type(case)
 
     @staticmethod
-    def load(file_path: str, func_name: str, print_func: Callable = print) -> FunctionData:
+    def load(file_path: str, func_name: str, print_func: Callable = print, source: Optional[str] = None) -> FunctionData:
         """
         Load the function from the given file path.
 
         :param file_path: The path to the file to load.
         :param func_name: The name of the function to load.
         :param print_func: The function to use for printing messages.
+        :param source: the read file
         :return: A tuple containing the function source code and the function object as a dictionary
         with the function name as the key and the function object as the value.
         """
         if not file_path:
-            print_func(f"{Fore.RED}ERROR:: No file to load. Run %edit first.{Style.RESET_ALL}")
-            return None, None
+            if source is None:
+                print_func(f"{Fore.RED}ERROR:: No file to load. Run %edit first.{Style.RESET_ALL}")
+                return None, None
 
-        with open(file_path, 'r') as f:
-            source = f.read()
+        if source is None:
+            with open(file_path, 'r') as f:
+                source = f.read()
 
         tree = ast.parse(source)
         updates = {}

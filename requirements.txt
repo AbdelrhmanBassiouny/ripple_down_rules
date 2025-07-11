@@ -12,3 +12,5 @@ sqlalchemy
 pandas
 pyparsing>=3.2.3
 omegaconf
+rustworkx
+pydot
