@@ -1,7 +1,7 @@
+from ...datastructures.case import create_case
 from types import NoneType
-from ripple_down_rules.datastructures.case import Case, create_case
 from typing_extensions import Optional
-from .physical_object_is_a_robot_output__scrdr_defs import *
+from .depends_on_output__scrdr_defs import *
 
 
 attribute_name = 'output_'
@@ -13,7 +13,7 @@ def classify(case: Dict, **kwargs) -> Optional[bool]:
     if not isinstance(case, Case):
         case = create_case(case, max_recursion_idx=3)
 
-    if conditions_226969243620390858682731042391766665817(case):
-        return conclusion_226969243620390858682731042391766665817(case)
+    if conditions_15107258415760040561965086064322061396(case):
+        return conclusion_15107258415760040561965086064322061396(case)
     else:
         return None

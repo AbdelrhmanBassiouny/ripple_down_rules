@@ -7,17 +7,20 @@
                 "_type": "ripple_down_rules.rules.SingleClassRule",
                 "conditions": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n    def conditions_for_physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n        \"\"\"Get conditions on whether it's possible to conclude a value for PhysicalObject_is_a_robot.output_  of type .\"\"\"\n        return True\n    return conditions_for_physical_object_is_a_robot(**case)\n    ",
+                    "user_input": "def _get_value(case):\n    def conditions_for_depends_on(parent_type: Type[TrackedObjectMixin], child_type: Type[TrackedObjectMixin], **kwargs) -> bool:\n        \"\"\"Get conditions on whether it's possible to conclude a value for depends_on.output_  of type .\"\"\"\n        return parent_type.has(child_type)\n    return conditions_for_depends_on(**case)\n    ",
                     "conclusion_type": [
                         "builtins.bool"
                     ],
                     "scope": {
+                        "Drawer": "test.datasets.Drawer",
+                        "Handle": "test.datasets.Handle",
                         "Dict": "typing.Dict",
                         "Optional": "typing.Optional",
+                        "Type": "typing.Type",
                         "Union": "typing.Union",
                         "NoneType": "builtins.NoneType",
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot"
+                        "Case": "ripple_down_rules.datastructures.case.Case",
+                        "TrackedObjectMixin": "ripple_down_rules.datastructures.tracked_object.TrackedObjectMixin"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -27,17 +30,20 @@
                 },
                 "conclusion": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n    def physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n        \"\"\"Get possible value(s) for PhysicalObject_is_a_robot.output_  of type .\"\"\"\n        return isinstance(self_, Robot)\n    return physical_object_is_a_robot(**case)\n    ",
+                    "user_input": "def _get_value(case):\n    def depends_on(parent_type: Type[TrackedObjectMixin], child_type: Type[TrackedObjectMixin], **kwargs) -> bool:\n        \"\"\"Get possible value(s) for depends_on.output_  of type .\"\"\"\n        return True\n    return depends_on(**case)\n    ",
                     "conclusion_type": [
                         "builtins.bool"
                     ],
                     "scope": {
+                        "Drawer": "test.datasets.Drawer",
+                        "Handle": "test.datasets.Handle",
                         "Dict": "typing.Dict",
                         "Optional": "typing.Optional",
+                        "Type": "typing.Type",
                         "Union": "typing.Union",
                         "NoneType": "builtins.NoneType",
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot"
+                        "Case": "ripple_down_rules.datastructures.case.Case",
+                        "TrackedObjectMixin": "ripple_down_rules.datastructures.tracked_object.TrackedObjectMixin"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -46,28 +52,21 @@
                     "mutually_exclusive": true
                 },
                 "parent": null,
-                "corner_case": {
-                    "_type": "ripple_down_rules.datastructures.case.Case",
-                    "self_": null,
-                    "output_": null,
-                    "_id": 140375680622464,
-                    "_obj_type": "builtins.dict",
-                    "_name": "PhysicalObject_is_a_robot"
-                },
+                "corner_case": null,
                 "conclusion_name": "output_",
                 "weight": "",
-                "uid": "226969243620390858682731042391766665817",
+                "uid": "15107258415760040561965086064322061396",
                 "refinement": null,
                 "alternative": null
             },
-            "generated_python_file_name": "physical_object_is_a_robot_output__scrdr",
+            "generated_python_file_name": "depends_on_output__scrdr",
             "name": "output_",
             "case_type": "typing.Dict",
-            "case_name": "PhysicalObject_is_a_robot"
+            "case_name": "depends_on"
         }
     },
-    "generated_python_file_name": "physical_object_is_a_robot_rdr",
+    "generated_python_file_name": "depends_on_rdr",
     "name": "output_",
     "case_type": "typing.Dict",
-    "case_name": "PhysicalObject_is_a_robot"
+    "case_name": "depends_on"
 }

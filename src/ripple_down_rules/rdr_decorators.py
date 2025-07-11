@@ -19,6 +19,7 @@ except ImportError:
     RDRCaseViewer = None
 from .utils import get_method_args_as_dict, get_func_rdr_model_name, make_set, \
     get_method_class_if_exists, str_to_snake_case
+from .helpers import create_case_from_method
 
 
 class RDRDecorator:
@@ -89,7 +90,7 @@ class RDRDecorator:
 
             func_output = {self.output_name: func(*args, **kwargs)}
 
-            case, case_dict = self.create_case_from_method(func, func_output, *args, **kwargs)
+            case, case_dict = create_case_from_method(func, func_output, *args, **kwargs)
 
             @self.fitting_decorator
             def fit():
@@ -163,7 +164,7 @@ class RDRDecorator:
         """
         output_type = make_set(output_type)
         if case is None or case_dict is None:
-            case, case_dict = RDRDecorator.create_case_from_method(func, func_output, *func_args, **func_kwargs)
+            case, case_dict = create_case_from_method(func, func_output, *func_args, **func_kwargs)
         scope = func.__globals__
         scope.update(case_dict)
         func_args_type_hints = get_type_hints(func)
@@ -172,24 +173,6 @@ class RDRDecorator:
         return CaseQuery(case, output_name, tuple(output_type),
                          mutual_exclusive, scope=scope, scenario=scenario, this_case_target_value=this_case_target_value,
                          is_function=True, function_args_type_hints=func_args_type_hints)
-
-    @staticmethod
-    def create_case_from_method(func: Callable,
-                                func_output: Dict[str, Any],
-                                *args, **kwargs) -> Tuple[Case, Dict[str, Any]]:
-        """
-        Create a Case from the function and its arguments.
-
-        :param func: The function to create a case from.
-        :param func_output: A dictionary containing the output of the function, where the key is the output name.
-        :param args: The positional arguments of the function.
-        :param kwargs: The keyword arguments of the function.
-        :return: A Case object representing the case.
-        """
-        case_dict = get_method_args_as_dict(func, *args, **kwargs)
-        case_dict.update(func_output)
-        case_name = get_func_rdr_model_name(func)
-        return Case(dict, id(case_dict), case_name, case_dict, **case_dict), case_dict
 
     def initialize_rdr_model_name_and_load(self, func: Callable) -> None:
         self.model_name = get_func_rdr_model_name(func, include_file_name=True)
@@ -220,6 +203,7 @@ class RDRDecorator:
         """
         Load the RDR model from the specified directory.
         """
+        self.rdr = None
         if self.model_name is not None:
             model_path = os.path.join(self.rdr_models_dir, self.model_name + f"/rdr_metadata/{self.model_name}.json")
             if os.path.exists(os.path.join(self.rdr_models_dir, model_path)):
@@ -234,9 +218,6 @@ class RDRDecorator:
         self.rdr.update_from_python(self.rdr_models_dir, package_name=self.package_name)
 
 
-def fit_rdr_func(scenario: Callable, rdr_decorated_func: Callable,
-                 target_value: Optional[Any] = None, *func_args, **func_kwargs) -> None:
-    rdr_decorated_func._rdr_decorator_instance.case_factory_metadata = CaseFactoryMetaData(
-                                                                        this_case_target_value=target_value,
-                                                                        scenario=scenario)
+def fit_rdr_func(scenario: Callable, rdr_decorated_func: Callable, *func_args, **func_kwargs) -> None:
+    rdr_decorated_func._rdr_decorator_instance.case_factory_metadata = CaseFactoryMetaData(scenario=scenario)
     rdr_decorated_func(*func_args, **func_kwargs)

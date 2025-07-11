@@ -334,8 +334,8 @@ class CaseFactoryMetaData:
                 f"factory_method={factory_method_repr}, "
                 f"factory_idx={self.factory_idx}, "
                 f"case_conf={self.case_conf}, "
-                f"scenario={scenario_repr}),"
-                f"this_case_target_value={self.this_case_target_value}")
+                f"scenario={scenario_repr}, "
+                f"this_case_target_value={self.this_case_target_value})")
 
     def __str__(self):
         return self.__repr__()

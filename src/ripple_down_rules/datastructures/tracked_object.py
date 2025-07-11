@@ -66,6 +66,16 @@ class TrackedObjectMixin:
     """
 
     @classmethod
+    def _reset_dependency_graph(cls) -> None:
+        """
+        Reset the dependency graph and all class indices.
+        """
+        cls._dependency_graph = rx.PyDAG()
+        cls._class_graph_indices = {}
+        cls._composition_edges = []
+        cls._inheritance_edges = []
+
+    @classmethod
     @final
     @lru_cache(maxsize=None)
     def has(cls, tracked_object_type: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
@@ -75,7 +85,7 @@ class TrackedObjectMixin:
                        for n, e in neighbors.items())
         if recursive:
             return curr_val or any((e == Relation.has
-                                   and cls._dependency_graph.get_node_data(n).has(tracked_object_type, recursive=True))
+                                    and cls._dependency_graph.get_node_data(n).has(tracked_object_type, recursive=True))
                                    for n, e in neighbors.items())
         else:
             return curr_val

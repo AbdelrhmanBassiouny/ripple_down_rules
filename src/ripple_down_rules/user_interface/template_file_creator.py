@@ -177,6 +177,8 @@ class TemplateFileCreator:
         if self.case_query.is_function:
             func_args = {}
             for k, v in self.case_query.case.items():
+                if k == self.case_query.attribute_name:
+                    continue
                 if (self.case_query.function_args_type_hints is not None
                         and k in self.case_query.function_args_type_hints):
                     func_args[k] = stringify_hint(self.case_query.function_args_type_hints[k])
@@ -184,6 +186,7 @@ class TemplateFileCreator:
                     func_args[k] = type(v).__name__ if not isinstance(v, type) else f"Type[{v.__name__}]"
             func_args = ', '.join([f"{k}: {v}" if str(v) not in ["NoneType", "None"] else str(k)
                                    for k, v in func_args.items()])
+            func_args += ", **kwargs"
         else:
             func_args = f"case: {self.case_query.case_type.__name__}"
         return func_args

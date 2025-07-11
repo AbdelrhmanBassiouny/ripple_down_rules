@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import importlib
 import os
+from functools import wraps
 from types import ModuleType
-from typing import Tuple
+from typing import Tuple, Callable, Dict, Any, Optional
 
 from typing_extensions import Type, Optional, Callable, Any, Dict, TYPE_CHECKING, Union
 
 from .datastructures.case import create_case, Case
 from .datastructures.dataclasses import CaseQuery
-from .utils import calculate_precision_and_recall
+from .utils import calculate_precision_and_recall, get_method_args_as_dict, get_func_rdr_model_name
 from .utils import get_func_rdr_model_name, copy_case, make_set, update_case
 
 if TYPE_CHECKING:
@@ -116,3 +118,36 @@ def get_an_updated_case_copy(case: Case, conclusion: Callable, attribute_name: s
         output = {attribute_name: output}
     update_case(temp_case_query, output)
     return case_cp
+
+
+def create_case_from_method(func: Callable,
+                            func_output: Dict[str, Any],
+                            *args, **kwargs) -> Tuple[Case, Dict[str, Any]]:
+    """
+    Create a Case from the function and its arguments.
+
+    :param func: The function to create a case from.
+    :param func_output: A dictionary containing the output of the function, where the key is the output name.
+    :param args: The positional arguments of the function.
+    :param kwargs: The keyword arguments of the function.
+    :return: A Case object representing the case.
+    """
+    case_dict = get_method_args_as_dict(func, *args, **kwargs)
+    case_dict.update(func_output)
+    case_name = get_func_rdr_model_name(func)
+    return Case(dict, id(case_dict), case_name, case_dict, **case_dict), case_dict
+
+
+class MockRDRDecorator:
+    def __init__(self, models_dir: str):
+        self.models_dir = models_dir
+    def decorator(self, func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> Optional[Any]:
+            model_dir = get_func_rdr_model_name(func, include_file_name=True)
+            model_name = get_func_rdr_model_name(func, include_file_name=False)
+            rdr = importlib.import_module(os.path.join(self.models_dir, model_dir, f"{model_name}_rdr.py"))
+            func_output = {"output_": func(*args, **kwargs)}
+            case, case_dict = create_case_from_method(func, func_output, *args, **kwargs)
+            return rdr.classify(case)
+        return wrapper

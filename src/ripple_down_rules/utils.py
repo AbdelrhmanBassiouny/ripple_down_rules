@@ -22,7 +22,6 @@ from tempfile import NamedTemporaryFile
 from textwrap import dedent
 from types import NoneType
 import inspect
-from typing import Callable
 
 import six
 from graphviz import Source
@@ -2085,3 +2084,5 @@ def get_method_object_from_pytest_request(request) -> Callable:
     else:
         func = getattr(func, test_name)
     return func
+
+

@@ -2,12 +2,14 @@ import os
 from os.path import dirname
 
 import pytest
+from rustworkx import PyDAG
 
 from ripple_down_rules.rdr import GeneralRDR
 from .datasets import Drawer, Handle, Cabinet, View, WorldEntity, Body, Connection
 
 
 def test_construct_class_hierarchy():
+    # Drawer._reset_dependency_graph()
     Drawer.make_class_dependency_graph(composition=False)
     assert len(Drawer._dependency_graph.nodes()) == 16
     assert len(Drawer._dependency_graph.edges()) == 14
@@ -15,6 +17,7 @@ def test_construct_class_hierarchy():
 
 
 def test_construct_class_composition():
+    # Drawer._reset_dependency_graph()
     Drawer.make_class_dependency_graph(composition=True)
     Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
     assert len(Drawer._dependency_graph.nodes()) == 16
@@ -24,6 +27,7 @@ def test_construct_class_composition():
 
 # @pytest.mark.skip("Not Implemented yet")
 def test_construct_class_composition_and_dependency():
+    # Drawer._reset_dependency_graph()
     Drawer.make_class_dependency_graph(composition=True)
     assert Drawer.has(Handle)
     assert Cabinet.has(Drawer)
