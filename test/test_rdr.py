@@ -75,6 +75,23 @@ class TestRDR(TestCase):
         # render_tree(scrdr.start_rule, use_dot_exporter=True,
         #             filename=self.test_results_dir + f"/scrdr")
 
+    def test_read_scrdr_tree(self):
+        original_scrdr, _ = get_fit_scrdr(self.all_cases, self.targets)
+        save_dir = self.generated_rdrs_dir
+        model_name = original_scrdr.save(save_dir)
+        scrdr_loaded = SingleClassRDR.load(save_dir, original_scrdr.generated_python_file_name)
+        rules_root = SingleClassRDR.read_rule_tree_from_python(save_dir, original_scrdr.generated_python_file_name)
+        for rule, og_rule in zip([rules_root] + list(rules_root.descendants),
+                                 [scrdr_loaded.start_rule] + list(scrdr_loaded.start_rule.descendants)):
+            assert rule.conditions.split('conditions_')[1] == rule.conclusion.split("conclusion_")[1] == rule.uid
+            assert rule.uid == og_rule.uid
+            if not rule.parent:
+                assert not og_rule.parent
+            else:
+                assert rule.parent.uid == og_rule.parent.uid
+            rule.name = f"{rule.conditions[:14]}\n -> {rule.conclusion[:14]} "
+        render_tree(rules_root, use_dot_exporter=True, filename="scrdr_read_tree")
+
     def test_save_load_scrdr(self):
 
         scrdr, _ = get_fit_scrdr(self.all_cases, self.targets, draw_tree=False,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib
 import json
 import os
@@ -26,7 +27,7 @@ from typing_extensions import List, Optional, Dict, Type, Union, Any, Self, Tupl
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
-from .datastructures.enums import MCRDRMode
+from .datastructures.enums import MCRDRMode, RDREdge
 from .experts import Expert, Human
 from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule, MultiClassRefinementRule, \
@@ -482,7 +483,85 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         return module.classify
 
 
+class TreeBuilder(ast.NodeVisitor):
+    """Parses an AST of nested if-elif statements and reconstructs the tree."""
+
+    def __init__(self):
+        self.root = None
+        self.current_parent = None
+        self.current_edge: Optional[RDREdge] = None
+
+    def visit_FunctionDef(self, node):
+        """Finds the main function and starts parsing its body."""
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_If(self, node):
+        """Handles if-elif blocks and creates nodes."""
+        condition = self.get_condition_name(node.test)
+        if condition is None:
+            return
+        rule_uid = condition.split("conditions_")[1]
+        new_node = SingleClassRule(conditions=condition, parent=self.current_parent, uid=rule_uid)
+        if self.current_edge == RDREdge.Alternative:
+            self.current_parent.alternative = new_node
+        elif self.current_edge == RDREdge.Refinement:
+            self.current_parent.refinement = new_node
+
+        if self.current_parent is None:
+            self.root = new_node
+
+        self.current_parent = new_node
+
+        # Parse the body (True branch -> except_if)
+        for stmt in node.body:
+            self.current_edge = RDREdge.Refinement
+            self.current_parent = new_node
+            self.visit(stmt)
+
+        # Parse elif or else (False branches -> else_if)
+        for stmt in node.orelse:
+            self.current_edge = RDREdge.Alternative
+            self.current_parent = new_node
+            if isinstance(stmt, ast.If): # elif case
+                self.visit_If(stmt)
+            else:  # else case (return)
+                # self.visit(stmt)
+                continue
+
+    def visit_Return(self, node, parent=None):
+        """Handles return statements as leaf nodes."""
+        if isinstance(node.value, ast.Call):
+            return_value = node.value.func.id
+        else:
+            return_value = ast.literal_eval(node.value)
+        self.current_parent.conclusion = return_value
+
+    def get_condition_name(self, node):
+        """Extracts the condition function name from an AST expression."""
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            return node.func.id
+        return None
+
+
 class RDRWithCodeWriter(RippleDownRules, ABC):
+
+    @classmethod
+    def read_rule_tree_from_python(cls, model_dir: str, model_name: str):
+        model_dir = os.path.join(model_dir, model_name)
+        filepath = f"{model_dir}/{model_name}.py"
+        with open(filepath, "r") as f:
+            source_code = f.read()
+
+        tree = ast.parse(source_code)
+        builder = TreeBuilder()
+
+        # Find and process the function
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef):
+                builder.visit_FunctionDef(node)
+
+        return builder.root
 
     def update_from_python(self, model_dir: str, package_name: Optional[str] = None):
         """
