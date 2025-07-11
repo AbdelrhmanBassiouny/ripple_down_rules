@@ -5,7 +5,7 @@ import pytest
 from typing_extensions import Type, Optional, Any, Callable
 
 from ripple_down_rules.rdr_decorators import RDRDecorator, fit_rdr_func
-from ripple_down_rules.datastructures.tracked_object import TrackedObjectMixin
+from ripple_down_rules import TrackedObjectMixin
 from .datasets import Drawer, Handle, Cabinet
 
 

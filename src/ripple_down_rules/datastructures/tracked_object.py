@@ -100,7 +100,6 @@ class TrackedObjectMixin:
         return issubclass(cls, tracked_object_type)
 
     @classmethod
-    @final
     @lru_cache(maxsize=None)
     def depends_on(cls, tracked_object_type: Type[TrackedObjectMixin]) -> bool:
         raise NotImplementedError
