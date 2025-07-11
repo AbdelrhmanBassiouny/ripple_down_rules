@@ -1,7 +1,7 @@
 from typing_extensions import Optional, Set
 from ripple_down_rules.datastructures.case import Case, create_case
-from ripple_down_rules.utils import make_set
 from ripple_down_rules.helpers import get_an_updated_case_copy
+from ripple_down_rules.utils import make_set
 from .physical_object_select_objects_that_are_parts_of_robot_output__mcrdr_defs import *
 
 

@@ -48,21 +48,6 @@
                     "mutually_exclusive": false
                 },
                 "parent": null,
-                "corner_case": {
-                    "_type": "ripple_down_rules.datastructures.case.Case",
-                    "self_": null,
-                    "objects": [
-                        null,
-                        null,
-                        null,
-                        null
-                    ],
-                    "robot": null,
-                    "output_": null,
-                    "_id": 132810571996096,
-                    "_obj_type": "builtins.dict",
-                    "_name": "PhysicalObject_select_objects_that_are_parts_of_robot"
-                },
                 "conclusion_name": "output_",
                 "weight": "",
                 "uid": "164855806603893754507167918997373216146",
