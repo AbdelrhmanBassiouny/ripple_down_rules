@@ -715,6 +715,42 @@ origin_type_to_hint = {
 }
 
 
+def get_file_that_ends_with(directory_path: str, suffix: str) -> Optional[str]:
+    """
+    Get the file that ends with the given suffix in the model directory.
+
+    :param directory_path: The path to the directory where the file is located.
+    :param suffix: The suffix to search for.
+    :return: The path to the file that ends with the given suffix, or None if not found.
+    """
+    files = [f for f in os.listdir(directory_path) if f.endswith(suffix)]
+    if files:
+        return files[0]
+    return None
+
+def get_function_return_type(func: Callable) -> Union[Type, None, Tuple[Type, ...]]:
+    """
+    Get the return type of a function.
+
+    :param func: The function to get the return type for.
+    :return: The return type of the function, or None if not specified.
+    """
+    sig = inspect.signature(func)
+    if sig.return_annotation == inspect.Signature.empty:
+        return None
+    type_hint = sig.return_annotation
+    origin = get_origin(type_hint)
+    args = get_args(type_hint)
+    if origin not in [list, set, None, Union]:
+        raise TypeError(f"{origin} is not a handled return type for function {func.__name__}")
+    if origin is None:
+        return typing_to_python_type(type_hint)
+    if args is None or len(args) == 0:
+        return typing_to_python_type(type_hint)
+    return args
+
+
+
 def extract_types(tp, seen: Set = None) -> Set[type]:
     """Recursively extract all base types from a type hint."""
     if seen is None:

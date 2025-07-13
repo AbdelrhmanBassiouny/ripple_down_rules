@@ -12,12 +12,7 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Dict": "typing.Dict",
-                        "Optional": "typing.Optional",
-                        "Union": "typing.Union",
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot",
-                        "NoneType": "builtins.NoneType"
+                        "PhysicalObject": "test.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -32,12 +27,8 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Dict": "typing.Dict",
-                        "Optional": "typing.Optional",
-                        "Union": "typing.Union",
-                        "PhysicalObject": "test.datasets.PhysicalObject",
                         "Robot": "test.datasets.Robot",
-                        "NoneType": "builtins.NoneType"
+                        "PhysicalObject": "test.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",

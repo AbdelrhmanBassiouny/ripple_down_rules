@@ -7,7 +7,11 @@ import os
 from abc import ABC, abstractmethod
 from copy import copy
 from dataclasses import is_dataclass
-from types import NoneType
+from io import TextIOWrapper
+from pathlib import Path
+from types import NoneType, ModuleType
+
+from tornado.iostream import IOStream
 
 from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
 from . import logger
@@ -39,7 +43,8 @@ except ImportError as e:
     RDRCaseViewer = None
 from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_type_from_string, \
     is_value_conflicting, extract_function_source, extract_imports, get_full_class_name, \
-    is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree
+    is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree, \
+    get_types_to_import_from_func_type_hints, get_function_return_type, get_file_that_ends_with
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -96,6 +101,30 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.viewer: Optional[RDRCaseViewer] = RDRCaseViewer.instances[0]\
             if RDRCaseViewer and any(RDRCaseViewer.instances) else None
         self.input_node: Optional[Rule] = None
+
+    def write_rdr_metadata_to_pyton_file(self, file: TextIOWrapper):
+        """
+        Write the metadata of the RDR classifier to a python file.
+
+        :param file: The file to write the metadata to.
+        """
+        file.write(f"name = \'{self.name}\'\n")
+        file.write(f"case_type = {self.case_type.__name__ if self.case_type is not None else None}\n")
+        file.write(f"case_name = \'{self.case_name}\'\n")
+
+    def update_rdr_metadata_from_python(self, module: ModuleType):
+        """
+        Update the RDR metadata from the module that contains the RDR classifier function.
+
+        :param module: The module that contains the RDR classifier function.
+        """
+        try:
+            self.name = module.name if hasattr(module, "name") else self.start_rule.conclusion_name
+            self.case_type = module.case_type
+            self.case_name = module.case_name if hasattr(module, "case_name") else f"{self.case_type.__name__}.{self.name}"
+        except AttributeError as e:
+            logger.warning(f"Could not update the RDR metadata from the module {module.__name__}. "
+                           f"Make sure the module has the required attributes: {e}")
 
     def render_evaluated_rule_tree(self, filename: str, show_full_tree: bool = False) -> None:
         if show_full_tree:
@@ -181,19 +210,41 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param package_name: The name of the package that contains the RDR classifier function, this
         is required in case of relative imports in the generated python file.
         """
+        rdr: Optional[RippleDownRules] = None
         model_dir = os.path.join(load_dir, model_name)
         json_file = os.path.join(model_dir, cls.metadata_folder, model_name)
-        rdr = cls.from_json_file(json_file)
-        rdr.save_dir = load_dir
-        rdr.model_name = model_name
+        if os.path.exists(json_file + ".json"):
+            rdr = cls.from_json_file(json_file)
         try:
-            rdr.update_from_python(model_dir, package_name=package_name)
+            if rdr is None:
+                acronym = cls.get_acronym().lower()
+                python_file_name = get_file_that_ends_with(model_dir, f"_{acronym}.py")
+                python_file_path = os.path.join(model_dir, python_file_name)
+                rdr = cls.from_python(model_dir, parent_package_name=package_name, python_file_path=python_file_path)
+            else:
+                rdr.update_from_python(model_dir, package_name=package_name)
+            rdr.save_dir = load_dir
+            rdr.model_name = model_name
             rdr.to_json_file(json_file)
         except (FileNotFoundError, ValueError, SyntaxError) as e:
             logger.warning(f"Could not load the python file for the model {model_name} from {model_dir}. "
                            f"Make sure the file exists and is valid.")
             rdr.save(save_dir=load_dir, model_name=model_name, package_name=package_name)
         return rdr
+
+    @classmethod
+    @abstractmethod
+    def from_python(cls, model_dir: str, python_file_path: Optional[str] = None,
+                    parent_package_name: Optional[str] = None) -> Self:
+        """
+        Load the classifier from a python file.
+
+        :param model_dir: The path to the directory where the generated python file is located.
+        :param python_file_path: The path to the python file to load the classifier from.
+        :param parent_package_name: The name of the package that contains the RDR classifier function, this
+        is required in case of relative imports in the generated python file.
+        """
+        pass
 
     @abstractmethod
     def _write_to_python(self, model_dir: str, package_name: Optional[str] = None):
@@ -425,6 +476,58 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
     def type_(self):
         return self.__class__
 
+    @classmethod
+    def get_json_file_path(cls, model_path: str) -> str:
+        """
+        Get the path to the saved json file.
+
+        :param model_path : The path to the model directory.
+        :return: The path to the saved model.
+        """
+        model_name = cls.get_model_name_from_model_path(model_path)
+        return os.path.join(model_path, cls.metadata_folder, f"{model_name}.json")
+
+    @classmethod
+    def get_generated_cases_file_path(cls, model_path: str) -> str:
+        """
+        Get the path to the python file that contains the RDR classifier cases.
+
+        :param model_path : The path to the model directory.
+        :return: The path to the generated python file.
+        """
+        return cls.get_generated_python_file_path(model_path).replace(".py", "_cases.py")
+
+    @classmethod
+    def get_generated_defs_file_path(cls, model_path: str) -> str:
+        """
+        Get the path to the python file that contains the RDR classifier function definitions.
+
+        :param model_path : The path to the model directory.
+        :return: The path to the generated python file.
+        """
+        return cls.get_generated_python_file_path(model_path).replace(".py", "_defs.py")
+
+    @classmethod
+    def get_generated_python_file_path(cls, model_path: str) -> str:
+        """
+        Get the path to the python file that contains the RDR classifier function.
+
+        :param model_path : The path to the model directory.
+        :return: The path to the generated python file.
+        """
+        model_name = cls.get_model_name_from_model_path(model_path)
+        return os.path.join(model_path, f"{model_name}.py")
+
+    @classmethod
+    def get_model_name_from_model_path(cls, model_path: str) -> str:
+        """
+        Get the model name from the model path.
+
+        :param model_path: The path to the model directory.
+        :return: The name of the model.
+        """
+        return Path(model_path).name
+
     @property
     def generated_python_file_name(self) -> str:
         if self._generated_python_file_name is None:
@@ -483,13 +586,14 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         return module.classify
 
 
-class TreeBuilder(ast.NodeVisitor):
+class TreeBuilder(ast.NodeVisitor, ABC):
     """Parses an AST of nested if-elif statements and reconstructs the tree."""
 
     def __init__(self):
-        self.root = None
-        self.current_parent = None
+        self.root: Optional[Rule] = None
+        self.current_parent: Optional[Rule] = None
         self.current_edge: Optional[RDREdge] = None
+        self.default_conclusion: Optional[str] = None
 
     def visit_FunctionDef(self, node):
         """Finds the main function and starts parsing its body."""
@@ -502,40 +606,86 @@ class TreeBuilder(ast.NodeVisitor):
         if condition is None:
             return
         rule_uid = condition.split("conditions_")[1]
-        new_node = SingleClassRule(conditions=condition, parent=self.current_parent, uid=rule_uid)
-        if self.current_edge == RDREdge.Alternative:
-            self.current_parent.alternative = new_node
-        elif self.current_edge == RDREdge.Refinement:
-            self.current_parent.refinement = new_node
 
-        if self.current_parent is None:
+        new_rule_type = self.get_new_rule_type(node)
+        new_node = new_rule_type(conditions=condition, parent=self.current_parent, uid=rule_uid)
+        if self.current_parent is not None:
+            self.update_current_parent(new_node)
+
+        if self.current_parent is None and self.root is None:
             self.root = new_node
 
         self.current_parent = new_node
 
-        # Parse the body (True branch -> except_if)
+        # Parse the body of the if statement
         for stmt in node.body:
-            self.current_edge = RDREdge.Refinement
+            self.current_edge = self.get_refinement_edge(node)
             self.current_parent = new_node
             self.visit(stmt)
 
-        # Parse elif or else (False branches -> else_if)
+        # Parse elif/else
         for stmt in node.orelse:
-            self.current_edge = RDREdge.Alternative
+            self.current_edge = self.get_alternative_edge(node)
             self.current_parent = new_node
             if isinstance(stmt, ast.If): # elif case
                 self.visit_If(stmt)
             else:  # else case (return)
-                # self.visit(stmt)
-                continue
+                self.process_else_statement(stmt)
+        self.current_parent = new_node
+        self.current_edge = None
 
-    def visit_Return(self, node, parent=None):
+    @abstractmethod
+    def process_else_statement(self, stmt: ast.AST):
+        """
+        Process the else statement in the if-elif-else block.
+
+        :param stmt: The else statement to process.
+        """
+        pass
+
+    @abstractmethod
+    def get_refinement_edge(self, node: ast.AST) -> RDREdge:
+        """
+        :param node: The current AST node to determine the edge type from.
+        :return: The refinement edge type.
+        """
+        pass
+
+    @abstractmethod
+    def get_alternative_edge(self, node: ast.AST) -> RDREdge:
+        """
+        :param node: The current AST node to determine the alternative edge type from.
+        :return: The alternative edge type.
+        """
+        pass
+
+    @abstractmethod
+    def get_new_rule_type(self, node: ast.AST) -> Type[Rule]:
+        """
+        Get the new rule type to create.
+        :param node: The current AST node to determine the rule type from.
+        :return: The new rule type.
+        """
+        pass
+
+    @abstractmethod
+    def update_current_parent(self, new_node: Rule):
+        """
+        Update the current parent rule with the new node.
+        :param new_node: The new node to set as the current parent.
+        """
+        pass
+
+    def visit_Return(self, node):
         """Handles return statements as leaf nodes."""
         if isinstance(node.value, ast.Call):
             return_value = node.value.func.id
         else:
             return_value = ast.literal_eval(node.value)
-        self.current_parent.conclusion = return_value
+        if self.current_parent is None:
+            self.default_conclusion = return_value
+        else:
+            self.current_parent.conclusion = return_value
 
     def get_condition_name(self, node):
         """Extracts the condition function name from an AST expression."""
@@ -543,84 +693,236 @@ class TreeBuilder(ast.NodeVisitor):
             return node.func.id
         return None
 
+class SingleClassTreeBuilder(TreeBuilder):
+    """Parses an AST of generated SingleClassRDR classifier and reconstructs the rdr tree."""
+
+    def get_new_rule_type(self, node: ast.AST) -> Type[Rule]:
+        return SingleClassRule
+
+    def get_refinement_edge(self, node: ast.AST) -> RDREdge:
+        return RDREdge.Refinement
+
+    def get_alternative_edge(self, node: ast.AST) -> RDREdge:
+        return RDREdge.Alternative
+
+    def update_current_parent(self, new_node: Rule):
+        if self.current_edge == RDREdge.Alternative:
+            self.current_parent.alternative = new_node
+        elif self.current_edge == RDREdge.Refinement:
+            self.current_parent.refinement = new_node
+
+    def process_else_statement(self, stmt: ast.AST):
+        """Handles the else statement in the if-elif-else block."""
+        if isinstance(stmt, ast.Return):
+            self.current_parent = None
+            self.visit_Return(stmt)
+        else:
+            raise ValueError(f"Unexpected statement in else block: {stmt}")
+
+
+class MultiClassTreeBuilder(TreeBuilder):
+    """Parses an AST of generated MultiClassRDR classifier and reconstructs the rdr tree."""
+
+    def visit_If(self, stmt: ast.If):
+        super().visit_If(stmt)
+        if isinstance(self.current_parent, (MultiClassTopRule, MultiClassFilterRule)):
+            self.current_parent.conclusion = self.current_parent.conditions.replace("conditions_", "conclusion_")
+
+    def visit_Return(self, node):
+        pass
+
+    def get_new_rule_type(self, node: ast.AST) -> Type[Rule]:
+        if self.current_edge == RDREdge.Refinement:
+            return MultiClassStopRule
+        elif self.current_edge == RDREdge.Filter:
+            return MultiClassFilterRule
+        elif self.current_edge in [RDREdge.Next, None]:
+            return MultiClassTopRule
+        elif self.current_edge == RDREdge.Alternative:
+            return self.get_refinement_rule_type(node)
+        else:
+            raise ValueError(f"Unknown edge type: {self.current_edge}")
+
+    def get_alternative_edge(self, node: ast.AST) -> RDREdge:
+        if isinstance(self.current_parent, MultiClassTopRule):
+            return RDREdge.Next
+        else:
+            return RDREdge.Alternative
+
+    def get_refinement_edge(self, node: ast.AST) -> RDREdge:
+        rule_type = self.get_refinement_rule_type(node)
+        return self.get_refinement_edge_from_refinement_rule(rule_type)
+
+    def get_refinement_edge_from_refinement_rule(self, rule_type: Type[Rule]) -> RDREdge:
+        """
+        :param rule_type: The type of the rule to determine the refinement edge from.
+        :return: The refinement edge type based on the rule type.
+        """
+        if isinstance(self.current_parent, MultiClassRefinementRule):
+            return RDREdge.Alternative
+        if rule_type == MultiClassStopRule:
+            return RDREdge.Refinement
+        else:
+            return RDREdge.Filter
+
+    def get_refinement_rule_type(self, node: ast.AST) -> Type[Rule]:
+        """
+        :param node: The current AST node to determine the rule type from.
+        :return: The rule type based on the node body.
+        """
+        for stmt in node.body:
+            if len(node.body) == 1 and isinstance(stmt, ast.Pass):
+                return MultiClassStopRule
+            elif isinstance(stmt, ast.If):
+                return self.get_refinement_rule_type(stmt)
+            else:
+                return MultiClassFilterRule
+        raise ValueError(f"Could not determine the refinement rule type from the node: {node} as it has an empty body.")
+
+    def update_current_parent(self, new_node: Rule):
+        if isinstance(new_node, MultiClassRefinementRule):
+            if isinstance(self.current_parent, MultiClassTopRule):
+                new_node.top_rule = self.current_parent
+            elif hasattr(self.current_parent, "top_rule"):
+                new_node.top_rule = self.current_parent.top_rule
+            else:
+                raise ValueError(f"Could not set the top rule for the refinement rule: {new_node}")
+        if self.current_edge in [RDREdge.Alternative, RDREdge.Next, None]:
+            self.current_parent.alternative = new_node
+        elif self.current_edge in [RDREdge.Refinement, RDREdge.Filter]:
+            self.current_parent.refinement = new_node
+
+    def process_else_statement(self, stmt: ast.AST):
+        """Handles the else statement in the if-elif-else block."""
+        pass
 
 class RDRWithCodeWriter(RippleDownRules, ABC):
 
     @classmethod
-    def read_rule_tree_from_python(cls, model_dir: str, model_name: str):
-        model_dir = os.path.join(model_dir, model_name)
-        filepath = f"{model_dir}/{model_name}.py"
-        with open(filepath, "r") as f:
+    def from_python(cls, model_path: str,
+                    python_file_path: Optional[str] = None,
+                    parent_package_name: Optional[str] = None) -> Self:
+        """
+        Load the RDR classifier from a generated python file.
+
+        :param model_path: The directory where the generated python file is located.
+        :param python_file_path: The path to the generated python file that contains the RDR classifier function.
+        :param parent_package_name: The name of the package that contains the RDR classifier function, this
+        is required in case of relative imports in the generated python file.
+        :return: An instance of the RDR classifier.
+        """
+        rule_tree_root = cls.read_rule_tree_from_python(model_path, python_file_path=python_file_path)
+        rdr = cls(start_rule=rule_tree_root)
+        rdr.update_from_python(model_path, package_name=parent_package_name, python_file_path=python_file_path)
+        return rdr
+
+    @classmethod
+    def read_rule_tree_from_python(cls, model_path: str, python_file_path: Optional[str] = None) -> Rule:
+        """
+        :param model_path: The path to the generated python file that contains the RDR classifier function.
+        :param python_file_path: The path to the generated python file that contains the RDR classifier function.
+        """
+        if python_file_path is None:
+            python_file_path = cls.get_generated_python_file_path(model_path)
+        with open(python_file_path, "r") as f:
             source_code = f.read()
 
         tree = ast.parse(source_code)
-        builder = TreeBuilder()
+        builder = cls.get_tree_builder_class()()
 
         # Find and process the function
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef):
+            if isinstance(node, ast.FunctionDef) and node.name == "classify":
                 builder.visit_FunctionDef(node)
 
         return builder.root
 
-    def update_from_python(self, model_dir: str, package_name: Optional[str] = None):
+    @classmethod
+    @abstractmethod
+    def get_tree_builder_class(cls) -> Type[TreeBuilder]:
+        """
+        :return: The class that builds the rule tree from the generated python file.
+        This should be either SingleClassTreeBuilder or MultiClassTreeBuilder.
+        """
+        pass
+
+    @property
+    def all_rules(self) -> List[Rule]:
+        """
+        Get all rules in the classifier.
+
+        :return: A list of all rules in the classifier.
+        """
+        if self.start_rule is None:
+            return []
+        return [r for r in [self.start_rule] + list(self.start_rule.descendants) if r.conditions is not None]
+
+    def update_from_python(self, model_dir: str, package_name: Optional[str] = None,
+                           python_file_path: Optional[str] = None):
         """
         Update the rules from the generated python file, that might have been modified by the user.
 
         :param model_dir: The directory where the generated python file is located.
         :param package_name: The name of the package that contains the RDR classifier function, this
         is required in case of relative imports in the generated python file.
+        :param python_file_path: The path to the generated python file that contains the RDR classifier function.
         """
-        rules_dict = {r.uid: r for r in [self.start_rule] + list(self.start_rule.descendants)
-                      if r.conditions is not None}
-        condition_func_names = [f'conditions_{rid}' for rid in rules_dict.keys()]
-        conclusion_func_names = [f'conclusion_{rid}' for rid in rules_dict.keys()
-                                 if not isinstance(rules_dict[rid], MultiClassStopRule)]
+        all_rules = self.all_rules
+        condition_func_names = [rule.generated_conditions_function_name for rule in all_rules]
+        conclusion_func_names = [rule.generated_conclusion_function_name for rule in all_rules
+                                 if not isinstance(rule, MultiClassStopRule)]
         all_func_names = condition_func_names + conclusion_func_names
-        rule_tree_file_path = f"{model_dir}/{self.generated_python_file_name}.py"
-        filepath = f"{model_dir}/{self.generated_python_defs_file_name}.py"
-        cases_path = f"{model_dir}/{self.generated_python_cases_file_name}.py"
-        cases_import_path = get_import_path_from_path(model_dir)
-        cases_import_path = f"{cases_import_path}.{self.generated_python_cases_file_name}" if cases_import_path \
-            else self.generated_python_cases_file_name
-        functions_source = extract_function_source(filepath, all_func_names, include_signature=False)
-        python_rule_tree_source = ""
-        with open(rule_tree_file_path, "r") as rule_tree_source:
-            python_rule_tree_source = rule_tree_source.read()
-        # get the scope from the imports in the file
-        scope = extract_imports(filepath, package_name=package_name)
-        rules_not_found = set()
-        for rule in [self.start_rule] + list(self.start_rule.descendants):
+
+        if python_file_path is None:
+            main_file_name = get_file_that_ends_with(model_dir, f"_{self.get_acronym().lower()}.py")
+            main_file_path = os.path.join(model_dir, main_file_name)
+        else:
+            main_file_path = python_file_path
+        self.generated_python_file_name = Path(main_file_path).name.replace(".py", "")
+
+        defs_file_path = main_file_path.replace(".py", "_defs.py")
+        defs_file_name = Path(defs_file_path).name.replace(".py", "")
+
+        cases_path = main_file_path.replace(".py", "_cases.py")
+        cases_file_name = Path(cases_path).name.replace(".py", "")
+        model_import_path = get_import_path_from_path(model_dir)
+        cases_import_path = f"{model_import_path}.{cases_file_name}" if model_import_path \
+            else cases_file_name
+        if os.path.exists(cases_path):
+            cases_module = importlib.import_module(cases_import_path, package=package_name)
+            importlib.reload(cases_module)
+        else:
+            cases_module = None
+
+        defs_import_path = f"{model_import_path}.{defs_file_name}" if model_import_path \
+            else defs_file_name
+        defs_module = importlib.import_module(defs_import_path, package=package_name)
+        importlib.reload(defs_module)
+
+        main_file_name = Path(main_file_path).name.replace(".py", "")
+        main_import_path = f"{model_import_path}.{main_file_name}" if model_import_path \
+            else main_file_name
+        main_module = importlib.import_module(main_import_path, package=package_name)
+        importlib.reload(main_module)
+
+        self.start_rule.conclusion_name = main_module.attribute_name
+        self.update_rdr_metadata_from_python(main_module)
+        functions_source = extract_function_source(defs_file_path, all_func_names, include_signature=False)
+        scope = extract_imports(defs_file_path, package_name=package_name)
+        for rule in all_rules:
             if rule.conditions is not None:
-                conditions_name = rule.generated_conditions_function_name
-                if conditions_name not in functions_source or conditions_name not in python_rule_tree_source:
-                    rules_not_found.add(rule)
-                    continue
-                rule.conditions.user_input = functions_source[conditions_name]
-                rule.conditions.scope = scope
+                conditions_wrapper_func_name = rule.generated_conditions_function_name
+                user_input = functions_source[conditions_wrapper_func_name]
+                rule.conditions = CallableExpression(user_input, (bool,), scope=scope)
                 if os.path.exists(cases_path):
-                    module = importlib.import_module(cases_import_path, package=package_name)
-                    importlib.reload(module)
-                    rule.corner_case_metadata = module.__dict__.get(f"corner_case_{rule.uid}", None)
+                    rule.corner_case_metadata = cases_module.__dict__.get(rule.generated_corner_case_object_name, None)
             if not isinstance(rule, MultiClassStopRule):
-                conclusion_name = rule.generated_conclusion_function_name
-                if conclusion_name not in functions_source or conclusion_name not in python_rule_tree_source:
-                    rules_not_found.add(rule)
-                rule.conclusion.user_input = functions_source[conclusion_name]
-                rule.conclusion.scope = scope
-        for rule in rules_not_found:
-            if isinstance(rule, MultiClassTopRule):
-                rule.parent.set_immediate_alternative(rule.alternative)
-                if rule.refinement is not None:
-                    ref_rules = [ref_rule for ref_rule in [rule.refinement] + list(rule.refinement.descendants)]
-                    for ref_rule in ref_rules:
-                        del ref_rule
-            else:
-                rule.parent.refinement = rule.alternative
-            if rule.alternative is not None:
-                rule.alternative = None
-            rule.parent = None
-            del rule
+                conclusion_wrapper_func_name = rule.generated_conclusion_function_name
+                user_input = functions_source[conclusion_wrapper_func_name]
+                conclusion_func = defs_module.__dict__.get(rule.generated_conclusion_function_name)
+                conclusion_type = get_function_return_type(conclusion_func)
+                rule.conclusion = CallableExpression(user_input, conclusion_type, scope=scope,
+                                                     mutually_exclusive=self.mutually_exclusive)
 
     @abstractmethod
     def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = "",
@@ -683,6 +985,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             f.write(f"attribute_name = '{self.attribute_name}'\n")
             f.write(f"conclusion_type = ({', '.join([ct.__name__ for ct in self.conclusion_type])},)\n")
             f.write(f"mutually_exclusive = {self.mutually_exclusive}\n")
+            self.write_rdr_metadata_to_pyton_file(f)
             f.write(f"\n\n{func_def}")
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
                     f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
@@ -748,9 +1051,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         :return: The type of the conclusion of the RDR classifier.
         """
         all_types = []
-        if self.start_rule is not None:
-            for rule in [self.start_rule] + list(self.start_rule.descendants):
-                all_types.extend(list(rule.conclusion.conclusion_type))
+        for rule in self.all_rules:
+            all_types.extend(list(rule.conclusion.conclusion_type))
         return tuple(set(all_types))
 
     @property
@@ -806,6 +1108,10 @@ class SingleClassRDR(RDRWithCodeWriter):
         """
         super(SingleClassRDR, self).__init__(**kwargs)
         self.default_conclusion: Optional[Any] = default_conclusion
+
+    @classmethod
+    def get_tree_builder_class(cls) -> Type[TreeBuilder]:
+        return SingleClassTreeBuilder
 
     def _fit_case(self, case_query: CaseQuery, expert: Optional[Expert] = None, **kwargs) \
             -> Union[CaseAttribute, CallableExpression, None]:
@@ -957,6 +1263,10 @@ class MultiClassRDR(RDRWithCodeWriter):
         """
         super(MultiClassRDR, self).__init__(start_rule, **kwargs)
         self.mode: MCRDRMode = mode
+
+    @classmethod
+    def get_tree_builder_class(cls) -> Type[TreeBuilder]:
+        return MultiClassTreeBuilder
 
     def _classify(self, case: Union[Case, SQLTable], modify_case: bool = False,
                   case_query: Optional[CaseQuery] = None) -> Set[Any]:
@@ -1207,6 +1517,58 @@ class GeneralRDR(RippleDownRules):
         super(GeneralRDR, self).__init__(**kwargs)
         self.all_figs: List[Figure] = [sr.fig for sr in self.start_rules_dict.values()]
 
+    @classmethod
+    def from_python(cls, model_dir: str, python_file_path: Optional[str] = None,
+                    parent_package_name: Optional[str] = None) -> Self:
+        """
+        Create an instance of the class from a python file.
+
+        :param model_dir: The path to the directory containing the python file.
+        :param python_file_path: The path to the python file, if not provided, it will be generated from the model_dir.
+        :param parent_package_name: The name of the package that contains the RDR classifier function, this
+        is required in case of relative imports in the generated python file.
+        :return: An instance of the class.
+        """
+        if python_file_path is None:
+            file_name = get_file_that_ends_with(model_dir, f"_{cls.get_acronym().lower()}.py",)
+            main_python_file_path = os.path.join(model_dir, file_name)
+        else:
+            main_python_file_path = python_file_path
+        main_python_file_name = Path(main_python_file_path).name.replace('.py', '')
+        main_module_import_path = get_import_path_from_path(model_dir)
+        main_module_import_path = f"{main_module_import_path}.{main_python_file_name}" \
+            if main_module_import_path else main_python_file_name
+        main_module = importlib.import_module(main_module_import_path)
+        importlib.reload(main_module)
+        classifiers_dict = main_module.classifiers_dict
+        start_rules_dict = {}
+        for rdr_name, rdr_module in classifiers_dict.items():
+            rdr_module_name = rdr_module.__name__
+            rdr_acronym = rdr_module_name.split('_')[-1]
+            rdr_type = cls.get_rdr_type_from_acronym(rdr_acronym)
+            rdr_model_path = main_python_file_path.replace('_rdr.py', f'_{rdr_name}_{rdr_acronym}.py')
+            rdr = rdr_type.from_python(model_dir, python_file_path=rdr_model_path, parent_package_name=parent_package_name)
+            start_rules_dict[rdr_name] = rdr
+        grdr = cls(category_rdr_map=start_rules_dict)
+        grdr.update_rdr_metadata_from_python(main_module)
+        return grdr
+
+    @classmethod
+    def get_rdr_type_from_acronym(cls, acronym: str) -> Type[Union[SingleClassRDR, MultiClassRDR]]:
+        """
+        Get the type of the ripple down rules classifier from the acronym.
+
+        :param acronym: The acronym of the ripple down rules classifier.
+        :return: The type of the ripple down rules classifier.
+        """
+        acronym = acronym.lower()
+        if acronym == "scrdr":
+            return SingleClassRDR
+        elif acronym == "mcrdr":
+            return MultiClassRDR
+        else:
+            raise ValueError(f"Unknown RDR type acronym: {acronym}")
+
     def add_rdr(self, rdr: Union[SingleClassRDR, MultiClassRDR], case_query: Optional[CaseQuery] = None):
         """
         Add a ripple down rules classifier to the map of classifiers.
@@ -1328,7 +1690,7 @@ class GeneralRDR(RippleDownRules):
         Write the tree of rules as source code to a file.
 
         :param model_dir: The directory where the model is stored.
-        :param relative_imports: Whether to use relative imports in the generated python file.
+        :param package_name: The name of the package that contains the RDR classifier function.
         """
         for rdr in self.start_rules_dict.values():
             rdr._write_to_python(model_dir, package_name=package_name)
@@ -1336,6 +1698,7 @@ class GeneralRDR(RippleDownRules):
         file_path = model_dir + f"/{self.generated_python_file_name}.py"
         with open(file_path, "w") as f:
             f.write(self._get_imports(file_path=file_path, package_name=package_name) + "\n\n")
+            self.write_rdr_metadata_to_pyton_file(f)
             f.write("classifiers_dict = dict()\n")
             for rdr_key, rdr in self.start_rules_dict.items():
                 f.write(f"classifiers_dict['{rdr_key}'] = {self.rdr_key_to_function_name(rdr_key)}\n")

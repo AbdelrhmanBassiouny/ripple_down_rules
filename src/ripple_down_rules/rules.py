@@ -214,6 +214,10 @@ class Rule(NodeMixin, SubclassJSONSerializer, ABC):
     def generated_conditions_function_name(self) -> str:
         return f"conditions_{self.uid}"
 
+    @property
+    def generated_corner_case_object_name(self) -> str:
+        return f"corner_case_{self.uid}"
+
     def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
         """
         Convert the conclusion of a rule to source code.
