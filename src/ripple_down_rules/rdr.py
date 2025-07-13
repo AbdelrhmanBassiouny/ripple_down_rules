@@ -11,8 +11,6 @@ from io import TextIOWrapper
 from pathlib import Path
 from types import NoneType, ModuleType
 
-from tornado.iostream import IOStream
-
 from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
 from . import logger
 
