@@ -221,13 +221,13 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                 rdr = cls.from_python(model_dir, parent_package_name=package_name, python_file_path=python_file_path)
             else:
                 rdr.update_from_python(model_dir, package_name=package_name)
-            rdr.save_dir = load_dir
-            rdr.model_name = model_name
             rdr.to_json_file(json_file)
-        except (FileNotFoundError, ValueError, SyntaxError) as e:
+        except (FileNotFoundError, ValueError, SyntaxError, ModuleNotFoundError) as e:
             logger.warning(f"Could not load the python file for the model {model_name} from {model_dir}. "
                            f"Make sure the file exists and is valid.")
             rdr.save(save_dir=load_dir, model_name=model_name, package_name=package_name)
+        rdr.save_dir = load_dir
+        rdr.model_name = model_name
         return rdr
 
     @classmethod
@@ -876,6 +876,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             main_file_path = os.path.join(model_dir, main_file_name)
         else:
             main_file_path = python_file_path
+        if not os.path.exists(main_file_path):
+            raise ModuleNotFoundError(main_file_path)
         self.generated_python_file_name = Path(main_file_path).name.replace(".py", "")
 
         defs_file_path = main_file_path.replace(".py", "_defs.py")
