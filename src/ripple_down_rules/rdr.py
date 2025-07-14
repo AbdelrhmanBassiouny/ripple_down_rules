@@ -873,6 +873,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
 
         if python_file_path is None:
             main_file_name = get_file_that_ends_with(model_dir, f"_{self.get_acronym().lower()}.py")
+            if not main_file_name:
+                raise FileNotFoundError(f"Could not find the main python file for the model {self.model_name} in {model_dir}.")
             main_file_path = os.path.join(model_dir, main_file_name)
         else:
             main_file_path = python_file_path
