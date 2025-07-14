@@ -2091,7 +2091,10 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
         else:
             filename = filename or "rule_tree"
             de.to_dotfile(f"{filename}{'.dot'}")
-            de.to_picture(f"{filename}{'.svg'}")
+            try:
+                de.to_picture(f"{filename}{'.svg'}")
+            except FileNotFoundError as e:
+                logger.warning(f"{e}")
 
 
 def draw_tree(root: Node, fig: Figure):
