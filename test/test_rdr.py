@@ -106,8 +106,8 @@ class TestRDR(TestCase):
     def test_read_mcrdr_tree(self):
         original_mcrdr = get_fit_mcrdr(self.all_cases, self.targets)
         save_dir = self.generated_rdrs_dir
-        model_name = original_mcrdr.save(save_dir)
-        scrdr_loaded = MultiClassRDR.load(save_dir, original_mcrdr.generated_python_file_name)
+        model_name = original_mcrdr.save(save_dir, 'test_read_mcrdr_tree')
+        scrdr_loaded = MultiClassRDR.load(save_dir, model_name, package_name=f"test.test_generated_rdrs.{model_name}")
         model_path = os.path.join(save_dir, model_name)
         rules_root = MultiClassRDR.read_rule_tree_from_python(model_path)
         for rule, og_rule in zip([rules_root] + list(rules_root.descendants),
@@ -130,7 +130,7 @@ class TestRDR(TestCase):
     def test_load_mcrdr_from_python(self):
         original_mcrdr = get_fit_mcrdr(self.all_cases, self.targets)
         save_dir = self.generated_rdrs_dir
-        model_name = original_mcrdr.save(save_dir)
+        model_name = original_mcrdr.save(save_dir, 'test_load_mcrdr_from_python')
         model_path = os.path.join(save_dir, model_name)
         mcrdr_loaded = MultiClassRDR.from_python(model_path)
         for case, target in zip(self.all_cases, self.targets):
@@ -139,7 +139,7 @@ class TestRDR(TestCase):
     def test_load_grdr_from_python(self):
         original_grdr, targets = get_fit_grdr(self.all_cases, self.targets)
         save_dir = self.generated_rdrs_dir
-        model_name = original_grdr.save(save_dir)
+        model_name = original_grdr.save(save_dir, 'test_load_grdr_from_python')
         model_path = os.path.join(save_dir, model_name)
         grdr_loaded = GeneralRDR.from_python(model_path)
         for case, target in zip(self.all_cases[:len(targets)], targets):

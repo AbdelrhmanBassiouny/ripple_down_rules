@@ -7,14 +7,14 @@
                 "_type": "ripple_down_rules.rules.MultiClassTopRule",
                 "conditions": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n    def conditions_for_physical_object_select_objects_that_are_parts_of_robot(self_: PhysicalObject, objects: List[PhysicalObject], robot: Robot, output_: PhysicalObject) -> bool:\n        \"\"\"Get conditions on whether it's possible to conclude a value for PhysicalObject_select_objects_that_are_parts_of_robot.output_  of type PhysicalObject.\"\"\"\n        return robot is not None\n    return conditions_for_physical_object_select_objects_that_are_parts_of_robot(**case)\n    ",
+                    "user_input": "def _get_value(case):\n        def conditions_for_physical_object_select_objects_that_are_parts_of_robot(self_: PhysicalObject, objects: List[PhysicalObject], robot: Robot, output_: PhysicalObject) -> bool:\n            \"\"\"Get conditions on whether it's possible to conclude a value for PhysicalObject_select_objects_that_are_parts_of_robot.output_  of type PhysicalObject.\"\"\"\n            return robot is not None\n        return conditions_for_physical_object_select_objects_that_are_parts_of_robot(**case)\n    ",
                     "conclusion_type": [
                         "builtins.bool"
                     ],
                     "scope": {
+                        "PhysicalObject": "test.datasets.PhysicalObject",
                         "Robot": "test.datasets.Robot",
-                        "List": "typing.List",
-                        "PhysicalObject": "test.datasets.PhysicalObject"
+                        "List": "typing.List"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -24,14 +24,14 @@
                 },
                 "conclusion": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n    def physical_object_select_objects_that_are_parts_of_robot(self_: PhysicalObject, objects: List[PhysicalObject], robot: Robot, output_: PhysicalObject) -> List[PhysicalObject]:\n        \"\"\"Get possible value(s) for PhysicalObject_select_objects_that_are_parts_of_robot.output_  of type PhysicalObject.\"\"\"\n        robot_parts = [obj for obj in objects if obj in robot.parts]\n        return robot_parts\n    return physical_object_select_objects_that_are_parts_of_robot(**case)\n    ",
+                    "user_input": "def _get_value(case):\n        def physical_object_select_objects_that_are_parts_of_robot(self_: PhysicalObject, objects: List[PhysicalObject], robot: Robot, output_: PhysicalObject) -> List[PhysicalObject]:\n            \"\"\"Get possible value(s) for PhysicalObject_select_objects_that_are_parts_of_robot.output_  of type PhysicalObject.\"\"\"\n            robot_parts = [obj for obj in objects if obj in robot.parts]\n            return robot_parts\n        return physical_object_select_objects_that_are_parts_of_robot(**case)\n    ",
                     "conclusion_type": [
                         "test.datasets.PhysicalObject"
                     ],
                     "scope": {
+                        "PhysicalObject": "test.datasets.PhysicalObject",
                         "Robot": "test.datasets.Robot",
-                        "List": "typing.List",
-                        "PhysicalObject": "test.datasets.PhysicalObject"
+                        "List": "typing.List"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",

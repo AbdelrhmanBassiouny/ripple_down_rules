@@ -45,7 +45,7 @@ from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_t
     is_value_conflicting, extract_function_source, extract_imports, get_full_class_name, \
     is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree, \
     get_types_to_import_from_func_type_hints, get_function_return_type, get_file_that_ends_with, \
-    get_and_import_python_module, get_and_import_python_modules_in_a_package
+    get_and_import_python_module, get_and_import_python_modules_in_a_package, get_type_from_type_hint
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -217,10 +217,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if os.path.exists(json_file + ".json"):
             rdr = cls.from_json_file(json_file)
         try:
+            acronym = cls.get_acronym().lower()
+            python_file_name = get_file_that_ends_with(model_dir, f"_{acronym}.py")
+            python_file_path = os.path.join(model_dir, python_file_name)
             if rdr is None:
-                acronym = cls.get_acronym().lower()
-                python_file_name = get_file_that_ends_with(model_dir, f"_{acronym}.py")
-                python_file_path = os.path.join(model_dir, python_file_name)
                 rdr = cls.from_python(model_dir, parent_package_name=package_name, python_file_path=python_file_path)
             else:
                 rdr.update_from_python(model_dir, package_name=package_name)
@@ -886,22 +886,52 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         self.update_rdr_metadata_from_python(main_module)
 
         functions_source = extract_function_source(defs_module.__file__,
-                                                   all_func_names, include_signature=False)
+                                                   all_func_names, include_signature=True)
         scope = extract_imports(defs_module.__file__, package_name=package_name)
+
+        cases_source, cases_scope = None, None
+        if cases_module:
+            with open(cases_module.__file__, "r") as f:
+                cases_source = f.read()
+            cases_scope = extract_imports(cases_module.__file__, package_name=package_name)
+
+        with open(main_module.__file__, "r") as f:
+            main_source = f.read()
+        main_scope = extract_imports(main_module.__file__, package_name=package_name)
+        attribute_name_line = [l for l in main_source.split('\n') if "attribute_name = " in l]
+        conclusion_name = None
+        if len(attribute_name_line) > 0:
+            conclusion_name = eval(attribute_name_line[0].split('=')[-1].strip(), main_scope)
 
         for rule in all_rules:
             if rule.conditions is not None:
                 conditions_wrapper_func_name = rule.generated_conditions_function_name
                 user_input = functions_source[conditions_wrapper_func_name]
+                user_input = '\n'.join(user_input.split("\n")[1:])  # Remove the function signature line
                 rule.conditions = CallableExpression(user_input, (bool,), scope=scope)
                 if cases_module:
-                    rule.corner_case_metadata = cases_module.__dict__.get(rule.generated_corner_case_object_name, None)
+                    try:
+                        rule.corner_case_metadata = cases_module.__dict__[rule.generated_corner_case_object_name]
+                    except KeyError:
+                        case_def_lines = [l for l in cases_source.split('\n') if rule.generated_corner_case_object_name in l]
+                        if len(case_def_lines) > 0:
+                            case_def_line = case_def_lines[0].split('=')[-1].strip()
+                            rule.corner_case_metadata = eval(case_def_line, cases_scope)
+
             if not isinstance(rule, MultiClassStopRule):
-                rule.conclusion_name = main_module.attribute_name
-                conclusion_wrapper_func_name = rule.generated_conclusion_function_name
-                user_input = functions_source[conclusion_wrapper_func_name]
+                if conclusion_name:
+                    rule.conclusion_name = conclusion_name
+                user_input = functions_source[rule.generated_conclusion_function_name]
+                split_user_input = user_input.split("\n")
+                user_input = '\n'.join(split_user_input[1:])
                 conclusion_func = defs_module.__dict__.get(rule.generated_conclusion_function_name)
-                conclusion_type = get_function_return_type(conclusion_func)
+                if conclusion_func is None:
+                    function_signature = split_user_input[0]
+                    return_type_hint_str = function_signature.split('->')[-1].strip(' :')
+                    return_type_hint = eval(return_type_hint_str, scope)
+                    conclusion_type = get_type_from_type_hint(return_type_hint)
+                else:
+                    conclusion_type = get_function_return_type(conclusion_func)
                 rule.conclusion = CallableExpression(user_input, conclusion_type, scope=scope,
                                                      mutually_exclusive=self.mutually_exclusive)
 

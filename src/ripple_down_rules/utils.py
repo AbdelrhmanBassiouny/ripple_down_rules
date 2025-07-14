@@ -168,20 +168,23 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                 try:
                     scope[asname] = importlib.import_module(module_name, package=package_name)
                 except ImportError as e:
-                    print(f"Could not import {module_name}: {e}")
+                    logger.warning(f"Could not import {module_name}: {e}")
         elif isinstance(node, ast.ImportFrom):
             module_name = node.module
             for alias in node.names:
                 name = alias.name
                 asname = alias.asname or name
                 try:
-                    if package_name is not None and node.level > 0:  # Handle relative imports
-                        module_rel_path = Path(os.path.join(file_path, *['..'] * node.level, module_name)).resolve()
-                        idx = str(module_rel_path).rfind(package_name)
-                        if idx != -1:
-                            module_name = str(module_rel_path)[idx:].replace(os.path.sep, '.')
-                    module = importlib.import_module(module_name, package=package_name)
-                    scope[asname] = getattr(module, name)
+                    if node.level > 0:  # Handle relative imports
+                        package_name = get_import_path_from_path(Path(os.path.join(file_path, *['..'] * node.level)).resolve())
+                    try:
+                        module = importlib.import_module(module_name, package=package_name)
+                    except ModuleNotFoundError:
+                        module = importlib.import_module(f"{package_name}.{module_name}")
+                    if name == "*":
+                        scope.update(module.__dict__)
+                    else:
+                        scope[asname] = getattr(module, name)
                 except (ImportError, AttributeError) as e:
                     logger.warning(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
 
@@ -782,10 +785,14 @@ def get_function_return_type(func: Callable) -> Union[Type, None, Tuple[Type, ..
     if sig.return_annotation == inspect.Signature.empty:
         return None
     type_hint = sig.return_annotation
+    return get_type_from_type_hint(type_hint)
+
+
+def get_type_from_type_hint(type_hint: Type) -> Union[Type, Tuple[Type, ...]]:
     origin = get_origin(type_hint)
     args = get_args(type_hint)
     if origin not in [list, set, None, Union]:
-        raise TypeError(f"{origin} is not a handled return type for function {func.__name__}")
+        raise TypeError(f"{origin} is not a handled return type for type hint {type_hint}")
     if origin is None:
         return typing_to_python_type(type_hint)
     if args is None or len(args) == 0:
