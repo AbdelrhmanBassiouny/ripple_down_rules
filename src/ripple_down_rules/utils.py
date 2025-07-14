@@ -20,7 +20,7 @@ from pathlib import Path
 from subprocess import check_call
 from tempfile import NamedTemporaryFile
 from textwrap import dedent
-from types import NoneType
+from types import NoneType, ModuleType
 import inspect
 
 import six
@@ -58,6 +58,49 @@ if TYPE_CHECKING:
     from .datastructures.dataclasses import CaseQuery
 
 import ast
+
+
+def get_and_import_python_modules_in_a_package(file_paths: List[str],
+                                               parent_package_name: Optional[str] = None) -> List[Optional[ModuleType]]:
+    """
+    :param file_paths: The paths to the python files to import.
+    :param parent_package_name: The name of the parent package to use for relative imports.
+    :return: The imported modules.
+    """
+    package_path = dirname(file_paths[0])
+    package_import_path = get_import_path_from_path(package_path)
+    file_names = [Path(file_path).name.replace(".py", "") for file_path in file_paths]
+    module_import_paths = [
+        f"{package_import_path}.{file_name}" if package_import_path else file_name
+        for file_name in file_names
+    ]
+    modules = [
+        importlib.import_module(module_import_path, package=parent_package_name)
+        if os.path.exists(file_paths[i]) else None
+        for i, module_import_path in enumerate(module_import_paths)
+    ]
+    for module in modules:
+        if module is not None:
+            importlib.reload(module)
+    return modules
+
+
+def get_and_import_python_module(python_file_path: str, package_import_path: Optional[str] = None,
+                                 parent_package_name: Optional[str] = None) -> ModuleType:
+    """
+    :param python_file_path: The path to the python file to import.
+    :param package_import_path: The import path of the package that contains the python file.
+    :param parent_package_name: The name of the parent package to use for relative imports.
+    :return: The imported module.
+    """
+    if package_import_path is None:
+        package_path = dirname(python_file_path)
+        package_import_path = get_import_path_from_path(package_path)
+    file_name = Path(python_file_path).name.replace(".py", "")
+    module_import_path = f"{package_import_path}.{file_name}" if package_import_path else file_name
+    module = importlib.import_module(module_import_path, package=parent_package_name)
+    importlib.reload(module)
+    return module
 
 
 def str_to_snake_case(snake_str: str) -> str:

@@ -4,10 +4,12 @@ import ast
 import importlib
 import json
 import os
+import sys
 from abc import ABC, abstractmethod
 from copy import copy
 from dataclasses import is_dataclass
 from io import TextIOWrapper
+from os.path import dirname
 from pathlib import Path
 from types import NoneType, ModuleType
 
@@ -42,7 +44,8 @@ except ImportError as e:
 from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_type_from_string, \
     is_value_conflicting, extract_function_source, extract_imports, get_full_class_name, \
     is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree, \
-    get_types_to_import_from_func_type_hints, get_function_return_type, get_file_that_ends_with
+    get_types_to_import_from_func_type_hints, get_function_return_type, get_file_that_ends_with, \
+    get_and_import_python_module, get_and_import_python_modules_in_a_package
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -524,7 +527,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param model_path: The path to the model directory.
         :return: The name of the model.
         """
-        return Path(model_path).name
+        file_name = get_file_that_ends_with(model_path, f"_{cls.get_acronym().lower()}.py")
+        if file_name is None:
+            raise FileNotFoundError(f"Could not find the python file for the model in the given path: {model_path}.")
+        return file_name.replace('.py', '')
 
     @property
     def generated_python_file_name(self) -> str:
@@ -871,60 +877,61 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                                  if not isinstance(rule, MultiClassStopRule)]
         all_func_names = condition_func_names + conclusion_func_names
 
-        if python_file_path is None:
-            main_file_name = get_file_that_ends_with(model_dir, f"_{self.get_acronym().lower()}.py")
-            if not main_file_name:
-                raise FileNotFoundError(f"Could not find the main python file for the model {self.model_name} in {model_dir}.")
-            main_file_path = os.path.join(model_dir, main_file_name)
-        else:
-            main_file_path = python_file_path
-        if not os.path.exists(main_file_path):
-            raise ModuleNotFoundError(main_file_path)
-        self.generated_python_file_name = Path(main_file_path).name.replace(".py", "")
+        main_module, defs_module, cases_module = self.get_and_import_model_python_modules(
+                                                        model_dir,
+                                                        python_file_path=python_file_path,
+                                                        parent_package_name=package_name)
+        self.generated_python_file_name = Path(main_module.__file__).name.replace(".py", "")
 
-        defs_file_path = main_file_path.replace(".py", "_defs.py")
-        defs_file_name = Path(defs_file_path).name.replace(".py", "")
-
-        cases_path = main_file_path.replace(".py", "_cases.py")
-        cases_file_name = Path(cases_path).name.replace(".py", "")
-        model_import_path = get_import_path_from_path(model_dir)
-        cases_import_path = f"{model_import_path}.{cases_file_name}" if model_import_path \
-            else cases_file_name
-        if os.path.exists(cases_path):
-            cases_module = importlib.import_module(cases_import_path, package=package_name)
-            importlib.reload(cases_module)
-        else:
-            cases_module = None
-
-        defs_import_path = f"{model_import_path}.{defs_file_name}" if model_import_path \
-            else defs_file_name
-        defs_module = importlib.import_module(defs_import_path, package=package_name)
-        importlib.reload(defs_module)
-
-        main_file_name = Path(main_file_path).name.replace(".py", "")
-        main_import_path = f"{model_import_path}.{main_file_name}" if model_import_path \
-            else main_file_name
-        main_module = importlib.import_module(main_import_path, package=package_name)
-        importlib.reload(main_module)
-
-        self.start_rule.conclusion_name = main_module.attribute_name
         self.update_rdr_metadata_from_python(main_module)
-        functions_source = extract_function_source(defs_file_path, all_func_names, include_signature=False)
-        scope = extract_imports(defs_file_path, package_name=package_name)
+
+        functions_source = extract_function_source(defs_module.__file__,
+                                                   all_func_names, include_signature=False)
+        scope = extract_imports(defs_module.__file__, package_name=package_name)
+
         for rule in all_rules:
             if rule.conditions is not None:
                 conditions_wrapper_func_name = rule.generated_conditions_function_name
                 user_input = functions_source[conditions_wrapper_func_name]
                 rule.conditions = CallableExpression(user_input, (bool,), scope=scope)
-                if os.path.exists(cases_path):
+                if cases_module:
                     rule.corner_case_metadata = cases_module.__dict__.get(rule.generated_corner_case_object_name, None)
             if not isinstance(rule, MultiClassStopRule):
+                rule.conclusion_name = main_module.attribute_name
                 conclusion_wrapper_func_name = rule.generated_conclusion_function_name
                 user_input = functions_source[conclusion_wrapper_func_name]
                 conclusion_func = defs_module.__dict__.get(rule.generated_conclusion_function_name)
                 conclusion_type = get_function_return_type(conclusion_func)
                 rule.conclusion = CallableExpression(user_input, conclusion_type, scope=scope,
                                                      mutually_exclusive=self.mutually_exclusive)
+
+    @classmethod
+    def get_and_import_model_python_modules(cls, model_dir: str,
+                                            python_file_path: Optional[str] = None,
+                                            parent_package_name: Optional[str] = None)\
+            -> Tuple[ModuleType, ModuleType, ModuleType]:
+        """
+        Get and import the python modules that contain the RDR classifier function, definitions, and corner cases.
+
+        :param model_dir: The path to the directory where the generated python files are located.
+        :param python_file_path: The path to the generated python file that contains the RDR classifier function.
+        :param parent_package_name: The name of the package that contains the RDR classifier function, this
+        is required in case of relative imports in the generated python file.
+        :return: A tuple containing the main module, defs module, and cases module.
+        """
+        if python_file_path is None:
+            main_file_path = cls.get_generated_python_file_path(model_dir)
+        else:
+            main_file_path = python_file_path
+        if not os.path.exists(main_file_path):
+            raise ModuleNotFoundError(main_file_path)
+
+        defs_file_path = main_file_path.replace(".py", "_defs.py")
+        cases_path = main_file_path.replace(".py", "_cases.py")
+
+        main_module, defs_module, cases_module = get_and_import_python_modules_in_a_package(
+            [main_file_path, defs_file_path, cases_path], parent_package_name=parent_package_name)
+        return main_module, defs_module, cases_module
 
     @abstractmethod
     def write_rules_as_source_code_to_file(self, rule: Rule, file, parent_indent: str = "",
@@ -1532,21 +1539,14 @@ class GeneralRDR(RippleDownRules):
         :return: An instance of the class.
         """
         if python_file_path is None:
-            file_name = get_file_that_ends_with(model_dir, f"_{cls.get_acronym().lower()}.py",)
-            main_python_file_path = os.path.join(model_dir, file_name)
+            main_python_file_path = cls.get_generated_python_file_path(model_dir)
         else:
             main_python_file_path = python_file_path
-        main_python_file_name = Path(main_python_file_path).name.replace('.py', '')
-        main_module_import_path = get_import_path_from_path(model_dir)
-        main_module_import_path = f"{main_module_import_path}.{main_python_file_name}" \
-            if main_module_import_path else main_python_file_name
-        main_module = importlib.import_module(main_module_import_path)
-        importlib.reload(main_module)
+        main_module = get_and_import_python_module(main_python_file_path, parent_package_name=parent_package_name)
         classifiers_dict = main_module.classifiers_dict
         start_rules_dict = {}
         for rdr_name, rdr_module in classifiers_dict.items():
-            rdr_module_name = rdr_module.__name__
-            rdr_acronym = rdr_module_name.split('_')[-1]
+            rdr_acronym = rdr_module.__name__.split('_')[-1]
             rdr_type = cls.get_rdr_type_from_acronym(rdr_acronym)
             rdr_model_path = main_python_file_path.replace('_rdr.py', f'_{rdr_name}_{rdr_acronym}.py')
             rdr = rdr_type.from_python(model_dir, python_file_path=rdr_model_path, parent_package_name=parent_package_name)

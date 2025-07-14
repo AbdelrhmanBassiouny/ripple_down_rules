@@ -27,8 +27,8 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot"
+                        "Robot": "test.datasets.Robot",
+                        "PhysicalObject": "test.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
