@@ -12,34 +12,26 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Dict": "typing.Dict",
+                        "Robot": "test.datasets.Robot",
                         "List": "typing.List",
-                        "Set": "typing.Set",
-                        "Union": "typing.Union",
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot"
+                        "PhysicalObject": "test.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
                         "value": null
                     },
-                    "mutually_exclusive": false
+                    "mutually_exclusive": true
                 },
                 "conclusion": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
                     "user_input": "def _get_value(case):\n    def physical_object_select_objects_that_are_parts_of_robot(self_: PhysicalObject, objects: List[PhysicalObject], robot: Robot, output_: PhysicalObject) -> List[PhysicalObject]:\n        \"\"\"Get possible value(s) for PhysicalObject_select_objects_that_are_parts_of_robot.output_  of type PhysicalObject.\"\"\"\n        robot_parts = [obj for obj in objects if obj in robot.parts]\n        return robot_parts\n    return physical_object_select_objects_that_are_parts_of_robot(**case)\n    ",
                     "conclusion_type": [
-                        "test.datasets.PhysicalObject",
-                        "builtins.set",
-                        "builtins.list"
+                        "test.datasets.PhysicalObject"
                     ],
                     "scope": {
-                        "Dict": "typing.Dict",
+                        "Robot": "test.datasets.Robot",
                         "List": "typing.List",
-                        "Set": "typing.Set",
-                        "Union": "typing.Union",
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot"
+                        "PhysicalObject": "test.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -48,21 +40,6 @@
                     "mutually_exclusive": false
                 },
                 "parent": null,
-                "corner_case": {
-                    "_type": "ripple_down_rules.datastructures.case.Case",
-                    "self_": null,
-                    "objects": [
-                        null,
-                        null,
-                        null,
-                        null
-                    ],
-                    "robot": null,
-                    "output_": null,
-                    "_id": 132810571996096,
-                    "_obj_type": "builtins.dict",
-                    "_name": "PhysicalObject_select_objects_that_are_parts_of_robot"
-                },
                 "conclusion_name": "output_",
                 "weight": "",
                 "uid": "164855806603893754507167918997373216146",

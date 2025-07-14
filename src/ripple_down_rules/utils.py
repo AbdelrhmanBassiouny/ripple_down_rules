@@ -20,7 +20,7 @@ from pathlib import Path
 from subprocess import check_call
 from tempfile import NamedTemporaryFile
 from textwrap import dedent
-from types import NoneType
+from types import NoneType, ModuleType
 import inspect
 
 import six
@@ -58,6 +58,49 @@ if TYPE_CHECKING:
     from .datastructures.dataclasses import CaseQuery
 
 import ast
+
+
+def get_and_import_python_modules_in_a_package(file_paths: List[str],
+                                               parent_package_name: Optional[str] = None) -> List[Optional[ModuleType]]:
+    """
+    :param file_paths: The paths to the python files to import.
+    :param parent_package_name: The name of the parent package to use for relative imports.
+    :return: The imported modules.
+    """
+    package_path = dirname(file_paths[0])
+    package_import_path = get_import_path_from_path(package_path)
+    file_names = [Path(file_path).name.replace(".py", "") for file_path in file_paths]
+    module_import_paths = [
+        f"{package_import_path}.{file_name}" if package_import_path else file_name
+        for file_name in file_names
+    ]
+    modules = [
+        importlib.import_module(module_import_path, package=parent_package_name)
+        if os.path.exists(file_paths[i]) else None
+        for i, module_import_path in enumerate(module_import_paths)
+    ]
+    for module in modules:
+        if module is not None:
+            importlib.reload(module)
+    return modules
+
+
+def get_and_import_python_module(python_file_path: str, package_import_path: Optional[str] = None,
+                                 parent_package_name: Optional[str] = None) -> ModuleType:
+    """
+    :param python_file_path: The path to the python file to import.
+    :param package_import_path: The import path of the package that contains the python file.
+    :param parent_package_name: The name of the parent package to use for relative imports.
+    :return: The imported module.
+    """
+    if package_import_path is None:
+        package_path = dirname(python_file_path)
+        package_import_path = get_import_path_from_path(package_path)
+    file_name = Path(python_file_path).name.replace(".py", "")
+    module_import_path = f"{package_import_path}.{file_name}" if package_import_path else file_name
+    module = importlib.import_module(module_import_path, package=parent_package_name)
+    importlib.reload(module)
+    return module
 
 
 def str_to_snake_case(snake_str: str) -> str:
@@ -716,6 +759,42 @@ origin_type_to_hint = {
     dict: Dict,
     tuple: Tuple,
 }
+
+
+def get_file_that_ends_with(directory_path: str, suffix: str) -> Optional[str]:
+    """
+    Get the file that ends with the given suffix in the model directory.
+
+    :param directory_path: The path to the directory where the file is located.
+    :param suffix: The suffix to search for.
+    :return: The path to the file that ends with the given suffix, or None if not found.
+    """
+    files = [f for f in os.listdir(directory_path) if f.endswith(suffix)]
+    if files:
+        return files[0]
+    return None
+
+def get_function_return_type(func: Callable) -> Union[Type, None, Tuple[Type, ...]]:
+    """
+    Get the return type of a function.
+
+    :param func: The function to get the return type for.
+    :return: The return type of the function, or None if not specified.
+    """
+    sig = inspect.signature(func)
+    if sig.return_annotation == inspect.Signature.empty:
+        return None
+    type_hint = sig.return_annotation
+    origin = get_origin(type_hint)
+    args = get_args(type_hint)
+    if origin not in [list, set, None, Union]:
+        raise TypeError(f"{origin} is not a handled return type for function {func.__name__}")
+    if origin is None:
+        return typing_to_python_type(type_hint)
+    if args is None or len(args) == 0:
+        return typing_to_python_type(type_hint)
+    return args
+
 
 
 def extract_types(tp, seen: Set = None) -> Set[type]:

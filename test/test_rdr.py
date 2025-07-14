@@ -4,6 +4,7 @@ from unittest import TestCase
 
 from typing_extensions import List, Optional
 
+from ripple_down_rules.rules import MultiClassStopRule
 from .datasets import Habitat, Species, load_zoo_cases
 from .datasets import load_zoo_dataset
 from ripple_down_rules.datastructures.case import Case
@@ -74,6 +75,78 @@ class TestRDR(TestCase):
                                  scenario=self.test_fit_scrdr)
         # render_tree(scrdr.start_rule, use_dot_exporter=True,
         #             filename=self.test_results_dir + f"/scrdr")
+
+    def test_read_scrdr_tree(self):
+        original_scrdr, _ = get_fit_scrdr(self.all_cases, self.targets)
+        save_dir = self.generated_rdrs_dir
+        model_name = original_scrdr.save(save_dir)
+        scrdr_loaded = SingleClassRDR.load(save_dir, original_scrdr.generated_python_file_name)
+        model_path = os.path.join(save_dir, model_name)
+        rules_root = SingleClassRDR.read_rule_tree_from_python(model_path)
+        for rule, og_rule in zip([rules_root] + list(rules_root.descendants),
+                                 [scrdr_loaded.start_rule] + list(scrdr_loaded.start_rule.descendants)):
+            assert rule.conditions.split('conditions_')[1] == rule.conclusion.split("conclusion_")[1] == rule.uid
+            assert rule.uid == og_rule.uid
+            if not rule.parent:
+                assert not og_rule.parent
+            else:
+                assert rule.parent.uid == og_rule.parent.uid
+            rule.name = f"{rule.conditions[:14]}\n -> {rule.conclusion[:14]} "
+        render_tree(rules_root, use_dot_exporter=True, filename="scrdr_read_tree")
+
+    def test_load_scrdr_from_python(self):
+        original_scrdr, _ = get_fit_scrdr(self.all_cases, self.targets)
+        save_dir = self.generated_rdrs_dir
+        model_name = original_scrdr.save(save_dir)
+        model_path = os.path.join(save_dir, model_name)
+        scrdr_loaded = SingleClassRDR.from_python(model_path)
+        for case, target in zip(self.all_cases, self.targets):
+            self.assertEqual(scrdr_loaded.classify(case), target)
+
+    def test_read_mcrdr_tree(self):
+        original_mcrdr = get_fit_mcrdr(self.all_cases, self.targets)
+        save_dir = self.generated_rdrs_dir
+        model_name = original_mcrdr.save(save_dir)
+        scrdr_loaded = MultiClassRDR.load(save_dir, original_mcrdr.generated_python_file_name)
+        model_path = os.path.join(save_dir, model_name)
+        rules_root = MultiClassRDR.read_rule_tree_from_python(model_path)
+        for rule, og_rule in zip([rules_root] + list(rules_root.descendants),
+                                 [scrdr_loaded.start_rule] + list(scrdr_loaded.start_rule.descendants)):
+            if isinstance(rule, MultiClassStopRule):
+                assert rule.conditions.split('conditions_')[1] == rule.uid
+            else:
+                assert rule.conditions.split('conditions_')[1] == rule.conclusion.split("conclusion_")[1] == rule.uid
+            assert rule.uid == og_rule.uid
+            if not rule.parent:
+                assert not og_rule.parent
+            else:
+                assert rule.parent.uid == og_rule.parent.uid
+            if isinstance(rule, MultiClassStopRule):
+                rule.name = f"{rule.conditions[:14]}\n -> {rule.conclusion} "
+            else:
+                rule.name = f"{rule.conditions[:14]}\n -> {rule.conclusion[:14]} "
+        render_tree(rules_root, use_dot_exporter=True, filename="mcrdr_read_tree")
+
+    def test_load_mcrdr_from_python(self):
+        original_mcrdr = get_fit_mcrdr(self.all_cases, self.targets)
+        save_dir = self.generated_rdrs_dir
+        model_name = original_mcrdr.save(save_dir)
+        model_path = os.path.join(save_dir, model_name)
+        mcrdr_loaded = MultiClassRDR.from_python(model_path)
+        for case, target in zip(self.all_cases, self.targets):
+            self.assertEqual(make_set(mcrdr_loaded.classify(case)), make_set(target))
+
+    def test_load_grdr_from_python(self):
+        original_grdr, targets = get_fit_grdr(self.all_cases, self.targets)
+        save_dir = self.generated_rdrs_dir
+        model_name = original_grdr.save(save_dir)
+        model_path = os.path.join(save_dir, model_name)
+        grdr_loaded = GeneralRDR.from_python(model_path)
+        for case, target in zip(self.all_cases[:len(targets)], targets):
+            cat = grdr_loaded.classify(case)
+            for cat_name, cat_val in cat.items():
+                if cat_name in target:
+                    self.assertEqual(make_set(cat_val), make_set(target[cat_name]))
 
     def test_save_load_scrdr(self):
 
@@ -259,7 +332,8 @@ class TestRDR(TestCase):
         scrdr, _ = get_fit_scrdr(self.all_cases, self.targets, scenario=self.test_update_rdr_from_python_file)
         modified_model_dir = self.generated_rdrs_dir + '/scrdr_modified'
         scrdr._write_to_python(modified_model_dir)
-        filepath = os.path.join(modified_model_dir, f"{scrdr.generated_python_defs_file_name}.py")
+        main_file_path = os.path.join(modified_model_dir, f"{scrdr.generated_python_file_name}.py")
+        filepath = main_file_path.replace(".py", "_defs.py")
         func_name = f"conditions_{scrdr.start_rule.uid}"
         first_rule_conditions, line_numbers = extract_function_source(filepath,
                                                                                func_name,
@@ -278,7 +352,7 @@ class TestRDR(TestCase):
                                                                                return_line_numbers=True)
         self.assertEqual(first_rule_conditions[func_name][-1], "    return case.milk == 0")
         scrdr: RDRWithCodeWriter
-        scrdr.update_from_python(modified_model_dir)
+        scrdr.update_from_python(modified_model_dir, python_file_path=main_file_path)
         self.assertEqual(scrdr.start_rule.conditions.user_input.strip().split('\n')[-1].strip(),
                          "return case.milk == 0")
         classify_species_scrdr = scrdr.get_rdr_classifier_from_python_file(modified_model_dir)

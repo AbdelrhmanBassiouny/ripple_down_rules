@@ -215,6 +215,10 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
     def generated_conditions_function_name(self) -> str:
         return f"conditions_{self.uid}"
 
+    @property
+    def generated_corner_case_object_name(self) -> str:
+        return f"corner_case_{self.uid}"
+
     def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
         """
         Convert the conclusion of a rule to source code.
@@ -283,16 +287,10 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
         pass
 
     def _to_json(self) -> Dict[str, Any]:
-        try:
-            corner_case = SubclassJSONSerializer.to_json_static(self.corner_case) if self.corner_case else None
-        except Exception as e:
-            logging.debug("Failed to serialize corner case to json, setting it to None. Error: %s", e)
-            corner_case = None
         json_serialization = {"_type": get_full_class_name(type(self)),
                               "conditions": self.conditions.to_json(),
                               "conclusion": conclusion_to_json(self.conclusion),
                               "parent": self.parent.json_serialization if self.parent else None,
-                              "corner_case": corner_case,
                               "conclusion_name": self.conclusion_name,
                               "weight": self.weight,
                               "uid": self.uid}
@@ -300,15 +298,9 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Rule:
-        try:
-            corner_case = Case.from_json(data["corner_case"])
-        except Exception as e:
-            logging.debug("Failed to load corner case from json, setting it to None.")
-            corner_case = None
         loaded_rule = cls(conditions=CallableExpression.from_json(data["conditions"]),
                           conclusion=CallableExpression.from_json(data["conclusion"]),
                           parent=cls.from_json(data["parent"]),
-                          corner_case=corner_case,
                           conclusion_name=data["conclusion_name"],
                           weight=data["weight"],
                           uid=data["uid"])

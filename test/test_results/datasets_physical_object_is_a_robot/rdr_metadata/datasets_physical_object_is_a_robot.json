@@ -12,12 +12,7 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Dict": "typing.Dict",
-                        "Optional": "typing.Optional",
-                        "Union": "typing.Union",
-                        "NoneType": "builtins.NoneType",
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot"
+                        "PhysicalObject": "test.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -32,12 +27,8 @@
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Dict": "typing.Dict",
-                        "Optional": "typing.Optional",
-                        "Union": "typing.Union",
-                        "NoneType": "builtins.NoneType",
-                        "PhysicalObject": "test.datasets.PhysicalObject",
-                        "Robot": "test.datasets.Robot"
+                        "Robot": "test.datasets.Robot",
+                        "PhysicalObject": "test.datasets.PhysicalObject"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -46,14 +37,6 @@
                     "mutually_exclusive": true
                 },
                 "parent": null,
-                "corner_case": {
-                    "_type": "ripple_down_rules.datastructures.case.Case",
-                    "self_": null,
-                    "output_": null,
-                    "_id": 140375680622464,
-                    "_obj_type": "builtins.dict",
-                    "_name": "PhysicalObject_is_a_robot"
-                },
                 "conclusion_name": "output_",
                 "weight": "",
                 "uid": "226969243620390858682731042391766665817",

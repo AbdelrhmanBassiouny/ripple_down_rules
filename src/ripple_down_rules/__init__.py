@@ -1,6 +1,6 @@
 import logging
 
-__version__ = "0.6.30"
+__version__ = "0.6.43"
 
 logger = logging.Logger("rdr")
 logger.setLevel(logging.INFO)
