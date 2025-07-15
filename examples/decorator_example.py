@@ -1,4 +1,5 @@
-from relational_model import Part, Robot, PhysicalObject, my_robot_factory
+from decorator_model import Part, Robot, PhysicalObject
+from decorator_model import my_robot_factory
 from ripple_down_rules import GeneralRDR, CaseQuery
 
 
@@ -16,12 +17,8 @@ except ImportError:
     viewer = None
 
 # Create a GeneralRDR instance and fit it to the case query
-grdr = GeneralRDR(save_dir='./', model_name='part_containment_rdr')
-
-case_query = CaseQuery(robot, "contained_objects", (PhysicalObject,), False)
-
-grdr.fit_case(case_query)
+robot.get_contained_objects()  # Ensure the decorator is applied
 
 # Classify the robot to check if it contains part_b
-result = grdr.classify(robot)
-assert list(result['contained_objects']) == robot.parts[0].contained_objects
+result = robot.get_contained_objects()
+assert result == robot.parts[0].contained_objects

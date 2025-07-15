@@ -5,9 +5,11 @@ of the RDRs.
 """
 import os.path
 from functools import wraps
+from typing import get_origin
 
 from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any, Self, get_type_hints, List, Union, Sequence
 
+from build.lib.ripple_down_rules.utils import get_type_from_type_hint
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseQuery
 from .experts import Expert, Human
@@ -18,7 +20,7 @@ try:
 except ImportError:
     RDRCaseViewer = None
 from .utils import get_method_args_as_dict, get_func_rdr_model_name, make_set, \
-    get_method_class_if_exists, str_to_snake_case
+    get_method_class_if_exists, str_to_snake_case, make_list
 
 
 class RDRDecorator:
@@ -77,6 +79,7 @@ class RDRDecorator:
             lambda f: f  # Default to no fitting decorator
         self.generate_dot_file = generate_dot_file
         self.not_none_output_found: bool = False
+        self.origin_type: Optional[Type] = None
 
     def decorator(self, func: Callable) -> Callable:
 
@@ -85,6 +88,10 @@ class RDRDecorator:
 
             if self.model_name is None:
                 self.initialize_rdr_model_name_and_load(func)
+            if self.origin_type is None and not self.mutual_exclusive:
+                self.origin_type = get_origin(get_type_hints(func)['return'])
+                if self.origin_type:
+                    self.origin_type = get_type_from_type_hint(self.origin_type)
 
             func_output = {self.output_name: func(*args, **kwargs)}
 
@@ -124,6 +131,8 @@ class RDRDecorator:
                             self.not_none_output_found = True
 
             if self.output_name in output:
+                if self.origin_type == list:
+                    return make_list(output[self.output_name])
                 return output[self.output_name]
             else:
                 return func_output[self.output_name]
