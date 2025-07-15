@@ -7,7 +7,7 @@
                 "_type": "ripple_down_rules.rules.SingleClassRule",
                 "conditions": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n                        def conditions_for_physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n                            \"\"\"Get conditions on whether it's possible to conclude a value for PhysicalObject_is_a_robot.output_  of type .\"\"\"\n                            return True\n                        return conditions_for_physical_object_is_a_robot(**case)\n    ",
+                    "user_input": "def _get_value(case):\n                            def conditions_for_physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n                                \"\"\"Get conditions on whether it's possible to conclude a value for PhysicalObject_is_a_robot.output_  of type .\"\"\"\n                                return True\n                            return conditions_for_physical_object_is_a_robot(**case)\n    ",
                     "conclusion_type": [
                         "builtins.bool"
                     ],
@@ -22,13 +22,13 @@
                 },
                 "conclusion": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n                        def physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n                            \"\"\"Get possible value(s) for PhysicalObject_is_a_robot.output_  of type .\"\"\"\n                            return isinstance(self_, Robot)\n                        return physical_object_is_a_robot(**case)\n    ",
+                    "user_input": "def _get_value(case):\n                            def physical_object_is_a_robot(self_: PhysicalObject, output_: bool) -> bool:\n                                \"\"\"Get possible value(s) for PhysicalObject_is_a_robot.output_  of type .\"\"\"\n                                return isinstance(self_, Robot)\n                            return physical_object_is_a_robot(**case)\n    ",
                     "conclusion_type": [
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Robot": "test.datasets.Robot",
-                        "PhysicalObject": "test.datasets.PhysicalObject"
+                        "PhysicalObject": "test.datasets.PhysicalObject",
+                        "Robot": "test.datasets.Robot"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",

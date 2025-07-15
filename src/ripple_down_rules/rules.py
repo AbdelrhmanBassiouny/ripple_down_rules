@@ -359,6 +359,14 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
     def __repr__(self):
         return self.__str__()
 
+    def __eq__(self, other):
+        if not isinstance(other, Rule):
+            return False
+        return other.uid == self.uid
+
+    def __hash__(self):
+        return hash(self.uid)
+
 
 class HasAlternativeRule:
     """
