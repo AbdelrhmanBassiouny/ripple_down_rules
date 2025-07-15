@@ -218,11 +218,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if os.path.exists(json_file + ".json"):
             rdr = cls.from_json_file(json_file)
         try:
-            acronym = cls.get_acronym().lower()
-            python_file_name = get_file_that_ends_with(model_dir, f"_{acronym}.py")
-            python_file_path = os.path.join(model_dir, python_file_name)
             if rdr is None:
-                rdr = cls.from_python(model_dir, parent_package_name=package_name, python_file_path=python_file_path)
+                rdr = cls.from_python(model_dir, parent_package_name=package_name)
             else:
                 rdr.update_from_python(model_dir, package_name=package_name)
             rdr.to_json_file(json_file)
