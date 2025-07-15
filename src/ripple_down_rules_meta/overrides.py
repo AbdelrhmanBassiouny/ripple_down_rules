@@ -26,7 +26,7 @@ def override_ripple_down_rules(name):
 class TrackedObjectMixin(OGTrackedObjectMixin):
     models_dir: ClassVar[str] = os.path.join(dirname(__file__), "predicates_models")
     depends_on_rdr: ClassVar[RDRDecorator] = RDRDecorator(models_dir, (bool,), True,
-                                                          package_name="ripple_down_rules", fit=True)
+                                                          package_name="ripple_down_rules", fit=False)
 
     @classmethod
     @lru_cache(maxsize=None)

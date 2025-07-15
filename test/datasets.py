@@ -12,7 +12,7 @@ from ucimlrepo import fetch_ucirepo
 
 from ripple_down_rules.datastructures.case import Case, create_cases_from_dataframe
 from ripple_down_rules.datastructures.enums import Category
-from ripple_down_rules.datastructures.tracked_object import TrackedObjectMixin
+from ripple_down_rules import TrackedObjectMixin
 from ripple_down_rules.rdr_decorators import RDRDecorator
 
 

@@ -11,6 +11,7 @@ from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any, Self, 
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseQuery, CaseFactoryMetaData
 from .experts import Expert, Human
+from .failures import RDRLoadError
 from .rdr import GeneralRDR
 from . import logger
 try:
@@ -205,7 +206,10 @@ class RDRDecorator:
         """
         self.rdr = None
         if self.model_name is not None:
-            self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name, package_name=self.package_name)
+            try:
+                self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name, package_name=self.package_name)
+            except RDRLoadError as e:
+                pass
         if self.rdr is None:
             self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name)
 
