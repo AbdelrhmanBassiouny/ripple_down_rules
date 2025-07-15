@@ -116,6 +116,7 @@ class TrackedObjectMixin:
         :param composition: If True, the class dependency graph will include composition relations.
         """
         subclasses = recursive_subclasses(TrackedObjectMixin)
+        subclasses = [sc for sc in subclasses if sc.__name__ != TrackedObjectMixin.__name__]
         for clazz in subclasses:
             cls._add_class_to_dependency_graph(clazz)
 

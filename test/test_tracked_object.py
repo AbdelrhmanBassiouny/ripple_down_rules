@@ -12,16 +12,16 @@ def test_construct_class_hierarchy():
     # Drawer._reset_dependency_graph()
     Drawer.make_class_dependency_graph(composition=False)
     Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
-    assert len(Drawer._dependency_graph.nodes()) == 17
-    assert len(Drawer._dependency_graph.edges()) == 15
+    assert len(Drawer._dependency_graph.nodes()) == 16
+    assert len(Drawer._dependency_graph.edges()) == 14
 
 
 def test_construct_class_composition():
     # Drawer._reset_dependency_graph()
     Drawer.make_class_dependency_graph(composition=True)
     Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
-    assert len(Drawer._dependency_graph.nodes()) == 17
-    assert len(Drawer._dependency_graph.edges()) == 20
+    assert len(Drawer._dependency_graph.nodes()) == 16
+    assert len(Drawer._dependency_graph.edges()) == 19
     Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
 
 
