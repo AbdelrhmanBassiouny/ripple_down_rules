@@ -77,7 +77,6 @@ class RDRDecorator:
             lambda f: f  # Default to no fitting decorator
         self.generate_dot_file = generate_dot_file
         self.not_none_output_found: bool = False
-        self.load()
 
     def decorator(self, func: Callable) -> Callable:
 
@@ -211,14 +210,10 @@ class RDRDecorator:
         """
         Load the RDR model from the specified directory.
         """
-        self.rdr = None
-        if self.model_name is not None:
-            self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name, package_name=self.package_name)
-        if self.rdr is None:
-            self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name)
+        self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name)
 
     def update_from_python(self):
         """
         Update the RDR model from a python file.
         """
-        self.rdr.update_from_python(self.rdr_models_dir, package_name=self.package_name)
+        self.rdr.update_from_python(self.rdr_models_dir, parent_package_name=self.package_name)

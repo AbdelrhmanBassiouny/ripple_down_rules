@@ -103,6 +103,16 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.viewer: Optional[RDRCaseViewer] = RDRCaseViewer.instances[0]\
             if RDRCaseViewer and any(RDRCaseViewer.instances) else None
         self.input_node: Optional[Rule] = None
+        self.update_model()
+
+    def update_model(self):
+        """
+        Update the model from the model directory if it exists.
+        """
+        if self.save_dir is not None and self.model_name is not None:
+            model_path = os.path.join(self.save_dir, self.model_name)
+            if os.path.exists(model_path):
+                self.update_from_python(model_path, update_rule_tree=True)
 
     def write_rdr_metadata_to_pyton_file(self, file: TextIOWrapper):
         """
@@ -221,7 +231,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             if rdr is None:
                 rdr = cls.from_python(model_dir, parent_package_name=package_name)
             else:
-                rdr.update_from_python(model_dir, package_name=package_name)
+                rdr.update_from_python(model_dir, parent_package_name=package_name)
             rdr.to_json_file(json_file)
         except (FileNotFoundError, ValueError, SyntaxError, ModuleNotFoundError) as e:
             logger.warning(f"Could not load the python file for the model {model_name} from {model_dir}. "
@@ -234,18 +244,22 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         return rdr
 
     @classmethod
-    @abstractmethod
-    def from_python(cls, model_dir: str, python_file_path: Optional[str] = None,
+    def from_python(cls, model_path: str,
+                    python_file_path: Optional[str] = None,
                     parent_package_name: Optional[str] = None) -> Self:
         """
-        Load the classifier from a python file.
+        Load the RDR classifier from a generated python file.
 
-        :param model_dir: The path to the directory where the generated python file is located.
-        :param python_file_path: The path to the python file to load the classifier from.
+        :param model_path: The directory where the generated python file is located.
+        :param python_file_path: The path to the generated python file that contains the RDR classifier function.
         :param parent_package_name: The name of the package that contains the RDR classifier function, this
         is required in case of relative imports in the generated python file.
+        :return: An instance of the RDR classifier.
         """
-        pass
+        rdr = cls()
+        rdr.update_from_python(model_path, parent_package_name=parent_package_name, python_file_path=python_file_path,
+                               update_rule_tree=True)
+        return rdr
 
     @abstractmethod
     def _write_to_python(self, model_dir: str, package_name: Optional[str] = None):
@@ -555,13 +569,17 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         pass
 
     @abstractmethod
-    def update_from_python(self, model_dir: str, package_name: Optional[str] = None):
+    def update_from_python(self, model_dir: str, parent_package_name: Optional[str] = None,
+                           python_file_path: Optional[str] = None,
+                           update_rule_tree: bool = False):
         """
         Update the rules from the generated python file, that might have been modified by the user.
 
         :param model_dir: The directory where the generated python file is located.
-        :param package_name: The name of the package that contains the RDR classifier function, this
+        :param parent_package_name: The name of the package that contains the RDR classifier function, this
         is required in case of relative imports in the generated python file.
+        :param python_file_path: The path to the generated python file that contains the RDR classifier function.
+        :param update_rule_tree: Whether to update the rule tree from the python file or not.
         """
         pass
 
@@ -803,24 +821,6 @@ class MultiClassTreeBuilder(TreeBuilder):
 class RDRWithCodeWriter(RippleDownRules, ABC):
 
     @classmethod
-    def from_python(cls, model_path: str,
-                    python_file_path: Optional[str] = None,
-                    parent_package_name: Optional[str] = None) -> Self:
-        """
-        Load the RDR classifier from a generated python file.
-
-        :param model_path: The directory where the generated python file is located.
-        :param python_file_path: The path to the generated python file that contains the RDR classifier function.
-        :param parent_package_name: The name of the package that contains the RDR classifier function, this
-        is required in case of relative imports in the generated python file.
-        :return: An instance of the RDR classifier.
-        """
-        rule_tree_root = cls.read_rule_tree_from_python(model_path, python_file_path=python_file_path)
-        rdr = cls(start_rule=rule_tree_root)
-        rdr.update_from_python(model_path, package_name=parent_package_name, python_file_path=python_file_path)
-        return rdr
-
-    @classmethod
     def read_rule_tree_from_python(cls, model_path: str, python_file_path: Optional[str] = None) -> Rule:
         """
         :param model_path: The path to the generated python file that contains the RDR classifier function.
@@ -861,16 +861,19 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             return []
         return [r for r in [self.start_rule] + list(self.start_rule.descendants) if r.conditions is not None]
 
-    def update_from_python(self, model_dir: str, package_name: Optional[str] = None,
-                           python_file_path: Optional[str] = None):
+    def update_from_python(self, model_dir: str, parent_package_name: Optional[str] = None,
+                           python_file_path: Optional[str] = None, update_rule_tree: bool = False):
         """
         Update the rules from the generated python file, that might have been modified by the user.
 
         :param model_dir: The directory where the generated python file is located.
-        :param package_name: The name of the package that contains the RDR classifier function, this
+        :param parent_package_name: The name of the package that contains the RDR classifier function, this
         is required in case of relative imports in the generated python file.
         :param python_file_path: The path to the generated python file that contains the RDR classifier function.
+        :param update_rule_tree: Whether to update the rule tree from the python file or not.
         """
+        if update_rule_tree:
+            self.start_rule = self.read_rule_tree_from_python(model_dir, python_file_path=python_file_path)
         all_rules = self.all_rules
         condition_func_names = [rule.generated_conditions_function_name for rule in all_rules]
         conclusion_func_names = [rule.generated_conclusion_function_name for rule in all_rules
@@ -880,24 +883,24 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         main_module, defs_module, cases_module = self.get_and_import_model_python_modules(
                                                         model_dir,
                                                         python_file_path=python_file_path,
-                                                        parent_package_name=package_name)
+                                                        parent_package_name=parent_package_name)
         self.generated_python_file_name = Path(main_module.__file__).name.replace(".py", "")
 
         self.update_rdr_metadata_from_python(main_module)
 
         functions_source = extract_function_source(defs_module.__file__,
                                                    all_func_names, include_signature=True)
-        scope = extract_imports(defs_module.__file__, package_name=package_name)
+        scope = extract_imports(defs_module.__file__, package_name=parent_package_name)
 
         cases_source, cases_scope = None, None
         if cases_module:
             with open(cases_module.__file__, "r") as f:
                 cases_source = f.read()
-            cases_scope = extract_imports(cases_module.__file__, package_name=package_name)
+            cases_scope = extract_imports(cases_module.__file__, package_name=parent_package_name)
 
         with open(main_module.__file__, "r") as f:
             main_source = f.read()
-        main_scope = extract_imports(main_module.__file__, package_name=package_name)
+        main_scope = extract_imports(main_module.__file__, package_name=parent_package_name)
         attribute_name_line = [l for l in main_source.split('\n') if "attribute_name = " in l]
         conclusion_name = None
         if len(attribute_name_line) > 0:
@@ -1568,21 +1571,9 @@ class GeneralRDR(RippleDownRules):
         is required in case of relative imports in the generated python file.
         :return: An instance of the class.
         """
-        if python_file_path is None:
-            main_python_file_path = cls.get_generated_python_file_path(model_dir)
-        else:
-            main_python_file_path = python_file_path
-        main_module = get_and_import_python_module(main_python_file_path, parent_package_name=parent_package_name)
-        classifiers_dict = main_module.classifiers_dict
-        start_rules_dict = {}
-        for rdr_name, rdr_module in classifiers_dict.items():
-            rdr_acronym = rdr_module.__name__.split('_')[-1]
-            rdr_type = cls.get_rdr_type_from_acronym(rdr_acronym)
-            rdr_model_path = main_python_file_path.replace('_rdr.py', f'_{rdr_name}_{rdr_acronym}.py')
-            rdr = rdr_type.from_python(model_dir, python_file_path=rdr_model_path, parent_package_name=parent_package_name)
-            start_rules_dict[rdr_name] = rdr
-        grdr = cls(category_rdr_map=start_rules_dict)
-        grdr.update_rdr_metadata_from_python(main_module)
+        grdr = cls()
+        grdr.update_from_python(model_dir, parent_package_name=parent_package_name, python_file_path=python_file_path,
+                                update_rule_tree=True)
         return grdr
 
     @classmethod
@@ -1706,16 +1697,38 @@ class GeneralRDR(RippleDownRules):
             new_rdr.case_name = data["case_name"]
         return new_rdr
 
-    def update_from_python(self, model_dir: str, package_name: Optional[str] = None) -> None:
+    def update_from_python(self, model_dir: str, parent_package_name: Optional[str] = None,
+                           python_file_path: Optional[str] = None,
+                           update_rule_tree: bool = False) -> None:
         """
         Update the rules from the generated python file, that might have been modified by the user.
 
         :param model_dir: The directory where the model is stored.
-        :param package_name: The name of the package that contains the RDR classifier function, this
+        :param parent_package_name: The name of the package that contains the RDR classifier function, this
         is required in case of relative imports in the generated python file.
+        :param python_file_path: The path to the python file, if not provided, it will be generated from the model_dir.
+        :param update_rule_tree: Whether to update the rule tree from the python file or not.
         """
-        for rdr in self.start_rules_dict.values():
-            rdr.update_from_python(model_dir, package_name=package_name)
+        if update_rule_tree:
+            if python_file_path is None:
+                main_python_file_path = self.get_generated_python_file_path(model_dir)
+            else:
+                main_python_file_path = python_file_path
+            main_module = get_and_import_python_module(main_python_file_path, parent_package_name=parent_package_name)
+            classifiers_dict = main_module.classifiers_dict
+            self.start_rules_dict = {}
+            for rdr_name, rdr_module in classifiers_dict.items():
+                rdr_acronym = rdr_module.__name__.split('_')[-1]
+                rdr_type = self.get_rdr_type_from_acronym(rdr_acronym)
+                rdr_model_path = main_python_file_path.replace('_rdr.py', f'_{rdr_name}_{rdr_acronym}.py')
+                rdr = rdr_type.from_python(model_dir, python_file_path=rdr_model_path,
+                                           parent_package_name=parent_package_name)
+                self.start_rules_dict[rdr_name] = rdr
+
+            self.update_rdr_metadata_from_python(main_module)
+        else:
+            for rdr in self.start_rules_dict.values():
+                rdr.update_from_python(model_dir, parent_package_name=parent_package_name)
 
     def _write_to_python(self, model_dir: str, package_name: Optional[str] = None) -> None:
         """

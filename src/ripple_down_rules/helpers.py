@@ -90,7 +90,7 @@ def load_or_create_func_rdr_model(func, model_dir: str, rdr_type: Type[RippleDow
     :param rdr_kwargs: Additional arguments to pass to the RDR constructor in the case of a new model.
     """
     model_name = get_func_rdr_model_name(func)
-    model_path = os.path.join(model_dir, model_name, "rdr_metadata", f"{model_name}.json")
+    model_path = os.path.join(model_dir, model_name, f"{model_name}.py")
     if os.path.exists(model_path):
         rdr = rdr_type.load(load_dir=model_dir, model_name=model_name)
     else:

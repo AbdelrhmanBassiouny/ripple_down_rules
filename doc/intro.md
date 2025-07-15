@@ -15,9 +15,9 @@ SCRDR, MCRDR, and GRDR logic were inspired from the book:
 
 ## 🚀 Enhanced Ripple-Down Rules Engine – Key Features
 
-### 🧠 Ontology + Rule Base as One Entity
-- 🧬 Unified data structure: Ontology and rules use the same Python data structures. 
-- 🔄 Automatic sync: Updates to the ontology instantly reflect in the rule base. 
+### 🧠 Data Model (Ontology) + Rule Base as One Entity
+- 🧬 Unified data structure: Data Model (Ontology) and rules use the same Python data structures. 
+- 🔄 Automatic sync: Updates to the data model instantly reflect in the rule base. 
 - 📦 Version controlled: The rule base is a Python module, versioned with your project.
 
 ### 🔁 Supports First, Second & Higher-Order Logic
@@ -63,17 +63,32 @@ performance, so stay tuned for updates! and feel free to contribute, give feedba
 author = {Bassiouny, Abdelrhman},
 title = {Ripple-Down-Rules},
 url = {https://github.com/AbdelrhmanBassiouny/ripple_down_rules},
-version = {0.5.4},
+version = {0.6.47},
 }
 ```
 
 ## Installation
-See [GitHub repository](https://github.com/AbdelrhmanBassiouny/ripple_down_rules)
+```bash
+sudo apt-get install graphviz graphviz-dev
+pip install ripple_down_rules
+```
+For GUI support, also install:
 
-## RippleDownRules (RDR)
+```bash
+sudo apt-get install libxcb-cursor-dev
+```
 
-This is the main abstract class for the ripple down rules. From this class, the different versions of
-ripple down rules are derived. So the `SingleClassRDR`, `MultiClassRDR`, and `GeneralRDR` classes
+## Technical Overview
+
+### CaseQuery
+
+The {py:class}`ripple_down_rules.datastructures.dataclasses.CaseQuery` class is a data structure that represents a query for a case in the ripple down rules system.
+It mainly requires the queried object which is referred to as `case`, the target attribute that is being queried, the type(s) of the target, and a boolean indicating whether the target is mutually exclusive or not.
+
+### RippleDownRules
+
+{py:class}`ripple_down_rules.rdr.RippleDownRules` This is the main abstract class for the ripple down rules. From this class, the different versions of
+ripple down rules are derived. So the {py:class}`ripple_down_rules.rdr.SingleClassRDR`, {py:class}`ripple_down_rules.rdr.MultiClassRDR`, and {py:class}`ripple_down_rules.rdr.GeneralRDR` classes
 are all derived from this class.
 
 For most cases, you will use the `GeneralRDR` class, which is the most general version of the ripple down rules, 
@@ -82,14 +97,14 @@ on the case query.
 
 This class has four main methods that you will mostly use:
 
-- `fit`: This method is used to fit the rules to the data. It takes a list of `CaseQuery` objects that contain the
+- {py:func}`ripple_down_rules.rdr.RippleDownRules.fit`: This method is used to fit the rules to the data. It takes a list of `CaseQuery` objects that contain the
   data cases and their targets, and it will prompt the user to add rules when a case is misclassified or not classified at all.
-- `fit_case`: This method is used to fit a single case to the rules.
-- `classify`: This method is used to classify a data case. It takes a data case (any python object) and returns the
+- {py:func}`ripple_down_rules.rdr.RippleDownRules.fit_case`: This method is used to fit a single case to the rules.
+- {py:func}`ripple_down_rules.rdr.RippleDownRules.classify`: This method is used to classify a data case. It takes a data case (any python object) and returns the
 predicted target.
-- `save`: This method is used to save the rules to a file. It will save the rules as a python module that can be imported
+- {py:func}`ripple_down_rules.rdr.RippleDownRules.save`: This method is used to save the rules to a file. It will save the rules as a python module that can be imported
   in your project. In addition, it will save the rules as a JSON file with some metadata about the rules.
-- `load`: This method is used to load the rules from a file. It will load the rules from a JSON file and then update the
+- {py:func}`ripple_down_rules.rdr.RippleDownRules.load`: This method is used to load the rules from a file. It will load the rules from a JSON file and then update the
   rules from the python module (which is important in case the user manually edited the rules in the python module).
 
 ### SingleClassRDR
@@ -111,18 +126,18 @@ This is the general version of the ripple down rules. It has the following featu
 
 ## Expert
 
-The expert is an interface between the ripple down rules and the rule writer. Currently, only a Human expert is
+The {py:class}`ripple_down_rules.experts.Expert` is an interface between the ripple down rules and the rule writer. Currently, only a {py:class}`ripple_down_rules.experts.Human` expert is
 implemented, but it is designed to be easily extendable to other types of experts, such as LLMs or other AI systems.
 
 The main APIs are:
 
-- `ask_for_conclusion`: This method is used to ask the expert for a conclusion or a target for a data case.
-- `ask_for_conditions`: This method is used to ask the expert for the conditions that should be met for a rule to be
+- {py:func}`ripple_down_rules.experts.Expert.ask_for_conclusion`: This method is used to ask the expert for a conclusion or a target for a data case.
+- {py:func}`ripple_down_rules.experts.Expert.ask_for_conditions`: This method is used to ask the expert for the conditions that should be met for a rule to be
 applied or evaluated.
 
 ## RDRDecorator
 
-The `RDRDecorator` is a decorator that can be used to create rules in a more convenient way. It allows you to write 
+The {py:class}`ripple_down_rules.rdr_decorators.RDRDecorator` is a decorator that can be used to create rules in a more convenient way. It allows you to write 
 functions normally and then decorate them with the `@RDRDecorator().decorator`. This will allow the function to be
 to use ripple down rules to provide its output. This also allows you to write your own initial function logic, and then
 this will be used input or feature to the ripple down rules.
@@ -223,13 +238,11 @@ and the parts it has.
 ```python
 from __future__ import annotations
 
-import os.path
 from dataclasses import dataclass, field
 
-from typing_extensions import List, Optional
+from typing_extensions import List
 
-from ripple_down_rules.datastructures.dataclasses import CaseQuery
-from ripple_down_rules.rdr import GeneralRDR
+from ripple_down_rules import CaseQuery, GeneralRDR
 
 
 @dataclass(unsafe_hash=True)
@@ -258,17 +271,12 @@ part_b.contained_objects = [part_c]
 
 case_query = CaseQuery(robot, "contained_objects", (PhysicalObject,), False)
 
-load = True  # Set to True if you want to load an existing model, False if you want to create a new one.
-if load and os.path.exists('./part_containment_rdr'):
-    grdr = GeneralRDR.load('./', model_name='part_containment_rdr')
-    grdr.ask_always = False # Set to True if you want to always ask the expert for a target value.
-else:
-    grdr = GeneralRDR(save_dir='./', model_name='part_containment_rdr')
+grdr = GeneralRDR(save_dir='./', model_name='part_containment_rdr')
 
 grdr.fit_case(case_query)
 
-print(grdr.classify(robot)['contained_objects'])
-assert grdr.classify(robot)['contained_objects'] == {part_b}
+result = grdr.classify(robot)
+assert result['contained_objects'] == {part_b}
 ```
 
 When prompted to write a rule, I wrote the following inside the template function that the Ripple Down Rules created
