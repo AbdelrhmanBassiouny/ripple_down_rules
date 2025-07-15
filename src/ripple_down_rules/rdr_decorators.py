@@ -213,9 +213,7 @@ class RDRDecorator:
         """
         self.rdr = None
         if self.model_name is not None:
-            model_path = os.path.join(self.rdr_models_dir, self.model_name + f"/rdr_metadata/{self.model_name}.json")
-            if os.path.exists(os.path.join(self.rdr_models_dir, model_path)):
-                self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name, package_name=self.package_name)
+            self.rdr = GeneralRDR.load(self.rdr_models_dir, self.model_name, package_name=self.package_name)
         if self.rdr is None:
             self.rdr = GeneralRDR(save_dir=self.rdr_models_dir, model_name=self.model_name)
 

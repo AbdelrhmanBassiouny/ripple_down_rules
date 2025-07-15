@@ -15,6 +15,7 @@ from types import NoneType, ModuleType
 
 from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
 from . import logger
+from .failures import RDRLoadError
 
 try:
     from matplotlib import pyplot as plt
@@ -228,6 +229,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         except (FileNotFoundError, ValueError, SyntaxError, ModuleNotFoundError) as e:
             logger.warning(f"Could not load the python file for the model {model_name} from {model_dir}. "
                            f"Make sure the file exists and is valid.")
+            if rdr is None:
+                raise RDRLoadError(f"Could not load the rdr model {model_name} from {model_dir}, error is {e}")
             rdr.save(save_dir=load_dir, model_name=model_name, package_name=package_name)
         rdr.save_dir = load_dir
         rdr.model_name = model_name

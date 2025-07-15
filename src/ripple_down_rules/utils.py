@@ -177,6 +177,11 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                 try:
                     if node.level > 0:  # Handle relative imports
                         package_name = get_import_path_from_path(Path(os.path.join(file_path, *['..'] * node.level)).resolve())
+                    if package_name is not None and node.level > 0:  # Handle relative imports
+                        module_rel_path = Path(os.path.join(file_path, *['..'] * node.level, module_name)).resolve()
+                        idx = str(module_rel_path).rfind(package_name)
+                        if idx != -1:
+                            module_name = str(module_rel_path)[idx:].replace(os.path.sep, '.')
                     try:
                         module = importlib.import_module(module_name, package=package_name)
                     except ModuleNotFoundError:
