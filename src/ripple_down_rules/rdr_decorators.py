@@ -102,8 +102,7 @@ class RDRDecorator:
     """
     This is used to refer to the output value of the decorated function, this is used as part of the case as input to 
     the rdr model, but is never used in the rule logic to prevent cycles from happening. The correct way to use the 
-    output of an rdr in the rules logic is in the case when mutually exclusive is False, or through refinements of 
-    existing rules when mutually exclusive is True, which happens automatically by the rdr prompting for refinements.
+    output of an rdr is through refinement rules which happens automatically by the rdr prompting for refinements.
     """
     _not_none_output_found: bool = field(init=False, default=False)
     """
