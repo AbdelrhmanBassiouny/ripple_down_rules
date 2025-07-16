@@ -1,8 +1,16 @@
-__version__ = "0.6.47"
+__version__ = "0.6.48"
 
 import logging
+import sys
+
 logger = logging.Logger("rdr")
 logger.setLevel(logging.INFO)
+
+try:
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication(sys.argv)
+except ImportError:
+    pass
 
 from .datastructures.dataclasses import CaseQuery
 from .rdr_decorators import RDRDecorator

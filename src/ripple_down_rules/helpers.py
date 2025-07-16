@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from types import ModuleType
 from typing import Tuple
 
@@ -116,3 +117,13 @@ def get_an_updated_case_copy(case: Case, conclusion: Callable, attribute_name: s
         output = {attribute_name: output}
     update_case(temp_case_query, output)
     return case_cp
+
+def enable_gui():
+    """
+    Enable the GUI for Ripple Down Rules if available.
+    """
+    try:
+        from .user_interface.gui import RDRCaseViewer
+        viewer = RDRCaseViewer()
+    except ImportError:
+        pass

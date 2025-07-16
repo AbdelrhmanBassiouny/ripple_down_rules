@@ -9,7 +9,7 @@ from typing import get_origin
 
 from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any, Self, get_type_hints, List, Union, Sequence
 
-from build.lib.ripple_down_rules.utils import get_type_from_type_hint
+from .utils import get_type_from_type_hint
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseQuery
 from .experts import Expert, Human

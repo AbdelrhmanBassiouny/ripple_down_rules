@@ -4,6 +4,9 @@
 format: jb-book
 root: intro
 chapters:
+- file: relational_example_tutorial
+- file: relational_example_with_decorator_tutorial
+- file: test_driven_rdr_fitting_tutorial
+- file: propositional_example_tutorial
 - file: bibliography
-- file: tutorials
 - file: autoapi/index

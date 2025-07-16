@@ -1,19 +1,17 @@
-from relational_model import Part, Robot, PhysicalObject, my_robot_factory
+from relational_model import Part, Robot, PhysicalObject
 from ripple_down_rules import GeneralRDR, CaseQuery
-
+from ripple_down_rules.helpers import enable_gui
 
 # Define a simple robot with parts and containment relationships
-robot = my_robot_factory()
+part_a = Part(name="A")
+part_b = Part(name="B")
+part_c = Part(name="C")
+robot = Robot("pr2", parts=[part_a])
+part_a.contained_objects = [part_b]
+part_b.contained_objects = [part_c]
 
 # Optional: Use the GUI.
-try:
-    from PyQt6.QtWidgets import QApplication
-    from ripple_down_rules.user_interface.gui import RDRCaseViewer
-    app = QApplication([])
-    viewer = RDRCaseViewer()
-except ImportError:
-    app = None
-    viewer = None
+enable_gui()
 
 # Create a GeneralRDR instance and fit it to the case query
 grdr = GeneralRDR(save_dir='./', model_name='part_containment_rdr')
@@ -22,6 +20,6 @@ case_query = CaseQuery(robot, "contained_objects", (PhysicalObject,), False)
 
 grdr.fit_case(case_query)
 
-# Classify the robot to check if it contains part_b
+# Classify the robot to check if it rcontains part_b
 result = grdr.classify(robot)
-assert list(result['contained_objects']) == robot.parts[0].contained_objects
+assert list(result['contained_objects']) == [part_b]

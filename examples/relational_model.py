@@ -1,7 +1,5 @@
 from __future__ import annotations
-
 from dataclasses import dataclass, field
-
 from typing_extensions import List
 
 
@@ -13,16 +11,18 @@ class PhysicalObject:
     name: str
     contained_objects: List[PhysicalObject] = field(default_factory=list, hash=False)
 
+
 @dataclass(unsafe_hash=True)
 class Part(PhysicalObject):
     ...
+
 
 @dataclass(unsafe_hash=True)
 class Robot(PhysicalObject):
     parts: List[Part] = field(default_factory=list, hash=False)
 
 
-def my_robot_factory()-> Robot:
+def my_robot_factory() -> Robot:
     """
     Factory function to create a simple robot with parts and containment relationships.
     """

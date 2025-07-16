@@ -46,7 +46,8 @@ from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_t
     is_value_conflicting, extract_function_source, extract_imports, get_full_class_name, \
     is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree, \
     get_types_to_import_from_func_type_hints, get_function_return_type, get_file_that_ends_with, \
-    get_and_import_python_module, get_and_import_python_modules_in_a_package, get_type_from_type_hint
+    get_and_import_python_module, get_and_import_python_modules_in_a_package, get_type_from_type_hint, \
+    are_results_subclass_of_types
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -1328,7 +1329,7 @@ class MultiClassRDR(RDRWithCodeWriter):
                     evaluated_rule.last_conclusion = rule_conclusion
                     if case_query is not None:
                         rule_conclusion_types = set(map(type, make_list(rule_conclusion)))
-                        if any(rule_conclusion_types.intersection(set(case_query.core_attribute_type))):
+                        if are_results_subclass_of_types(rule_conclusion_types, case_query.core_attribute_type):
                             evaluated_rule.contributed_to_case_query = True
                 self.add_conclusion(rule_conclusion)
             evaluated_rule = next_rule
