@@ -18,6 +18,7 @@ from . import TrackedObjectMixin
 from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_type_from_string
 from .helpers import get_an_updated_case_copy
 
+print("IMPORTED")
 
 class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
     fired: Optional[bool] = None

@@ -14,10 +14,6 @@ from .field_info import FieldInfo
 from .. import logger
 from ..utils import recursive_subclasses
 
-if TYPE_CHECKING:
-    from ..rdr import RippleDownRules
-    from ..rules import Rule
-
 
 class Direction(Enum):
     OUTBOUND = False
@@ -34,14 +30,6 @@ class Relation(str, Enum):
 class TrackedObjectMixin:
     """
     A class that is used as a base class to all classes that needs to be tracked for RDR inference, and reasoning.
-    """
-    _rdr_rule: Rule = field(init=False, repr=False, hash=False, default=None)
-    """
-    The rule that gave this conclusion.
-    """
-    _rdr: RippleDownRules = field(init=False, repr=False, hash=False, default=None)
-    """
-    The Ripple Down Rules that classified the case and produced this conclusion.
     """
     _rdr_tracked_object_id: int = field(init=False, repr=False, hash=False,
                                         compare=False, default_factory=lambda: uuid.uuid4().int)
@@ -115,8 +103,7 @@ class TrackedObjectMixin:
 
         :param composition: If True, the class dependency graph will include composition relations.
         """
-        subclasses = recursive_subclasses(TrackedObjectMixin)
-        subclasses = [sc for sc in subclasses if sc.__name__ != TrackedObjectMixin.__name__]
+        subclasses = recursive_subclasses(cls)
         for clazz in subclasses:
             cls._add_class_to_dependency_graph(clazz)
 

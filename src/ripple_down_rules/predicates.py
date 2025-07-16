@@ -8,7 +8,7 @@ from typing_extensions import Type, ClassVar, TYPE_CHECKING
 from .rdr_decorators import RDRDecorator
 
 if TYPE_CHECKING:
-    from .datastructures.tracked_object import TrackedObjectMixin
+    from . import TrackedObjectMixin
 
 
 @dataclass
