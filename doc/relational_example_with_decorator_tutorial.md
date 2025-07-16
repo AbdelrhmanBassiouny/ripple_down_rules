@@ -86,7 +86,7 @@ assert contained_objects == [part_b]
 
 When prompted to write a rule, I press edit in GUI (or type %edit in the Ipython interface if not using GUI),
 I wrote the following inside the template function that the Ripple Down Rules created for me, this function takes a
-`case` object as input:
+`case` object as input, in this exampke the case is the `Robot` instance:
 
 ```python
 contained_objects = []
@@ -114,8 +114,10 @@ This means that the rule will only be applied if the robot has parts.
 We can let the fit mode be `True`, but give the rdr a function that tells it when to prompt for an answer.
 For example, we can ask for an answer only when the robot's name is "tracy", which will result in the rdr not asking 
 for an answer because the robot name is "pr2" for the current case.
-The input to the `ask_now` function is a dictionary with the original function arguments, while arguments like
-`self` and `cls` are passed as a special key `'self_'` or `'cls_'` respectively.
+The {py:attr}`ripple_down_rules.rdr_decorators.RDRDecorator.ask_now` is a user provided callable function that outputs
+a boolean indicating when to ask the expert for an answer. The input to the `ask_now` function is a dictionary with the
+original function arguments, while arguments like `self` and `cls` are passed as a special key `'self_'` or `'cls_'`
+respectively.
 ```python
 robot.containment_rdr.fit = True
 robot.containment_rdr.ask_now = lambda case: case['self_'].name == "tracy"

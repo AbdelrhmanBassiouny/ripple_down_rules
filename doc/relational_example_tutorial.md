@@ -73,7 +73,7 @@ from ripple_down_rules import CaseQuery, GeneralRDR
 
 grdr = GeneralRDR(save_dir='./', model_name='part_containment_rdr')
 
-case_query = CaseQuery(robot, "contained_objects", (PhysicalObject,), False)
+case_query = CaseQuery(robot, "contained_objects", (PhysicalObject,), mutually_exclusive=False)
 ```
 
 ### Fit the Model to the Case Query by Answering the prompts.
@@ -83,7 +83,7 @@ grdr.fit_case(case_query)
 
 When prompted to write a rule, I press edit in GUI (or type %edit in the Ipython interface if not using GUI),
 I wrote the following inside the template function that the Ripple Down Rules created for me, this function takes a
-`case` object as input:
+`case` object as input, in this exampke the case is the `Robot` instance:
 
 ```python
 contained_objects = []

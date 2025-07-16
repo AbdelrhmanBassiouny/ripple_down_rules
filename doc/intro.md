@@ -13,7 +13,7 @@ SCRDR, MCRDR, and GRDR logic were inspired from the book:
 ["Ripple Down Rules: An Alternative to Machine Learning"](https://www.taylorfrancis.com/books/mono/10.1201/9781003126157/ripple-rules-paul-compton-byeong-ho-kang) by Paul Compton, Byeong Ho Kang.
 
 
-## 🚀 Enhanced Ripple-Down Rules Engine – Key Features
+## 🚀 Key Features
 
 ### 🧠 Data Model (Ontology) + Rule Base as One Entity
 - 🧬 Unified data structure: Data Model (Ontology) and rules use the same Python data structures. 
