@@ -22,7 +22,7 @@ from ripple_down_rules.rdr import GeneralRDR
 def test_drawer_cabinet_rdr(drawer_cabinet_rdr):
     pass
 
-@pytest.mark.skip("Skipping test_drawer_cabinet_ai_rdr as it is not implemented yet.")
+# @pytest.mark.skip("Skipping test_drawer_cabinet_ai_rdr as it is not implemented yet.")
 def test_drawer_cabinet_ai_rdr(drawer_cabinet_ai_rdr):
     pass
 

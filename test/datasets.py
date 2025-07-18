@@ -12,6 +12,7 @@ from ucimlrepo import fetch_ucirepo
 
 from ripple_down_rules.datastructures.case import Case, create_cases_from_dataframe
 from ripple_down_rules.datastructures.enums import Category
+from ripple_down_rules.datastructures.tracked_object import TrackedObjectMixin
 from ripple_down_rules.rdr_decorators import RDRDecorator
 
 
@@ -229,7 +230,7 @@ class MappedAnimal(MappedAsDataclass, Base):
 
 
 @dataclass
-class WorldEntity:
+class WorldEntity(TrackedObjectMixin):
     world: Optional[World] = field(default=None, kw_only=True, repr=False, hash=False)
 
 
