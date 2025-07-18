@@ -335,26 +335,57 @@ class RDRConclusion:
     This dataclass represents a conclusion of a Ripple Down Rule.
     It contains the conclusion expression, the type of the conclusion, and the scope in which it is evaluated.
     """
-    value: Any
+    _conclusion: Any
     """
     The conclusion value.
     """
-    frozen_case: Any
+    _frozen_case: Any
     """
     The frozen case that the conclusion was made for.
     """
-    rule: Rule
+    _rule: Rule
     """
     The rule that gave this conclusion.
     """
-    rdr: RippleDownRules
+    _rdr: RippleDownRules
     """
     The Ripple Down Rules that classified the case and produced this conclusion.
     """
-    id: int = field(default_factory=lambda: uuid.uuid4().int)
+    _id: int = field(default_factory=lambda: uuid.uuid4().int)
     """
     The unique identifier of the conclusion.
     """
+    def __getattribute__(self, name: str) -> Any:
+        if name.startswith('_'):
+            return object.__getattribute__(self, name)
+        else:
+            conclusion = object.__getattribute__(self, "_conclusion")
+
+            value = getattr(conclusion, name)
+
+            self._record_dependency(name)
+
+            return value
+
+    def __setattr__(self, name, value):
+        if name.startswith('_'):
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._wrapped, name, value)
+
+    def _record_dependency(self, attr_name):
+        # Inspect stack to find instance of CallableExpression
+        for frame_info in inspect.stack():
+            func_name = frame_info.function
+            local_self = frame_info.frame.f_locals.get("self", None)
+            if (
+                    func_name == "__call__" and
+                    local_self is not None and
+                    type(local_self) is CallableExpression
+            ):
+                self._used_in_tracker = True
+                print("RDRConclusion used inside CallableExpression")
+                break
 
     def __hash__(self):
         return hash(self.id)

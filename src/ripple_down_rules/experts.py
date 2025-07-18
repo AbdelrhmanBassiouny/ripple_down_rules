@@ -17,14 +17,16 @@ from .datastructures.case import show_current_and_corner_cases
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import PromptFor
 from .user_interface.template_file_creator import TemplateFileCreator
-from .utils import extract_imports, extract_function_source, get_imports_from_scope, get_class_file_path
+from .utils import extract_imports, extract_function_source, get_imports_from_scope, get_class_file_path, \
+    encapsulate_code_lines_into_a_function
+import requests
+
 
 try:
     from .user_interface.gui import RDRCaseViewer
 except ImportError as e:
     RDRCaseViewer = None
 from .user_interface.prompt import UserPrompt
-
 if TYPE_CHECKING:
     from .rdr import Rule
 
@@ -216,20 +218,61 @@ class AI(Expert):
         """
         super().__init__(**kwargs)
         self.user_prompt = UserPrompt()
+        self.url = "http://localhost:8000/generate"
+        self.template_file_creator: Optional[TemplateFileCreator] = None
+
+    def ask_ai(self, prompt: str):
+
+
+        payload = {
+            "prompt": f"{prompt}",
+            "max_new_tokens": 1024,
+            "do_sample": False,
+            "top_k": 50,
+            "top_p": 0.95
+        }
+
+        try:
+            resp = requests.post(self.url, json=payload)
+        except requests.exceptions.RequestException as e:
+            print("please make sure you run the file AI_expert_Server.py before running this expert.")
+            raise e
+
+        if resp.ok:
+            data = resp.json()
+            return data.get("generated_code")
+        else:
+            print(f"Error {resp.status_code}: {resp.text}")
+            return None
+
+    def parse_ai_output(self, case_query: CaseQuery, ai_output: str):
+        code_lines, updates = self.template_file_creator.load(self.template_file_creator.temp_file_path,
+                                                              self.template_file_creator.func_name,
+                                                              self.template_file_creator.print_func,
+                                                              ai_output)
+        user_input = encapsulate_code_lines_into_a_function(
+            code_lines, self.template_file_creator.func_name,
+            self.template_file_creator.function_signature,
+            self.template_file_creator.func_doc, case_query)
+        case_query.scope.update(updates)
+        return user_input
 
     def ask_for_conditions(self, case_query: CaseQuery,
                            last_evaluated_rule: Optional[Rule] = None) \
             -> CallableExpression:
         prompt_str = self.get_prompt_for_ai(case_query, PromptFor.Conditions)
-        print(prompt_str)
-        sys.exit()
+        ask_ai = self.ask_ai(prompt_str)
+        ai_output = self.parse_ai_output(case_query, ask_ai)
+        return CallableExpression(ai_output, conclusion_type=(bool,), scope=case_query.scope)
+
+
 
     def ask_for_conclusion(self, case_query: CaseQuery) -> Optional[CallableExpression]:
         prompt_str = self.get_prompt_for_ai(case_query, PromptFor.Conclusion)
-        output_type_source = self.get_output_type_class_source(case_query)
-        prompt_str = f"\n\n\nOutput type(s) class source:\n{output_type_source}\n\n" + prompt_str
-        print(prompt_str)
-        sys.exit()
+        ask_ai = self.ask_ai(prompt_str)
+        ai_output = self.parse_ai_output(case_query, ask_ai)
+        return CallableExpression(ai_output, conclusion_type=case_query.core_attribute_type, scope=case_query.scope)
+
 
     def get_output_type_class_source(self, case_query: CaseQuery) -> str:
         """
@@ -272,10 +315,15 @@ class AI(Expert):
         :return: The prompt for the AI expert.
         """
         # data_to_show = show_current_and_corner_cases(case_query.case)
+        static_prompt = ("you are given a class object named case that has the following "
+                         "features which are not used like a dictionary but like attributes of a class (eg. case.hands):")
         data_to_show = f"\nCase ({case_query.case_name}):\n {case_query.case.__dict__}"
-        template_file_creator = TemplateFileCreator(case_query, prompt_for=prompt_for)
-        boilerplate_code = template_file_creator.build_boilerplate_code()
-        initial_prompt_str = data_to_show + "\n\n" + boilerplate_code + "\n\n"
+        static_prompt_2 = ("Modify the following template and write code inside the function that "
+                           "has the following return class")
+        output_type_source = self.get_output_type_class_source(case_query)
+        self.template_file_creator = TemplateFileCreator(case_query, prompt_for=prompt_for)
+        boilerplate_code = self.template_file_creator.build_boilerplate_code()
+        initial_prompt_str = static_prompt + data_to_show + static_prompt_2 + output_type_source + "\n\n" + boilerplate_code + "\n\n"
         return self.user_prompt.build_prompt_str_for_ai(case_query, prompt_for=prompt_for,
                                                         initial_prompt_str=initial_prompt_str)
 

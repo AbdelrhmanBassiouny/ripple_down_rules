@@ -14,11 +14,12 @@ from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseFactoryMetaData, CaseQuery
 from .datastructures.enums import RDREdge, Stop
+from .datastructures.tracked_object import TrackedObjectMixin
 from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_type_from_string
 from .helpers import get_an_updated_case_copy
 
 
-class Rule(NodeMixin, SubclassJSONSerializer, ABC):
+class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
     fired: Optional[bool] = None
     """
     Whether the rule has fired or not.
