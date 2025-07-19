@@ -7,31 +7,31 @@
                 "_type": "ripple_down_rules.rules.MultiClassTopRule",
                 "conditions": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n    def conditions_for_robot_contained_objects_of_type_physical_object(case: Robot) -> bool:\n        \"\"\"Get conditions on whether it's possible to conclude a value for Robot.contained_objects  of type PhysicalObject.\"\"\"\n        return len(case.parts) > 0\n    return conditions_for_robot_contained_objects_of_type_physical_object(case)",
+                    "user_input": "def _get_value(case):\n    def conditions_for_robot_contained_objects_of_type_physical_object(case: Robot) -> bool:\n        \"\"\"Get conditions on whether it's possible to conclude a value for Robot.contained_objects  of type PhysicalObject.\"\"\"\n        return len(case.parts) > 0\n    return conditions_for_robot_contained_objects_of_type_physical_object(case)\n    ",
                     "conclusion_type": [
                         "builtins.bool"
                     ],
                     "scope": {
-                        "Robot": "__main__.Robot"
+                        "Robot": "relational_model.Robot"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
                         "value": null
                     },
-                    "mutually_exclusive": true
+                    "mutually_exclusive": false
                 },
                 "conclusion": {
                     "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
-                    "user_input": "def _get_value(case):\n    def robot_contained_objects_of_type_physical_object(case: Robot) -> List[PhysicalObject]:\n        \"\"\"Get possible value(s) for Robot.contained_objects  of type PhysicalObject.\"\"\"\n        contained_objects = []\n        for part in case.parts:\n            contained_objects.extend(part.contained_objects)\n        return contained_objects\n    return robot_contained_objects_of_type_physical_object(case)",
+                    "user_input": "def _get_value(case):\n    def robot_contained_objects_of_type_physical_object(case: Robot) -> List[PhysicalObject]:\n        \"\"\"Get possible value(s) for Robot.contained_objects  of type PhysicalObject.\"\"\"\n        contained_objects: List[PhysicalObject] = []\n        for part in case.parts:\n            contained_objects.extend(part.contained_objects)\n        return contained_objects\n    return robot_contained_objects_of_type_physical_object(case)\n    ",
                     "conclusion_type": [
-                        "__main__.PhysicalObject",
+                        "relational_model.PhysicalObject",
                         "builtins.set",
                         "builtins.list"
                     ],
                     "scope": {
-                        "List": "typing.List",
-                        "PhysicalObject": "__main__.PhysicalObject",
-                        "Robot": "__main__.Robot"
+                        "Robot": "relational_model.Robot",
+                        "PhysicalObject": "relational_model.PhysicalObject",
+                        "List": "typing.List"
                     },
                     "conclusion": {
                         "_type": "builtins.NoneType",
@@ -40,56 +40,20 @@
                     "mutually_exclusive": false
                 },
                 "parent": null,
-                "corner_case": {
-                    "$id": "df259c9d-c52b-48e7-84a3-39304b2a47ce",
-                    "__dataclass__": "__main__.Robot",
-                    "fields": {
-                        "name": "pr2",
-                        "contained_objects": [],
-                        "parts": [
-                            {
-                                "$id": "d64ad238-f8f9-457a-a0a1-4d2c964f372c",
-                                "__dataclass__": "__main__.Part",
-                                "fields": {
-                                    "name": "A",
-                                    "contained_objects": [
-                                        {
-                                            "$id": "14722aff-f867-4fd3-88bd-55b0e7524c1a",
-                                            "__dataclass__": "__main__.Part",
-                                            "fields": {
-                                                "name": "B",
-                                                "contained_objects": [
-                                                    {
-                                                        "$id": "0e21228b-02c7-4616-ab0f-ea3f5aa4d3da",
-                                                        "__dataclass__": "__main__.Part",
-                                                        "fields": {
-                                                            "name": "C",
-                                                            "contained_objects": []
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        }
-                                    ]
-                                }
-                            }
-                        ]
-                    }
-                },
                 "conclusion_name": "contained_objects",
-                "weight": "next",
-                "uid": "292338421353147015053324365450552788888",
+                "weight": "",
+                "uid": "298609776593271728826836208156881692889",
                 "refinement": null,
                 "alternative": null
             },
             "generated_python_file_name": "robot_contained_objects_mcrdr",
             "name": "contained_objects",
-            "case_type": "__main__.Robot",
+            "case_type": "relational_model.Robot",
             "case_name": "Robot"
         }
     },
     "generated_python_file_name": "robot_rdr",
     "name": "contained_objects",
-    "case_type": "__main__.Robot",
+    "case_type": "relational_model.Robot",
     "case_name": "Robot"
 }

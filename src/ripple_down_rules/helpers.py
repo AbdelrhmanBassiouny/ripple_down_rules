@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import sys
 from functools import wraps
 from types import ModuleType
 from typing import Tuple, Callable, Dict, Any, Optional
@@ -92,7 +93,7 @@ def load_or_create_func_rdr_model(func, model_dir: str, rdr_type: Type[RippleDow
     :param rdr_kwargs: Additional arguments to pass to the RDR constructor in the case of a new model.
     """
     model_name = get_func_rdr_model_name(func)
-    model_path = os.path.join(model_dir, model_name, "rdr_metadata", f"{model_name}.json")
+    model_path = os.path.join(model_dir, model_name, f"{model_name}.py")
     if os.path.exists(model_path):
         rdr = rdr_type.load(load_dir=model_dir, model_name=model_name)
     else:
@@ -118,6 +119,16 @@ def get_an_updated_case_copy(case: Case, conclusion: Callable, attribute_name: s
         output = {attribute_name: output}
     update_case(temp_case_query, output)
     return case_cp
+
+def enable_gui():
+    """
+    Enable the GUI for Ripple Down Rules if available.
+    """
+    try:
+        from .user_interface.gui import RDRCaseViewer
+        viewer = RDRCaseViewer()
+    except ImportError:
+        pass
 
 
 def create_case_from_method(func: Callable,
