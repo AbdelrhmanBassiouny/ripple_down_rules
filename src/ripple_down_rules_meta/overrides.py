@@ -20,7 +20,7 @@ def override_ripple_down_rules(name):
 
 
 @override_ripple_down_rules("DependsOn")
-@dataclass(unsafe_hash=True)
+@dataclass(eq=False)
 class DependsOn(OGDependsOn):
     rdr_decorator: RDRDecorator = RDRDecorator(OGDependsOn.models_dir, (bool,), True,
                                                 fit=False, package_name="ripple_down_rules_meta")
@@ -29,8 +29,8 @@ class DependsOn(OGDependsOn):
     """
     @classmethod
     @rdr_decorator.decorator
-    def evaluate(cls, dependent_type: Type[TrackedObjectMixin],
-                 dependency_type: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
+    def evaluate(cls, dependent: Type[TrackedObjectMixin],
+                 dependency: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
         pass
 
 _overrides.append(("dependsOn", DependsOn()))

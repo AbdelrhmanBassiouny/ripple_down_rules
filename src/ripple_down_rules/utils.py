@@ -269,7 +269,8 @@ def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optio
     :param func_doc: The function docstring to use for encapsulation.
     :return: The encapsulated user input string.
     """
-    if func_signature not in user_input:
+    func_name = func_signature.split('(')[0].strip()
+    if func_name not in user_input:
         new_user_input = func_signature + "\n    "
         if func_doc is not None:
             new_user_input += f"\"\"\"{func_doc}\"\"\"" + "\n    "

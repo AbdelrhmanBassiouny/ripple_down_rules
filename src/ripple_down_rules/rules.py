@@ -495,7 +495,7 @@ class HasRefinementRule:
             self._refinement = new_rule
 
 
-@dataclass
+@dataclass(eq=False)
 class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
     """
     A rule in the SingleClassRDR classifier, it can have a refinement or an alternative rule or both.
@@ -538,7 +538,7 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         return "elif" if self.weight == RDREdge.Alternative else "if"
 
 
-@dataclass
+@dataclass(eq=False)
 class MultiClassRefinementRule(Rule, HasAlternativeRule, ABC):
     """
     A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule.
@@ -569,7 +569,7 @@ class MultiClassRefinementRule(Rule, HasAlternativeRule, ABC):
         return "elif" if self.weight == RDREdge.Alternative else "if"
 
 
-@dataclass
+@dataclass(eq=False)
 class MultiClassStopRule(MultiClassRefinementRule):
     """
     A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
@@ -594,7 +594,7 @@ class MultiClassStopRule(MultiClassRefinementRule):
         return None, f"{parent_indent}{' ' * 4}pass\n"
 
 
-@dataclass
+@dataclass(eq=False)
 class MultiClassFilterRule(MultiClassRefinementRule, HasRefinementRule):
     """
     A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
@@ -650,7 +650,7 @@ class MultiClassFilterRule(MultiClassRefinementRule, HasRefinementRule):
         return loaded_rule
 
 
-@dataclass
+@dataclass(eq=False)
 class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
     """
     A rule in the MultiClassRDR classifier, it can have a refinement and a next rule.

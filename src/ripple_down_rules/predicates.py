@@ -9,7 +9,7 @@ from typing_extensions import Type, ClassVar, TYPE_CHECKING
 from .datastructures.tracked_object import TrackedObjectMixin, Direction, Relation
 
 
-@dataclass(unsafe_hash=True)
+@dataclass
 class Predicate(TrackedObjectMixin, ABC):
     models_dir: ClassVar[str] = os.path.join(dirname(__file__), "predicates_models")
 
@@ -25,8 +25,16 @@ class Predicate(TrackedObjectMixin, ABC):
         """
         pass
 
+    def __hash__(self):
+        return hash(self.__class__.__name__)
 
-@dataclass(unsafe_hash=True)
+    def __eq__(self, other):
+        if not isinstance(other, Predicate):
+            return False
+        return self.__class__ == other.__class__
+
+
+@dataclass(eq=False)
 class IsA(Predicate):
     """
     A predicate that checks if an object type is a subclass of another object type.
@@ -39,7 +47,7 @@ class IsA(Predicate):
 isA = IsA()
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(eq=False)
 class Has(Predicate):
     """
     A predicate that checks if an object type has a certain member object type.
@@ -62,15 +70,15 @@ class Has(Predicate):
 has = Has()
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(eq=False)
 class DependsOn(Predicate):
     """
     A predicate that checks if an object type depends on another object type.
     """
 
     @classmethod
-    def evaluate(cls, dependent_type: Type[TrackedObjectMixin],
-                 dependency_type: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
+    def evaluate(cls, dependent: Type[TrackedObjectMixin],
+                 dependency: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
         raise NotImplementedError("Should be overridden in rdr meta")
 
 

@@ -23,14 +23,14 @@ from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import PromptFor, ExitStatus
 from .ipython_custom_shell import IPythonShell
 from ..utils import make_list
-from threading import RLock
+from threading import Lock
 
 
 class UserPrompt:
     """
     A class to handle user prompts for the RDR.
     """
-    shell_lock: RLock = RLock()  # To ensure that only one thread can access the shell at a time
+    shell_lock: Lock = Lock()  # To ensure that only one thread can access the shell at a time
 
     def __init__(self, prompt_user: bool = True):
         """
@@ -49,43 +49,43 @@ class UserPrompt:
         :param prompt_str: The prompt string to display to the user.
         :return: A callable expression that takes a case and executes user expression on it.
         """
-        prev_user_input: Optional[str] = None
-        user_input_to_modify: Optional[str] = None
-        callable_expression: Optional[CallableExpression] = None
-        while True:
-            with self.shell_lock:
+        with self.shell_lock:
+            prev_user_input: Optional[str] = None
+            user_input_to_modify: Optional[str] = None
+            callable_expression: Optional[CallableExpression] = None
+            while True:
                 user_input, expression_tree = self.prompt_user_about_case(case_query, prompt_for, prompt_str,
                                                                           code_to_modify=prev_user_input)
-            if user_input is None:
-                if prompt_for == PromptFor.Conclusion:
-                    self.print_func(f"\n{Fore.YELLOW}No conclusion provided. Exiting.{Style.RESET_ALL}")
-                    return None, None
-                else:
-                    self.print_func(f"\n{Fore.RED}Conditions must be provided. Please try again.{Style.RESET_ALL}")
-                    continue
-            elif user_input in ["exit", 'quit']:
-                self.print_func(f"\n{Fore.YELLOW}Exiting.{Style.RESET_ALL}")
-                return user_input, None
+                if user_input is None:
+                    if prompt_for == PromptFor.Conclusion:
+                        self.print_func(f"\n{Fore.YELLOW}No conclusion provided. Exiting.{Style.RESET_ALL}")
+                        return None, None
+                    else:
+                        self.print_func(f"\n{Fore.RED}Conditions must be provided. Please try again.{Style.RESET_ALL}")
+                        continue
+                elif user_input in ["exit", 'quit']:
+                    self.print_func(f"\n{Fore.YELLOW}Exiting.{Style.RESET_ALL}")
+                    return user_input, None
 
-            prev_user_input = '\n'.join(user_input.split('\n')[2:-1])
-            conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
-            callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
-                                                     scope=case_query.scope,
-                                                     mutually_exclusive=case_query.mutually_exclusive)
-            try:
-                result = callable_expression(case_query.case)
-                if len(make_list(result)) == 0 and (user_input_to_modify is not None
-                                                    and (prev_user_input != user_input_to_modify)):
-                    user_input_to_modify = prev_user_input
-                    self.print_func(
-                        f"{Fore.YELLOW}The given expression gave an empty result for case {case_query.name}."
-                        f" Please accept or modify!{Style.RESET_ALL}")
-                    continue
-                break
-            except Exception as e:
-                logging.error(e)
-                self.print_func(f"{Fore.RED}{e}{Style.RESET_ALL}")
-        return user_input, callable_expression
+                prev_user_input = '\n'.join(user_input.split('\n')[2:-1])
+                conclusion_type = bool if prompt_for == PromptFor.Conditions else case_query.attribute_type
+                callable_expression = CallableExpression(user_input, conclusion_type, expression_tree=expression_tree,
+                                                         scope=case_query.scope,
+                                                         mutually_exclusive=case_query.mutually_exclusive)
+                try:
+                    result = callable_expression(case_query.case)
+                    if len(make_list(result)) == 0 and (user_input_to_modify is not None
+                                                        and (prev_user_input != user_input_to_modify)):
+                        user_input_to_modify = prev_user_input
+                        self.print_func(
+                            f"{Fore.YELLOW}The given expression gave an empty result for case {case_query.name}."
+                            f" Please accept or modify!{Style.RESET_ALL}")
+                        continue
+                    break
+                except Exception as e:
+                    logging.error(e)
+                    self.print_func(f"{Fore.RED}{e}{Style.RESET_ALL}")
+            return user_input, callable_expression
 
     def prompt_user_about_case(self, case_query: CaseQuery, prompt_for: PromptFor,
                                prompt_str: Optional[str] = None,

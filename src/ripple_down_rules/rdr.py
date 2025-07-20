@@ -1012,6 +1012,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         defs_imports = get_imports_from_types(defs_types, defs_file_name, package_name)
         corner_cases_imports = get_imports_from_types(corner_cases_types, cases_file_name, package_name)
 
+        defs_imports.append(f"from ripple_down_rules import *")
         # Add the imports to the defs file
         with open(defs_file_name, "w") as f:
             f.write('\n'.join(defs_imports) + "\n\n\n")
@@ -1071,7 +1072,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         main_types.update({Union, Optional})
         defs_types.add(Union)
         main_types.update({Case, create_case})
-        main_types = main_types.difference(defs_types)
+        # main_types = main_types.difference(defs_types)
         return main_types, defs_types, cases_types
 
     @property
@@ -1173,7 +1174,7 @@ class SingleClassRDR(RDRWithCodeWriter):
             self.default_conclusion = case_query.default_value
 
         pred = self.evaluate(case_query.case)
-        if pred.conclusion(case_query.case) != case_query.target_value:
+        if (not pred.fired and self.default_conclusion is None) or pred.conclusion(case_query.case) != case_query.target_value:
             expert.ask_for_conditions(case_query, pred)
             pred.fit_rule(case_query)
 

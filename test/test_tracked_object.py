@@ -1,11 +1,6 @@
 import os
-from os.path import dirname
-
-import pytest
-from rustworkx import PyDAG
 
 from ripple_down_rules import *
-from ripple_down_rules.rdr import GeneralRDR
 from .datasets import Drawer, Handle, Cabinet, View, WorldEntity, Body, Connection
 
 
@@ -39,12 +34,3 @@ def test_construct_class_composition_and_dependency():
     assert has(Cabinet, Body)
     assert has(Cabinet, WorldEntity)
     assert not has(Cabinet, Connection, recursive=True)
-
-
-@pytest.mark.skip("Not Implemented yet")
-def test_rule_dependency_graph(drawer_cabinet_rdr: GeneralRDR):
-    drawer_rule = [r for r in [drawer_cabinet_rdr.start_rule] + list(drawer_cabinet_rdr.start_rule.descendants)
-                   if Drawer in r.conclusion.conclusion_type][0]
-    cabinet_rule = [r for r in [drawer_cabinet_rdr.start_rule] + list(drawer_cabinet_rdr.start_rule.descendants)
-                    if Cabinet in r.conclusion.conclusion_type][0]
-    assert dependsOn(cabinet_rule, drawer_rule)
