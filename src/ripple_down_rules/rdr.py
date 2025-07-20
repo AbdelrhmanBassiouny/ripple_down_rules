@@ -113,7 +113,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if self.save_dir is not None and self.model_name is not None:
             model_path = os.path.join(self.save_dir, self.model_name)
             if os.path.exists(model_path):
-                self.update_from_python(model_path, update_rule_tree=True)
+                try:
+                    self.update_from_python(model_path, update_rule_tree=True)
+                except (FileNotFoundError, ModuleNotFoundError) as e:
+                    pass
 
     def write_rdr_metadata_to_pyton_file(self, file: TextIOWrapper):
         """
@@ -343,11 +346,11 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                 rule.reset()
         if self.start_rule is not None and self.start_rule.parent is None:
             if self.input_node is None:
-                self.input_node = type(self.start_rule)(parent=None, uid='0')
+                self.input_node = type(self.start_rule)(_parent=None, uid='0')
                 self.input_node.evaluated = False
                 self.input_node.fired = False
             self.start_rule.parent = self.input_node
-            self.start_rule.weight = ""
+            self.start_rule.weight = RDREdge.Empty
         if self.input_node is not None:
             data = case.__dict__ if is_dataclass(case) else case
             if hasattr(case, "items"):
@@ -631,7 +634,7 @@ class TreeBuilder(ast.NodeVisitor, ABC):
         rule_uid = condition.split("conditions_")[1]
 
         new_rule_type = self.get_new_rule_type(node)
-        new_node = new_rule_type(conditions=condition, parent=self.current_parent, uid=rule_uid)
+        new_node = new_rule_type(conditions=condition, _parent=self.current_parent, uid=rule_uid)
         if self.current_parent is not None:
             self.update_current_parent(new_node)
 

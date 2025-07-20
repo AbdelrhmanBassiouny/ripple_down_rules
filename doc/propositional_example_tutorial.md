@@ -85,7 +85,7 @@ grdr = GeneralRDR(save_dir="./", model_name="species_rdr")
 grdr.fit(case_queries, animate_tree=True)
 
 # Render the tree to a file
-render_tree(grdr.start_rules[0], use_dot_exporter=True, filename="species_rdr")
+render_tree(grdr.start_rules[0].node, use_dot_exporter=True, filename="species_rdr")
 
 # Classify a case
 cat = grdr.classify(all_cases[50])

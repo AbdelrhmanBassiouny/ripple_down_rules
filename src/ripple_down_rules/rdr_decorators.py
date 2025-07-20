@@ -3,6 +3,7 @@ This file contains decorators for the RDR (Ripple Down Rules) framework. Where e
 that can be used with any python function such that this function can benefit from the incremental knowledge acquisition
 of the RDRs.
 """
+import inspect
 import os.path
 from dataclasses import dataclass, field
 from functools import wraps
@@ -85,7 +86,7 @@ class RDRDecorator:
     The name of the rdr model, this gets auto generated from the function signature and the class/file it is contained
     in.
     """
-    rdr: GeneralRDR = field(init=False)
+    rdr: GeneralRDR = field(init=False, default=None)
     """
     The ripple down rules instance of the decorator class.
     """
@@ -120,6 +121,12 @@ class RDRDecorator:
 
         @wraps(func)
         def wrapper(*args, **kwargs) -> Optional[Any]:
+
+            original_kwargs = {pname: p for pname, p in inspect.signature(func).parameters.items() if
+                               p.default != inspect._empty}
+            for og_kwarg in original_kwargs:
+                if og_kwarg not in kwargs:
+                    kwargs[og_kwarg] = original_kwargs[og_kwarg].default
 
             if self.model_name is None:
                 self.initialize_rdr_model_name_and_load(func)

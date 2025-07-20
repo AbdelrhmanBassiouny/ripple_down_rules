@@ -83,8 +83,10 @@ class TestRDR(TestCase):
         scrdr_loaded = SingleClassRDR.load(save_dir, original_scrdr.generated_python_file_name)
         model_path = os.path.join(save_dir, model_name)
         rules_root = SingleClassRDR.read_rule_tree_from_python(model_path)
-        for rule, og_rule in zip([rules_root] + list(rules_root.descendants),
-                                 [scrdr_loaded.start_rule] + list(scrdr_loaded.start_rule.descendants)):
+        all_rules = [rules_root] + list(rules_root.descendants)
+        all_og_rules = [scrdr_loaded.start_rule] + list(scrdr_loaded.start_rule.descendants)
+        assert len(all_rules) == len(all_og_rules)
+        for rule, og_rule in zip(all_rules, all_og_rules):
             assert rule.conditions.split('conditions_')[1] == rule.conclusion.split("conclusion_")[1] == rule.uid
             assert rule.uid == og_rule.uid
             if not rule.parent:

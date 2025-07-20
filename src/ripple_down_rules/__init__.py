@@ -12,14 +12,14 @@ try:
 except ImportError:
     pass
 
+
 # Trigger patch
 try:
+    from .predicates import *
     from .datastructures.tracked_object import TrackedObjectMixin
+    from .datastructures.dataclasses import CaseQuery
+    from .rdr_decorators import RDRDecorator
+    from .rdr import MultiClassRDR, SingleClassRDR, GeneralRDR
     import ripple_down_rules_meta._apply_overrides
-    print("OVERRIDEN")
 except ImportError:
-    print("IMPORTERROR")
-
-from .datastructures.dataclasses import CaseQuery
-from .rdr_decorators import RDRDecorator
-from .rdr import MultiClassRDR, SingleClassRDR, GeneralRDR
+    pass
