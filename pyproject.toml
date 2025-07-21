@@ -21,7 +21,7 @@ Homepage = "https://github.com/AbdelrhmanBassiouny/ripple_down_rules"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["ripple_down_rules*"]
+include = ["ripple_down_rules"]
 
 [tool.setuptools.dynamic]
 version = {attr = "ripple_down_rules.__version__"}

@@ -1219,6 +1219,7 @@ def get_full_class_name(cls):
 def recursive_subclasses(cls):
     """
     Copied from: https://github.com/tomsch420/random-events/blob/master/src/random_events/utils.py#L6C1-L21C101
+
     :param cls: The class.
     :return: A list of the classes subclasses.
     """

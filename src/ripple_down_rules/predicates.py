@@ -4,14 +4,16 @@ from dataclasses import dataclass
 from enum import Enum
 from os.path import dirname
 
-from typing_extensions import Type, ClassVar, TYPE_CHECKING
+from typing_extensions import Type, ClassVar, TYPE_CHECKING, Tuple, Optional, Callable
 
 from .datastructures.tracked_object import TrackedObjectMixin, Direction, Relation
 
+if TYPE_CHECKING:
+    from .rdr_decorators import RDRDecorator
 
-@dataclass
+
+@dataclass(eq=False)
 class Predicate(TrackedObjectMixin, ABC):
-    models_dir: ClassVar[str] = os.path.join(dirname(__file__), "predicates_models")
 
     def __call__(self, *args, **kwargs):
         return self.evaluate(*args, **kwargs)
@@ -25,6 +27,16 @@ class Predicate(TrackedObjectMixin, ABC):
         """
         pass
 
+    @classmethod
+    def rdr_decorator(cls, output_types: Tuple[Type, ...], mutually_exclusive: bool,
+                      package_name: Optional[str] = None) -> Callable[[Callable], Callable]:
+        """
+        Returns the RDRDecorator to decorate the predicate evaluate method with.
+        """
+        rdr_decorator: RDRDecorator = RDRDecorator(cls.models_dir, output_types, mutually_exclusive,
+                                                   package_name=package_name)
+        return rdr_decorator.decorator
+
     def __hash__(self):
         return hash(self.__class__.__name__)
 
@@ -34,7 +46,7 @@ class Predicate(TrackedObjectMixin, ABC):
         return self.__class__ == other.__class__
 
 
-@dataclass(eq=False)
+@dataclass
 class IsA(Predicate):
     """
     A predicate that checks if an object type is a subclass of another object type.
@@ -47,7 +59,7 @@ class IsA(Predicate):
 isA = IsA()
 
 
-@dataclass(eq=False)
+@dataclass
 class Has(Predicate):
     """
     A predicate that checks if an object type has a certain member object type.
@@ -70,7 +82,7 @@ class Has(Predicate):
 has = Has()
 
 
-@dataclass(eq=False)
+@dataclass
 class DependsOn(Predicate):
     """
     A predicate that checks if an object type depends on another object type.
