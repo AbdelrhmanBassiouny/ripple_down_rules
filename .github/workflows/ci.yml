@@ -35,7 +35,7 @@ jobs:
         pip install -r requirements-dev-ci.txt
         pip install pytest mypy flake8 black isort
         pip install .
-        pip install src/ripple_down_rules_meta
+        pip install -e src/ripple_down_rules_meta
 
     - name: Run tests
       run: |

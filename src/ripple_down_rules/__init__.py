@@ -1,4 +1,4 @@
-__version__ = "0.6.63"
+__version__ = "0.6.64"
 
 import logging
 import sys
@@ -20,6 +20,6 @@ try:
     from .datastructures.dataclasses import CaseQuery
     from .rdr_decorators import RDRDecorator
     from .rdr import MultiClassRDR, SingleClassRDR, GeneralRDR
-    import ripple_down_rules_meta
+    import ripple_down_rules_meta._apply_overrides
 except ImportError:
     pass
