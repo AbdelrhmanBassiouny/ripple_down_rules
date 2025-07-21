@@ -162,3 +162,13 @@ class MockRDRDecorator:
             case, case_dict = create_case_from_method(func, func_output, *args, **kwargs)
             return rdr.classify(case)
         return wrapper
+
+
+def get_case_name(case: Any) -> str:
+    """
+    Get the case name from the case object or query.
+
+    :param case: The case object or query.
+    :return: The name of the case.
+    """
+    return case._name if isinstance(case, Case) else case.__class__.__name__

@@ -7,9 +7,9 @@ import os
 import sys
 from abc import ABC, abstractmethod
 from copy import copy
-from dataclasses import is_dataclass
+from dataclasses import is_dataclass, dataclass, field
 from io import TextIOWrapper
-from os.path import dirname
+from os.path import dirname, isdir
 from pathlib import Path
 from types import NoneType, ModuleType
 
@@ -34,7 +34,7 @@ from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode, RDREdge
 from .experts import Expert, Human
-from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy
+from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy, get_case_name
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule, MultiClassRefinementRule, \
     MultiClassFilterRule
 
@@ -1804,3 +1804,78 @@ class GeneralRDR(RippleDownRules):
         :return: The function name.
         """
         return rdr_key.replace(".", "_").lower() + "_classifier"
+
+
+@dataclass
+class MultiCaseReasoner:
+    """
+    A reasoner that can handle multiple cases and their relationships, using ripple down rules classifiers.
+    This reasoner can classify cases based on the rules defined in the RDR classifiers.
+    """
+    model_name: str
+    """
+    The name of the model, used to generate the python files.
+    """
+    models_dir: str = field(default="./")
+    """
+    The directory where the models are stored.
+    """
+    case_rdr_map: Dict[str, GeneralRDR] = field(default_factory=dict)
+    """
+    A map of case names to their respective general ripple down rules classifier
+    """
+    def __post_init__(self):
+        """
+        Post initialization method to ensure the models directory exists.
+        """
+        model_dir = os.path.join(self.models_dir, self.model_name)
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+            with open(os.path.join(model_dir, "__init__.py"), "w") as f:
+                f.write("# This is an empty __init__.py file to make the models directory a package.\n")
+        elif len(self.case_rdr_map) == 0:
+            # load existing models from the directory
+            for file in os.listdir(model_dir):
+                if isdir(os.path.join(model_dir, file)) and file.endswith("_rdr"):
+                    rdr = GeneralRDR(save_dir=model_dir, model_name=file)
+                    self.case_rdr_map[rdr.case_name] = rdr
+
+    def fit_case(self, case_query: CaseQuery,  **kwargs) -> Dict[str, Any]:
+        """
+        Fit a case to the reasoner by classifying it with the appropriate RDR classifier.
+
+        :param case_query: The case query to fit.
+        :param kwargs: Additional keyword arguments to pass to the RDR classifier fit_case method
+        (:py:meth:`~ripple_down_rules.rdr.GeneralRDR.fit_case`).
+        :return: The categories that the case belongs to.
+        """
+        case_name = get_case_name(case_query.case)
+        if case_name in self.case_rdr_map:
+            rdr = self.case_rdr_map[case_name]
+        else:
+            rdr = GeneralRDR(save_dir=self.models_dir, model_name=self.get_model_name_from_case_name(case_name))
+            self.case_rdr_map[case_name] = rdr
+        return rdr.fit_case(case_query, **kwargs)
+
+    def classify(self, case: Any):
+        """
+        Classify a case using the appropriate RDR classifier.
+
+        :param case: The case to classify.
+        :return: The categories that the case belongs to.
+        """
+        case_name = get_case_name(case)
+        if case_name not in self.case_rdr_map:
+            raise ValueError(f"No RDR classifier found for case name: {case_name}")
+        rdr = self.case_rdr_map[case_name]
+        return rdr.classify(case)
+
+    @staticmethod
+    def get_model_name_from_case_name(case_name: Any) -> str:
+        """
+        Get the model name for a case based on its name.
+
+        :param case_name: The name of the case or its class.
+        :return: The model name for the case.
+        """
+        return f"{case_name.lower()}_rdr"
