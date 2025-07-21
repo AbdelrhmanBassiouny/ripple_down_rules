@@ -3,8 +3,10 @@ This file contains decorators for the RDR (Ripple Down Rules) framework. Where e
 that can be used with any python function such that this function can benefit from the incremental knowledge acquisition
 of the RDRs.
 """
+import importlib
 import inspect
 import os.path
+import sys
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import get_origin
@@ -128,10 +130,18 @@ class RDRDecorator:
                 if og_kwarg not in kwargs:
                     kwargs[og_kwarg] = original_kwargs[og_kwarg].default
 
+            if len(self.parsed_output_type) == 0:
+                self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
+
             if self.model_name is None:
                 self.initialize_rdr_model_name_and_load(func)
             if self.origin_type is None and not self.mutual_exclusive:
-                self.origin_type = get_origin(get_type_hints(func)['return'])
+                try:
+                    self.origin_type = get_origin(get_type_hints(func)['return'])
+                except NameError:
+                    return_annotation = inspect.signature(func).return_annotation
+                    if any(return_annotation.startswith(t) for t in ['List', 'list', 'typing.List']):
+                        self.origin_type = list
                 if self.origin_type:
                     self.origin_type = get_type_from_type_hint(self.origin_type)
 
@@ -141,8 +151,6 @@ class RDRDecorator:
 
             @self.fitting_decorator
             def fit():
-                if len(self.parsed_output_type) == 0:
-                    self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
                 if self.expert is None:
                     self.expert = Human(answers_save_path=self.models_dir + f'/{self.model_name}/expert_answers')
                 case_query = self.create_case_query_from_method(
@@ -216,7 +224,23 @@ class RDRDecorator:
             case, case_dict = create_case_from_method(func, func_output, *func_args, **func_kwargs)
         scope = func.__globals__
         scope.update(case_dict)
-        func_args_type_hints = get_type_hints(func)
+        try:
+            func_args_type_hints = get_type_hints(func)
+        except NameError:
+            # use inspect to get the type hints if get_type_hints fails
+            func_args_type_hints = {k: v.annotation for k, v in inspect.signature(func).parameters.items()
+                                      if v.annotation is not inspect._empty}
+            # add return type hint from the function signature
+            return_annotation = inspect.signature(func).return_annotation
+            if return_annotation is not inspect._empty:
+                func_args_type_hints['return'] = return_annotation
+            types_dict = {t.__name__: t for t in output_type}
+            scope.update(types_dict)
+            types_names = list(types_dict.keys())
+            for k, v in func_args_type_hints.items():
+                for t_name in types_names:
+                    if isinstance(v, str) and t_name in v:
+                        func_args_type_hints[k] = eval(v, scope)
         output_name = list(func_output.keys())[0]
         func_args_type_hints.update({output_name: Union[tuple(output_type)]})
         return CaseQuery(case, output_name, tuple(output_type),
@@ -227,8 +251,7 @@ class RDRDecorator:
         self.model_name = get_func_rdr_model_name(func, include_file_name=True)
         self.load()
 
-    @staticmethod
-    def parse_output_type(func: Callable, output_type: Any, *args) -> List[Type]:
+    def parse_output_type(self, func: Callable, output_type: Any, *args) -> List[Type]:
         parsed_output_type = []
         for ot in make_set(output_type):
             if ot is Self:
@@ -238,6 +261,30 @@ class RDRDecorator:
                 else:
                     raise ValueError(f"The function {func} is not a method of a class,"
                                      f" and the output type is {Self}.")
+            elif type(ot) is str:
+                # If the type is a string, it might be a forward reference or a type hint.
+                # We can try to resolve it using the current module's globals.
+                if ot in globals():
+                    parsed_output_type.append(globals()[ot])
+                elif ot in func.__globals__:
+                    parsed_output_type.append(func.__globals__[ot])
+                else:
+                    if self.package_name:
+                        # If a package name is provided, try to resolve it as a module import.
+                        try:
+                            module = sys.modules[self.package_name]
+                            parsed_output_type.append(module.__dict__[ot])
+                            continue
+                        except (ImportError, KeyError):
+                            pass
+                    try:
+                        module_name = '.'.join(ot.split('.')[:-1])
+                        if self.package_name:
+                            module_name = f"{self.package_name}.{module_name}"
+                        type_name = ot.split('.')[-1]
+                        parsed_output_type.append(importlib.import_module(module_name).__dict__[type_name])
+                    except (ImportError, KeyError):
+                        raise ValueError(f"Output type '{ot}' could not be resolved in the current scope.")
             else:
                 parsed_output_type.append(ot)
         return parsed_output_type
