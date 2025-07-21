@@ -27,16 +27,6 @@ class Predicate(TrackedObjectMixin, ABC):
         """
         pass
 
-    @classmethod
-    def rdr_decorator(cls, output_types: Tuple[Type, ...], mutually_exclusive: bool,
-                      package_name: Optional[str] = None) -> Callable[[Callable], Callable]:
-        """
-        Returns the RDRDecorator to decorate the predicate evaluate method with.
-        """
-        rdr_decorator: RDRDecorator = RDRDecorator(cls.models_dir, output_types, mutually_exclusive,
-                                                   package_name=package_name)
-        return rdr_decorator.decorator
-
     def __hash__(self):
         return hash(self.__class__.__name__)
 
