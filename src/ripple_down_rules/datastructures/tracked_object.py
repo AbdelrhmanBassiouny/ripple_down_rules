@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass, field, Field, fields
 from enum import Enum
 from functools import lru_cache
@@ -45,13 +46,9 @@ class TrackedObjectMixin:
     """
     The index of the current class in the dependency graph.
     """
-    _composition_edges: ClassVar[List[Tuple[int, int]]] = []
+    _edges: ClassVar[Dict[Relation, List[Tuple[int, int]]]] = defaultdict(list)
     """
-    The edges that represent composition relations between objects (Relation.has).
-    """
-    _inheritance_edges: ClassVar[List[Tuple[int, int]]] = []
-    """
-    The edges that represent inheritance relations between objects (Relation.isA).
+    All the edges indexed by relation type.
     """
     _overridden_by: Type[TrackedObjectMixin] = field(init=False, repr=False, hash=False,
                               compare=False, default=None)
@@ -67,8 +64,7 @@ class TrackedObjectMixin:
         """
         cls._dependency_graph = rx.PyDAG()
         cls._class_graph_indices = {}
-        cls._composition_edges = []
-        cls._inheritance_edges = []
+        cls._edges = defaultdict(list)
 
     @classmethod
     def _my_graph_idx(cls):
@@ -93,10 +89,9 @@ class TrackedObjectMixin:
                 cls._add_class_to_dependency_graph(base)
                 clazz_idx = cls._class_graph_indices[clazz]
                 base_idx = cls._class_graph_indices[base]
-                if (clazz_idx, base_idx) in cls._inheritance_edges or base._overridden_by == clazz:
+                if (clazz_idx, base_idx) in cls._edges[Relation.isA] or base._overridden_by == clazz:
                     continue
-                cls._dependency_graph.add_edge(clazz_idx, base_idx, Relation.isA)
-                cls._inheritance_edges.append((clazz_idx, base_idx))
+                cls.add_edge(clazz_idx, base_idx, Relation.isA)
 
         if not composition:
             return
@@ -146,13 +141,17 @@ class TrackedObjectMixin:
 
         if field_cls is not None:
             field_cls_idx = TrackedObjectMixin._class_graph_indices.get(field_cls, None)
-            if field_cls_idx is not None and (parent_idx, field_cls_idx) in TrackedObjectMixin._composition_edges:
+            if field_cls_idx is not None and (parent_idx, field_cls_idx) in TrackedObjectMixin._edges[Relation.has]:
                 return
             elif field_cls_idx is None:
                 TrackedObjectMixin._add_class_to_dependency_graph(field_cls)
                 field_cls_idx = TrackedObjectMixin._class_graph_indices[field_cls]
-            TrackedObjectMixin._dependency_graph.add_edge(parent_idx, field_cls_idx, field_relation)
-            TrackedObjectMixin._composition_edges.append((parent_idx, field_cls_idx))
+            TrackedObjectMixin.add_edge(parent_idx, field_cls_idx, field_relation)
+
+    @classmethod
+    def add_edge(cls, parent_idx: int, child_idx: int, relation: Relation):
+        cls._dependency_graph.add_edge(parent_idx, child_idx, relation)
+        cls._edges[relation].append((parent_idx, child_idx))
 
     @classmethod
     def _create_tracked_object_class_for_field(cls, field_info: FieldInfo):
@@ -206,3 +205,6 @@ class TrackedObjectMixin:
 annotations = TrackedObjectMixin.__annotations__
 for val in [f.name for f in fields(TrackedObjectMixin)]:
     annotations.pop(val, None)
+
+
+QueryObject = TrackedObjectMixin

@@ -12,7 +12,7 @@ from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, Set
 from .callable_expression import CallableExpression
 from .case import create_case, Case
 from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, render_tree, \
-    get_function_representation, get_method_object_from_pytest_request
+    get_function_representation, get_method_object_from_pytest_request, typing_to_python_type
 
 if TYPE_CHECKING:
     from ..rdr import RippleDownRules
@@ -205,16 +205,20 @@ class CaseQuery:
         """
         if not isinstance(self._attribute_types, tuple):
             self._attribute_types = tuple(make_set(self._attribute_types))
-        origin, args = get_origin_and_args_from_type_hint(self._attribute_types)
-        if origin is not None:
-            att_types = make_set(origin)
-            if origin in (list, set, tuple, List, Set, Union, Tuple):
-                att_types.update(make_set(args))
-            elif origin in (dict, Dict):
-                # ignore the key type
-                if args and len(args) > 1:
-                    att_types.update(make_set(args[1]))
-            self._attribute_types = tuple(att_types)
+        att_types = set()
+        for att_type in self._attribute_types:
+            origin, args = get_origin_and_args_from_type_hint(att_type)
+            if origin is not None:
+                att_types.add(origin)
+                if origin in (list, set, tuple, type, List, Set, Union, Tuple, Type):
+                    att_types.update(make_set(args))
+                elif origin in (dict, Dict):
+                    # ignore the key type
+                    if args and len(args) > 1:
+                        att_types.update(make_set(args[1]))
+            else:
+                att_types.add(typing_to_python_type(att_type))
+        self._attribute_types = tuple(att_types)
         if not self.mutually_exclusive and (list not in self._attribute_types):
             self._attribute_types = tuple(make_list(self._attribute_types) + [set, list])
         return self._attribute_types

@@ -1,19 +1,26 @@
-import os.path
+import itertools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
-from os.path import dirname
+from functools import lru_cache
+from typing import Generator
 
-from typing_extensions import Type, ClassVar, TYPE_CHECKING, Tuple, Optional, Callable
+from typing_extensions import Type, TYPE_CHECKING, Tuple
 
 from .datastructures.tracked_object import TrackedObjectMixin, Direction, Relation
 
 if TYPE_CHECKING:
-    from .rdr_decorators import RDRDecorator
+    pass
 
 
 @dataclass(eq=False)
 class Predicate(TrackedObjectMixin, ABC):
+
+    @classmethod
+    @abstractmethod
+    def relation(cls) -> Relation:
+        """
+        The relation type of the predicate.
+        """
 
     def __call__(self, *args, **kwargs):
         return self.evaluate(*args, **kwargs)
@@ -43,8 +50,13 @@ class IsA(Predicate):
     """
 
     @classmethod
+    def relation(cls):
+        return Relation.isA
+
+    @classmethod
     def evaluate(cls, child_type: Type[TrackedObjectMixin], parent_type: Type[TrackedObjectMixin]) -> bool:
         return issubclass(child_type, parent_type)
+
 
 isA = IsA()
 
@@ -56,18 +68,53 @@ class Has(Predicate):
     """
 
     @classmethod
+    def relation(cls):
+        return Relation.has
+
+    @classmethod
+    @lru_cache(maxsize=None)
     def evaluate(cls, owner_type: Type[TrackedObjectMixin],
-                 member_type: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
-        neighbors = cls._dependency_graph.adj_direction(owner_type._my_graph_idx(), Direction.OUTBOUND.value)
-        curr_val = any(e == Relation.has and isA(cls._dependency_graph.get_node_data(n), member_type)
-                       or e == Relation.isA and cls.evaluate(cls._dependency_graph.get_node_data(n), member_type)
-                       for n, e in neighbors.items())
-        if recursive:
-            return curr_val or any((e == Relation.has
-                                    and cls.evaluate(cls._dependency_graph.get_node_data(n), member_type, recursive=True))
-                                   for n, e in neighbors.items())
+                 member_type: Type[TrackedObjectMixin], recursive: bool = False, is_reversed: bool = False) \
+            -> Generator[Tuple[Type[TrackedObjectMixin], Type[TrackedObjectMixin]], None, None]:
+
+        if owner_type is not TrackedObjectMixin:
+            direction = Direction.INBOUND.value if is_reversed else Direction.OUTBOUND.value
+            owner_idx = owner_type._my_graph_idx()
+            neighbors = cls._dependency_graph.adj_direction(owner_idx, direction)
+            neighbor_generator = ((owner_idx, n) for n, e in neighbors.items()
+                                  if (e == cls.relation() and isA(cls._dependency_graph.get_node_data(n), member_type))
+                                  or (e == Relation.isA and any(cls.evaluate(cls._dependency_graph.get_node_data(n),
+                                                                             member_type)))
+                                  )
+            if recursive:
+                # recursive_relation_gen = (
+                #     (owner_idx, n2._my_graph_idx())
+                #     for n, e in neighbors.items()
+                #     for _, n2 in cls.evaluate(cls._dependency_graph.get_node_data(n), member_type, recursive=True,
+                #                               is_reversed=is_reversed)
+                #     if e == cls.relation()
+                # )
+                recursive_relation_gen = [
+                    (owner_idx, n2._my_graph_idx())
+                    for n, e in neighbors.items()
+                    if e == cls.relation()
+                    for _, n2 in cls.evaluate(cls._dependency_graph.get_node_data(n), member_type, recursive=True,
+                                              is_reversed=is_reversed)
+                ]
+                neighbor_generator = itertools.chain(neighbor_generator, recursive_relation_gen)
+            yield from map(
+                lambda t: (cls._dependency_graph.get_node_data(t[0]), cls._dependency_graph.get_node_data(t[1])),
+                neighbor_generator)
+        elif member_type is not TrackedObjectMixin:
+            # owner type is TrackedObjectMixin
+            yield from map(lambda t: (t[1], t[0]),
+                           cls.evaluate(member_type, owner_type, recursive=recursive, is_reversed=True))
         else:
-            return curr_val
+            # both are TrackedObjectMixin
+            yield from map(
+                lambda t: (cls._dependency_graph.get_node_data(t[0]), cls._dependency_graph.get_node_data(t[1])),
+                cls._edges[cls.relation()])
+
 
 has = Has()
 
@@ -77,6 +124,10 @@ class DependsOn(Predicate):
     """
     A predicate that checks if an object type depends on another object type.
     """
+
+    @classmethod
+    def relation(cls):
+        return Relation.dependsOn
 
     @classmethod
     def evaluate(cls, dependent: Type[TrackedObjectMixin],

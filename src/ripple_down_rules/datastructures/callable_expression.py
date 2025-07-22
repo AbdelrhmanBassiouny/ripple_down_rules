@@ -151,8 +151,6 @@ class CallableExpression(SubclassJSONSerializer):
 
     def __call__(self, case: Any, **kwargs) -> Any:
         try:
-            # if not self.mutually_exclusive:
-            #     self.expected_types.update({list, set})
             if self.user_input is not None:
                 if not isinstance(case, Case):
                     case = create_case(case, max_recursion_idx=3)

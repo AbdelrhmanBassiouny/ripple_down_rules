@@ -5,6 +5,7 @@ from typing_extensions import List
 
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import PromptFor
+from ripple_down_rules.helpers import create_case_query_from_method
 from ripple_down_rules.rdr_decorators import RDRDecorator
 from ripple_down_rules.user_interface.template_file_creator import TemplateFileCreator
 from ripple_down_rules.utils import make_set
@@ -53,7 +54,7 @@ def test_rdr_decorator_func_name():
         def select_objects_that_are_parts_of_robot(self, objects: List[PhysicalObject], robot: Robot) -> List[PhysicalObject]:
             pass
     example = Example()
-    cq = RDRDecorator.create_case_query_from_method(example.is_a_robot, {"output_": None}, bool, True,
+    cq = create_case_query_from_method(example.is_a_robot, {"output_": None}, bool, True,
                                                     func_args=(), func_kwargs={})
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, cq)
     assert func_name == "example_is_a_robot"
@@ -62,7 +63,7 @@ def test_rdr_decorator_func_name():
 
     objects = [Part("Object1"), Part("Object2"), Part("Object3")]
     robot = Robot("Robot1", objects[:2])
-    cq = RDRDecorator.create_case_query_from_method(
+    cq = create_case_query_from_method(
         example.select_objects_that_are_parts_of_robot, {"output_": None}, (List[PhysicalObject],),
         False, func_args=(objects, robot), func_kwargs={})
 

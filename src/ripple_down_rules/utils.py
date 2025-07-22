@@ -51,13 +51,29 @@ from sqlalchemy import MetaData, inspect as sql_inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
-    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Iterable
+    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Iterable, Sequence
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
     from .datastructures.dataclasses import CaseQuery
 
 import ast
+
+
+def fill_in_missing_kwargs(func: Callable, **kwargs) -> Dict[str, Any]:
+    """
+    Fill in missing kwargs with kwargs from the function signature.
+
+    :param func: The function object.
+    :param kwargs: The kwargs to complete.
+    :return: The complete kwargs.
+    """
+    original_kwargs = {pname: p for pname, p in inspect.signature(func).parameters.items() if
+                       p.default != inspect._empty}
+    for og_kwarg in original_kwargs:
+        if og_kwarg not in kwargs:
+            kwargs[og_kwarg] = original_kwargs[og_kwarg].default
+    return kwargs
 
 
 def get_and_import_python_modules_in_a_package(file_paths: List[str],
@@ -131,6 +147,59 @@ def are_results_subclass_of_types(result_types: List[Any], types_: List[Type]) -
         if not any(issubclass(rt, t) for t in types_):
             return False
     return True
+
+
+def get_origin_type_of_function_output(func: Callable) -> Optional[Type]:
+    """
+    Get the origin type of a function return type.
+
+    :param func: The function object.
+    """
+    origin_type: Optional[Type] = None
+    try:
+        origin_type = get_origin(get_type_hints(func)['return'])
+    except NameError:
+        return_annotation = inspect.signature(func).return_annotation
+        if any(return_annotation.startswith(t) for t in ['List', 'list', 'typing.List']):
+            origin_type = list
+        elif any(return_annotation.startswith(t) for t in ['Type', 'type', 'typing.Type']):
+            origin_type = type
+    if origin_type:
+        origin_type = get_type_from_type_hint(origin_type)
+    return origin_type
+
+
+def get_arg_type_of_function_output(func: Callable, output_type: Type, *func_args, package_name: Optional[str] = None):
+    if output_type is Self and len(func_args) > 0:
+        func_class = get_method_class_if_exists(func, *func_args)
+        if func_class is not None:
+            return func_class
+        else:
+            raise ValueError(f"The function {func} is not a method of a class,"
+                             f" and the output type is {Self}.")
+    elif type(output_type) is str:
+        # If the type is a string, it might be a forward reference or a type hint.
+        # We can try to resolve it using the current module's globals.
+        if output_type in func.__globals__:
+            return func.__globals__[output_type]
+        else:
+            if package_name:
+                # If a package name is provided, try to resolve it as a module import.
+                try:
+                    module = sys.modules[package_name]
+                    return module.__dict__[output_type]
+                except (ImportError, KeyError):
+                    pass
+            try:
+                module_name = '.'.join(output_type.split('.')[:-1])
+                if package_name:
+                    module_name = f"{package_name}.{module_name}"
+                type_name = output_type.split('.')[-1]
+                return importlib.import_module(module_name).__dict__[type_name]
+            except (ImportError, KeyError):
+                raise ValueError(f"Output type '{output_type}' could not be resolved in the current scope.")
+    else:
+        return output_type
 
 
 def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
@@ -672,6 +741,8 @@ def typing_to_python_type(typing_hint: Type) -> Type:
         return set
     elif typing_hint in [dict, Dict]:
         return dict
+    elif typing_hint in [type, Type]:
+        return type
     else:
         return typing_hint
 

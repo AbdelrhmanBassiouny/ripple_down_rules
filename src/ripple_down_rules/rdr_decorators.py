@@ -3,30 +3,25 @@ This file contains decorators for the RDR (Ripple Down Rules) framework. Where e
 that can be used with any python function such that this function can benefit from the incremental knowledge acquisition
 of the RDRs.
 """
-import importlib
 import inspect
 import os.path
-import sys
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import get_origin
 
-from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any, Self, get_type_hints, List, Union, Sequence
+from typing_extensions import Callable, Optional, Type, Tuple, Dict, Any, List
 
-from .datastructures.case import Case
-from .datastructures.dataclasses import CaseQuery, CaseFactoryMetaData
+from .datastructures.dataclasses import CaseFactoryMetaData
 from .experts import Expert, Human
-from .failures import RDRLoadError
 from .rdr import GeneralRDR
-from .utils import get_type_from_type_hint
+from .utils import get_origin_type_of_function_output, get_arg_type_of_function_output, fill_in_missing_kwargs
 
 try:
     from .user_interface.gui import RDRCaseViewer
 except ImportError:
     RDRCaseViewer = None
-from .utils import get_method_args_as_dict, get_func_rdr_model_name, make_set, \
-    get_method_class_if_exists, make_list
-from .helpers import create_case_from_method
+from .utils import get_func_rdr_model_name, make_set, \
+    make_list
+from .helpers import create_case_from_method, create_case_query_from_method
 
 
 @dataclass(unsafe_hash=True)
@@ -124,26 +119,17 @@ class RDRDecorator:
         @wraps(func)
         def wrapper(*args, **kwargs) -> Optional[Any]:
 
-            original_kwargs = {pname: p for pname, p in inspect.signature(func).parameters.items() if
-                               p.default != inspect._empty}
-            for og_kwarg in original_kwargs:
-                if og_kwarg not in kwargs:
-                    kwargs[og_kwarg] = original_kwargs[og_kwarg].default
+            kwargs = fill_in_missing_kwargs(func, **kwargs)
+
+            if self.origin_type is None and not self.mutual_exclusive:
+                self.origin_type = get_origin_type_of_function_output(func)
 
             if len(self.parsed_output_type) == 0:
                 self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
+                self.parsed_output_type.append(self.origin_type)
 
             if self.model_name is None:
                 self.initialize_rdr_model_name_and_load(func)
-            if self.origin_type is None and not self.mutual_exclusive:
-                try:
-                    self.origin_type = get_origin(get_type_hints(func)['return'])
-                except NameError:
-                    return_annotation = inspect.signature(func).return_annotation
-                    if any(return_annotation.startswith(t) for t in ['List', 'list', 'typing.List']):
-                        self.origin_type = list
-                if self.origin_type:
-                    self.origin_type = get_type_from_type_hint(self.origin_type)
 
             func_output = {self.output_name: func(*args, **kwargs)}
 
@@ -153,14 +139,14 @@ class RDRDecorator:
             def fit():
                 if self.expert is None:
                     self.expert = Human(answers_save_path=self.models_dir + f'/{self.model_name}/expert_answers')
-                case_query = self.create_case_query_from_method(
-                                            func, func_output,
-                                            self.parsed_output_type,
-                                            self.mutual_exclusive,
-                                            args, kwargs,
-                                            case=case, case_dict=case_dict,
-                                            scenario=self.case_factory_metadata.scenario,
-                                            this_case_target_value=self.case_factory_metadata.this_case_target_value)
+                case_query = create_case_query_from_method(
+                    func, func_output,
+                    self.parsed_output_type,
+                    self.mutual_exclusive,
+                    args, kwargs,
+                    case=case, case_dict=case_dict,
+                    scenario=self.case_factory_metadata.scenario,
+                    this_case_target_value=self.case_factory_metadata.this_case_target_value)
                 output = self.rdr.fit_case(case_query, expert=self.expert,
                                            update_existing_rules=self.update_existing_rules)
                 return output
@@ -194,59 +180,6 @@ class RDRDecorator:
 
         return wrapper
 
-    @staticmethod
-    def create_case_query_from_method(func: Callable,
-                                      func_output: Dict[str, Any],
-                                      output_type: Sequence[Type],
-                                      mutual_exclusive: bool,
-                                      func_args: Tuple[Any, ...], func_kwargs: Dict[str, Any],
-                                      case: Optional[Case] = None,
-                                      case_dict: Optional[Dict[str, Any]] = None,
-                                      scenario: Optional[Callable] = None,
-                                      this_case_target_value: Optional[Any] = None,) -> CaseQuery:
-        """
-        Create a CaseQuery from the function and its arguments.
-
-        :param func: The function to create a case from.
-        :param func_output: The output of the function as a dictionary, where the key is the output name.
-        :param output_type: The type of the output as a sequence of types.
-        :param mutual_exclusive: If True, the output types are mutually exclusive.
-        :param func_args: The positional arguments of the function.
-        :param func_kwargs: The keyword arguments of the function.
-        :param case: The case to create.
-        :param case_dict: The dictionary of the case.
-        :param scenario: The scenario that produced the given case.
-        :param this_case_target_value: The target value for the case.
-        :return: A CaseQuery object representing the case.
-        """
-        output_type = make_set(output_type)
-        if case is None or case_dict is None:
-            case, case_dict = create_case_from_method(func, func_output, *func_args, **func_kwargs)
-        scope = func.__globals__
-        scope.update(case_dict)
-        try:
-            func_args_type_hints = get_type_hints(func)
-        except NameError:
-            # use inspect to get the type hints if get_type_hints fails
-            func_args_type_hints = {k: v.annotation for k, v in inspect.signature(func).parameters.items()
-                                      if v.annotation is not inspect._empty}
-            # add return type hint from the function signature
-            return_annotation = inspect.signature(func).return_annotation
-            if return_annotation is not inspect._empty:
-                func_args_type_hints['return'] = return_annotation
-            types_dict = {t.__name__: t for t in output_type}
-            scope.update(types_dict)
-            types_names = list(types_dict.keys())
-            for k, v in func_args_type_hints.items():
-                for t_name in types_names:
-                    if isinstance(v, str) and t_name in v:
-                        func_args_type_hints[k] = eval(v, scope)
-        output_name = list(func_output.keys())[0]
-        func_args_type_hints.update({output_name: Union[tuple(output_type)]})
-        return CaseQuery(case, output_name, tuple(output_type),
-                         mutual_exclusive, scope=scope, scenario=scenario, this_case_target_value=this_case_target_value,
-                         is_function=True, function_args_type_hints=func_args_type_hints)
-
     def initialize_rdr_model_name_and_load(self, func: Callable) -> None:
         self.model_name = get_func_rdr_model_name(func, include_file_name=True)
         self.load()
@@ -254,39 +187,8 @@ class RDRDecorator:
     def parse_output_type(self, func: Callable, output_type: Any, *args) -> List[Type]:
         parsed_output_type = []
         for ot in make_set(output_type):
-            if ot is Self:
-                func_class = get_method_class_if_exists(func, *args)
-                if func_class is not None:
-                    parsed_output_type.append(func_class)
-                else:
-                    raise ValueError(f"The function {func} is not a method of a class,"
-                                     f" and the output type is {Self}.")
-            elif type(ot) is str:
-                # If the type is a string, it might be a forward reference or a type hint.
-                # We can try to resolve it using the current module's globals.
-                if ot in globals():
-                    parsed_output_type.append(globals()[ot])
-                elif ot in func.__globals__:
-                    parsed_output_type.append(func.__globals__[ot])
-                else:
-                    if self.package_name:
-                        # If a package name is provided, try to resolve it as a module import.
-                        try:
-                            module = sys.modules[self.package_name]
-                            parsed_output_type.append(module.__dict__[ot])
-                            continue
-                        except (ImportError, KeyError):
-                            pass
-                    try:
-                        module_name = '.'.join(ot.split('.')[:-1])
-                        if self.package_name:
-                            module_name = f"{self.package_name}.{module_name}"
-                        type_name = ot.split('.')[-1]
-                        parsed_output_type.append(importlib.import_module(module_name).__dict__[type_name])
-                    except (ImportError, KeyError):
-                        raise ValueError(f"Output type '{ot}' could not be resolved in the current scope.")
-            else:
-                parsed_output_type.append(ot)
+            ot = get_arg_type_of_function_output(func, ot, *args, package_name=self.package_name)
+            parsed_output_type.append(ot)
         return parsed_output_type
 
     def load(self):
