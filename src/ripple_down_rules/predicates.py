@@ -44,7 +44,7 @@ class Predicate(TrackedObjectMixin, ABC):
         return self.__class__ == other.__class__
 
 
-@dataclass
+@dataclass(eq=False)
 class IsA(Predicate):
     """
     A predicate that checks if an object type is a subclass of another object type.
@@ -62,7 +62,7 @@ class IsA(Predicate):
 isA = IsA()
 
 
-@dataclass
+@dataclass(eq=False)
 class Has(Predicate):
     """
     A predicate that checks if an object type has a certain member object type.
@@ -114,7 +114,7 @@ class Has(Predicate):
 has = Has()
 
 
-@dataclass
+@dataclass(eq=False)
 class DependsOn(Predicate):
     """
     A predicate that checks if an object type depends on another object type.
