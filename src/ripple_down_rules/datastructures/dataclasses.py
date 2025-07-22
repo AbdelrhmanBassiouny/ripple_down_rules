@@ -11,7 +11,7 @@ from typing_extensions import Any, Optional, Dict, Type, Tuple, Union, List, Set
 
 from .callable_expression import CallableExpression
 from .case import create_case, Case
-from ..helpers import get_case_name
+from .helpers import get_case_name
 from ..utils import copy_case, make_list, make_set, get_origin_and_args_from_type_hint, render_tree, \
     get_function_representation, get_method_object_from_pytest_request
 

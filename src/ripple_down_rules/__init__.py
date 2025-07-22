@@ -12,7 +12,6 @@ try:
 except ImportError:
     pass
 
-
 # Trigger patch
 try:
     from .predicates import *

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 import uuid
 from dataclasses import dataclass, field, Field, fields
 from enum import Enum
@@ -159,7 +160,7 @@ class TrackedObjectMixin:
         raise NotImplementedError
 
     @classmethod
-    def to_dot(cls, filepath: str, format='png') -> None:
+    def to_dot(cls, filepath: str, format='svg') -> None:
         if not filepath.endswith(f".{format}"):
             filepath += f".{format}"
         dot_str = cls._dependency_graph.to_dot(
@@ -167,7 +168,16 @@ class TrackedObjectMixin:
                 color='black', fillcolor='lightblue', style='filled', label=node.__name__),
             lambda edge: dict(color='black', style='solid', label=edge))
         dot = pydot.graph_from_dot_data(dot_str)[0]
-        dot.write(filepath, format=format)
+        try:
+            dot.write(filepath, format=format)
+        except FileNotFoundError:
+            tmp_filepath = filepath.replace(f".{format}", ".dot")
+            dot.write(tmp_filepath, format='raw')
+            try:
+                os.system(f"/usr/bin/dot -T{format} {tmp_filepath} -o {filepath}")
+                os.remove(tmp_filepath)
+            except Exception as e:
+                logger.error(e)
 
     @classmethod
     def _add_class_to_dependency_graph(cls, class_to_add: Type[TrackedObjectMixin]) -> None:

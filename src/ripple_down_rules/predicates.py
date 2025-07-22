@@ -1,15 +1,13 @@
-import os.path
+from abc import ABC, abstractmethod
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
-from os.path import dirname
 
-from typing_extensions import Type, ClassVar, TYPE_CHECKING, Tuple, Optional, Callable
+from typing_extensions import Type, TYPE_CHECKING
 
 from .datastructures.tracked_object import TrackedObjectMixin, Direction, Relation
 
 if TYPE_CHECKING:
-    from .rdr_decorators import RDRDecorator
+    pass
 
 
 @dataclass(eq=False)
@@ -46,6 +44,7 @@ class IsA(Predicate):
     def evaluate(cls, child_type: Type[TrackedObjectMixin], parent_type: Type[TrackedObjectMixin]) -> bool:
         return issubclass(child_type, parent_type)
 
+
 isA = IsA()
 
 
@@ -64,10 +63,12 @@ class Has(Predicate):
                        for n, e in neighbors.items())
         if recursive:
             return curr_val or any((e == Relation.has
-                                    and cls.evaluate(cls._dependency_graph.get_node_data(n), member_type, recursive=True))
+                                    and cls.evaluate(cls._dependency_graph.get_node_data(n), member_type,
+                                                     recursive=True))
                                    for n, e in neighbors.items())
         else:
             return curr_val
+
 
 has = Has()
 

@@ -5,7 +5,11 @@ import logging
 import os.path
 from types import MethodType
 
+import pydot
 from graphviz import Digraph, Source
+from pandas.io.common import file_path_to_url
+
+from .. import logger
 
 try:
     from PyQt6.QtCore import Qt
@@ -375,8 +379,21 @@ class RDRCaseViewer(QMainWindow):
     def update_object_diagram(self, obj: Any, name: str):
         self.included_attrs = self.included_attrs or []
         graph = generate_object_graph(obj, name, included_attrs=self.included_attrs)
-        graph.render("object_diagram", view=False, format='svg')
-        self.obj_diagram_viewer.update_image("object_diagram.svg")
+        file_name = "object_diagram"
+        format = "svg"
+        filepath = f"{file_name}.{format}"
+        try:
+            graph.render(file_name, view=False, format=format)
+        except FileNotFoundError:
+            tmp_filepath = f"{file_name}.dot"
+            graph.save(tmp_filepath, directory="./")
+            try:
+                os.system(f"/usr/bin/dot -T{format} {tmp_filepath} -o {filepath}")
+                os.remove(tmp_filepath)
+            except Exception as e:
+                logger.error(e)
+        if os.path.exists(filepath):
+            self.obj_diagram_viewer.update_image(filepath)
 
     def _create_attribute_widget(self):
         main_widget = QWidget()

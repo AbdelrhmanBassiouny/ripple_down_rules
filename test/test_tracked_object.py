@@ -1,4 +1,5 @@
 import os
+from os.path import dirname
 
 from ripple_down_rules import *
 from .datasets import Drawer, Handle, Cabinet, View, WorldEntity, Body, Connection

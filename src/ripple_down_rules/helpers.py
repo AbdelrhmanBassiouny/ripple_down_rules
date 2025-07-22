@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import importlib
 import os
-import sys
 from functools import wraps
 from types import ModuleType
-from typing import Tuple, Callable, Dict, Any, Optional
+from typing import Tuple
 
 from typing_extensions import Type, Optional, Callable, Any, Dict, TYPE_CHECKING, Union
 
 from .datastructures.case import create_case, Case
 from .datastructures.dataclasses import CaseQuery
-from .utils import calculate_precision_and_recall, get_method_args_as_dict, get_func_rdr_model_name
+from .utils import calculate_precision_and_recall, get_method_args_as_dict
 from .utils import get_func_rdr_model_name, copy_case, make_set, update_case
 
 if TYPE_CHECKING:
@@ -164,11 +163,3 @@ class MockRDRDecorator:
         return wrapper
 
 
-def get_case_name(case: Any) -> str:
-    """
-    Get the case name from the case object or query.
-
-    :param case: The case object or query.
-    :return: The name of the case.
-    """
-    return case._name if isinstance(case, Case) else case.__class__.__name__

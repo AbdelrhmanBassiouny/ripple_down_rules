@@ -34,7 +34,8 @@ from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode, RDREdge
 from .experts import Expert, Human
-from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy, get_case_name
+from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy
+from .datastructures.helpers import get_case_name
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule, MultiClassRefinementRule, \
     MultiClassFilterRule
 
