@@ -1,25 +1,21 @@
 import os
 from os.path import dirname
 
-from IPython import embed
-from hypothesis.strategies import recursive
-
 from ripple_down_rules import *
 from ripple_down_rules.datastructures.tracked_object import X
 from .datasets import Drawer, Handle, Cabinet, View, WorldEntity, Body, Connection, Container
 
 
 def test_construct_class_hierarchy():
-    TrackedObjectMixin._reset_dependency_graph()
-    TrackedObjectMixin.make_class_dependency_graph(composition=False)
+    isA.infer()
     Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
     assert len(Drawer._dependency_graph.nodes()) == 20
     assert len(Drawer._dependency_graph.edges()) == 17
 
 
 def test_construct_class_composition():
-    TrackedObjectMixin._reset_dependency_graph()
-    TrackedObjectMixin.make_class_dependency_graph(composition=True)
+    isA.infer()
+    has.infer()
     Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
     assert len(Drawer._dependency_graph.nodes()) == 20
     assert len(Drawer._dependency_graph.edges()) == 22
@@ -28,8 +24,6 @@ def test_construct_class_composition():
 
 # @pytest.mark.skip("Not Implemented yet")
 def test_construct_class_composition_and_dependency():
-    TrackedObjectMixin._reset_dependency_graph()
-    TrackedObjectMixin.make_class_dependency_graph(composition=True)
     assert next(has(Drawer, Handle))
     assert next(has(Cabinet, Drawer))
     assert list(has(Cabinet, X)) == [(Cabinet, Drawer), (Cabinet, Container)]

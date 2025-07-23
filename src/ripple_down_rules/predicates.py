@@ -70,8 +70,20 @@ class Predicate(TrackedObjectMixin, ABC):
         """
 
     @classmethod
-    @abstractmethod
     def infer(cls, *args, **kwargs):
+        """
+        Evaluate the predicate with the given arguments.
+        This method should be implemented by subclasses.
+        """
+        for parent, child in cls._infer(*args, **kwargs):
+            cls._add_class_to_dependency_graph(parent)
+            cls._add_class_to_dependency_graph(child)
+            cls.add_edge(cls._class_graph_indices[parent], cls._class_graph_indices[child], cls.relation())
+
+    @classmethod
+    @abstractmethod
+    def _infer(cls, *args, **kwargs)\
+            -> Generator[Tuple[Type[TrackedObjectMixin], Type[TrackedObjectMixin]], None, None]:
         """
         Evaluate the predicate with the given arguments.
         This method should be implemented by subclasses.
@@ -131,8 +143,8 @@ class IsA(Predicate):
         return Relation.isA
 
     @classmethod
-    def infer(cls, child_type: Type[TrackedObjectMixin], parent_type: Type[TrackedObjectMixin]):
-        TrackedObjectMixin.make_class_dependency_graph(composition=False)
+    def _infer(cls, *args, **kwargs):
+        yield from TrackedObjectMixin._inheritance_relations()
 
     @classmethod
     def _should_infer(cls) -> bool:
@@ -152,8 +164,8 @@ class Has(Predicate):
         return Relation.has
 
     @classmethod
-    def infer(cls, owner_type: Type[TrackedObjectMixin], member_type: Type[TrackedObjectMixin]):
-        TrackedObjectMixin.make_class_dependency_graph()
+    def _infer(cls, *args, **kwargs):
+        yield from TrackedObjectMixin._composition_relations()
 
     @classmethod
     def _should_infer(cls) -> bool:
@@ -174,7 +186,7 @@ class DependsOn(Predicate):
         return Relation.dependsOn
 
     @classmethod
-    def infer(cls, dependent: Type[TrackedObjectMixin],
+    def _infer(cls, dependent: Type[TrackedObjectMixin],
                  dependency: Type[TrackedObjectMixin], recursive: bool = False) -> bool:
         raise NotImplementedError("Should be overridden in rdr meta")
 
