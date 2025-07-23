@@ -5,7 +5,7 @@ from IPython import embed
 from hypothesis.strategies import recursive
 
 from ripple_down_rules import *
-from ripple_down_rules.datastructures.tracked_object import QueryObject
+from ripple_down_rules.datastructures.tracked_object import X
 from .datasets import Drawer, Handle, Cabinet, View, WorldEntity, Body, Connection, Container
 
 
@@ -32,10 +32,10 @@ def test_construct_class_composition_and_dependency():
     TrackedObjectMixin.make_class_dependency_graph(composition=True)
     assert next(has(Drawer, Handle))
     assert next(has(Cabinet, Drawer))
-    assert list(has(Cabinet, QueryObject)) == [(Cabinet, Drawer), (Cabinet, Container)]
-    assert list(has(Cabinet, QueryObject, recursive=True)) == [(Cabinet, Drawer), (Cabinet, Container), (Cabinet, Container), (Cabinet, Handle)]
-    assert list(has(QueryObject, Handle)) == [(Drawer, Handle)]
-    assert list(has(QueryObject, Handle, recursive=True)) == [(Drawer, Handle), (Cabinet, Handle)]
+    assert list(has(Cabinet, X)) == [(Cabinet, Drawer), (Cabinet, Container)]
+    assert list(has(Cabinet, X, recursive=True)) == [(Cabinet, Drawer), (Cabinet, Container), (Cabinet, Container), (Cabinet, Handle)]
+    assert list(has(X, Handle)) == [(Drawer, Handle)]
+    assert list(has(X, Handle, recursive=True)) == [(Drawer, Handle), (Cabinet, Handle)]
     assert isA(Cabinet, View)
     assert isA(Cabinet, WorldEntity)
     assert not list(has(Cabinet, Handle))

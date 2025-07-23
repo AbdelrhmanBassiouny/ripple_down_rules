@@ -9,7 +9,7 @@ from functools import lru_cache
 
 import pydot
 import rustworkx as rx
-from typing_extensions import Any, TYPE_CHECKING, Type, final, ClassVar, Dict, List, Optional, Tuple
+from typing_extensions import Any, Type, ClassVar, Dict, List, Optional, Tuple
 
 from .field_info import FieldInfo
 from .. import logger
@@ -51,7 +51,7 @@ class TrackedObjectMixin:
     All the edges indexed by relation type.
     """
     _overridden_by: Type[TrackedObjectMixin] = field(init=False, repr=False, hash=False,
-                              compare=False, default=None)
+                                                     compare=False, default=None)
     """
     Whether the class has been overridden by a subclass.
     This is used to only include the new class in the dependency graph, not the overridden class.
@@ -65,6 +65,9 @@ class TrackedObjectMixin:
         cls._dependency_graph = rx.PyDAG()
         cls._class_graph_indices = {}
         cls._edges = defaultdict(list)
+        cls.parse_fields.cache_clear()
+        cls.get_fields.cache_clear()
+        cls.parse_field.cache_clear()
 
     @classmethod
     def _my_graph_idx(cls):
@@ -101,6 +104,7 @@ class TrackedObjectMixin:
             TrackedObjectMixin.parse_fields(clazz)
 
     @staticmethod
+    @lru_cache(maxsize=None)
     def parse_fields(clazz) -> None:
         for f in TrackedObjectMixin.get_fields(clazz):
 
@@ -116,6 +120,7 @@ class TrackedObjectMixin:
             TrackedObjectMixin.parse_field(field_info)
 
     @staticmethod
+    @lru_cache(maxsize=None)
     def get_fields(clazz) -> List[Field]:
         skip_fields = []
         bases = [base for base in clazz.__bases__ if issubclass(base, TrackedObjectMixin)]
@@ -127,6 +132,7 @@ class TrackedObjectMixin:
         return result
 
     @staticmethod
+    @lru_cache(maxsize=None)
     def parse_field(field_info: FieldInfo):
         parent_idx = TrackedObjectMixin._class_graph_indices[field_info.clazz]
         field_cls: Optional[Type[TrackedObjectMixin]] = None
@@ -206,5 +212,4 @@ annotations = TrackedObjectMixin.__annotations__
 for val in [f.name for f in fields(TrackedObjectMixin)]:
     annotations.pop(val, None)
 
-
-QueryObject = TrackedObjectMixin
+X = TrackedObjectMixin

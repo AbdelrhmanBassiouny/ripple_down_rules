@@ -199,7 +199,7 @@ class CaseQuery:
         return tuple(t for t in self.attribute_type if t not in (set, list))
 
     @property
-    def attribute_type(self) -> Tuple[Type]:
+    def attribute_type(self) -> Tuple[Type, ...]:
         """
         :return: The type of the attribute.
         """

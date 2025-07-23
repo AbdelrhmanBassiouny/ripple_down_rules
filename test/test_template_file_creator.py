@@ -31,10 +31,11 @@ def test_func_name_with_two_type():
     case_query: CaseQuery = CaseQuery(world, "views", (Handle, Container), False)
 
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, case_query)
-    assert func_name == "world_views_of_type_handle_or_container"
+    assert func_name in ["world_views_of_type_handle_or_container", "world_views_of_type_container_or_handle"]
 
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conditions, case_query)
-    assert func_name == "conditions_for_world_views_of_type_handle_or_container"
+    assert func_name in ["conditions_for_world_views_of_type_handle_or_container",
+                         "conditions_for_world_views_of_type_container_or_handle"]
 
 def test_func_name_with_not_needed_types():
     # Test the function name

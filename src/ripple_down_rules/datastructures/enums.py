@@ -7,6 +7,24 @@ from typing_extensions import List, Dict, Any, Type
 from ripple_down_rules.utils import SubclassJSONSerializer
 
 
+class InferMode(Enum):
+    """
+    The infer mode of a predicate, whether to infer new relations or retrieve current relations.
+    """
+    Auto = auto()
+    """
+    Inference is done automatically depending on the world state.
+    """
+    Always = auto()
+    """
+    Inference is always performed.
+    """
+    Never = auto()
+    """
+    Inference is never performed.
+    """
+
+
 class ExitStatus(Enum):
     """
     Describes the status at exit of the user interface.
