@@ -3,10 +3,12 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Generator, ClassVar
 
-from typing_extensions import Type, TYPE_CHECKING, Tuple, Dict, List
+from typing_extensions import Type, TYPE_CHECKING, Tuple, Dict, List, TypeVar, Iterator, Union
 
 from .datastructures.enums import InferMode
 from .datastructures.tracked_object import TrackedObjectMixin, Direction, Relation
+from .types import PredicateArgType, PredicateOutputType
+from .utils import is_iterable
 
 if TYPE_CHECKING:
     pass
@@ -90,38 +92,43 @@ class Predicate(TrackedObjectMixin, ABC):
         """
 
     @classmethod
-    def retrieve(cls, node1_type: Type[TrackedObjectMixin],
-                 node2_type: Type[TrackedObjectMixin], recursive: bool = False, is_reversed: bool = False) \
-            -> Generator[Tuple[Type[TrackedObjectMixin], Type[TrackedObjectMixin]], None, None]:
-        if node1_type is not TrackedObjectMixin:
-            direction = Direction.INBOUND.value if is_reversed else Direction.OUTBOUND.value
-            owner_idx = node1_type._my_graph_idx()
-            neighbors = cls._dependency_graph.adj_direction(owner_idx, direction)
-            neighbor_generator = ((owner_idx, n) for n, e in neighbors.items()
-                                  if (e == cls.relation() and issubclass(cls._dependency_graph.get_node_data(n),
-                                                                         node2_type))
-                                  or (e == Relation.isA and any(cls.retrieve(cls._dependency_graph.get_node_data(n),
-                                                                             node2_type)))
-                                  )
-            latest_results = []
-            for v in neighbor_generator:
-                res = (cls._dependency_graph.get_node_data(v[0]), cls._dependency_graph.get_node_data(v[1]))
-                latest_results.append(v)
-                yield res
-            if recursive:
-                for n in [n for n, e in neighbors.items() if e == cls.relation()]:
-                    for v in cls.retrieve(cls._dependency_graph.get_node_data(n), node2_type, recursive=True,
-                                          is_reversed=is_reversed):
-                        yield node1_type, v[1]
-        elif node2_type is not TrackedObjectMixin:
-            # owner type is TrackedObjectMixin
-            yield from map(lambda t: (t[1], t[0]),
-                           cls.retrieve(node2_type, node1_type, recursive=recursive, is_reversed=True))
-        else:
-            # both are TrackedObjectMixin
-            yield from map(
-                lambda t: (cls._dependency_graph.get_node_data(t[0]), cls._dependency_graph.get_node_data(t[1])),
-                cls._edges[cls.relation()])
+    def retrieve(cls, node1_type: PredicateArgType, node2_type: PredicateArgType,
+                 recursive: bool = False, is_reversed: bool = False) -> PredicateOutputType:
+        if not is_iterable(node1_type):
+            node1_type = (node1_type,)
+        if not is_iterable(node2_type):
+            node2_type = (node2_type,)
+        for n1 in node1_type:
+            for n2 in node2_type:
+                if n1 is not TrackedObjectMixin:
+                    direction = Direction.INBOUND.value if is_reversed else Direction.OUTBOUND.value
+                    owner_idx = n1._my_graph_idx()
+                    neighbors = cls._dependency_graph.adj_direction(owner_idx, direction)
+                    neighbor_generator = ((owner_idx, n) for n, e in neighbors.items()
+                                          if (e == cls.relation() and issubclass(cls._dependency_graph.get_node_data(n),
+                                                                                 n2))
+                                          or (e == Relation.isA and any(cls.retrieve(cls._dependency_graph.get_node_data(n),
+                                                                                     n2)))
+                                          )
+                    latest_results = []
+                    for v in neighbor_generator:
+                        res = (cls._dependency_graph.get_node_data(v[0]), cls._dependency_graph.get_node_data(v[1]))
+                        latest_results.append(v)
+                        yield res
+                    if recursive:
+                        for n in [n for n, e in neighbors.items() if e == cls.relation()]:
+                            for v in cls.retrieve(cls._dependency_graph.get_node_data(n), n2, recursive=True,
+                                                  is_reversed=is_reversed):
+                                yield n1, v[1]
+                elif n2 is not TrackedObjectMixin:
+                    # owner type is TrackedObjectMixin
+                    yield from map(lambda t: (t[1], t[0]),
+                                   cls.retrieve(n2, n1, recursive=recursive, is_reversed=True))
+                else:
+                    # both are TrackedObjectMixin
+                    yield from map(
+                        lambda t: (cls._dependency_graph.get_node_data(t[0]), cls._dependency_graph.get_node_data(t[1])),
+                        cls._edges[cls.relation()])
 
     def __hash__(self):
         return hash(self.__class__.__name__)
