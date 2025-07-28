@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import itertools
 from typing import dataclass_transform
 
-from typing_extensions import Iterable, Any, Optional, Type, Dict
+from typing_extensions import Iterable, Any, Optional, Type, Dict, Callable
 
 import contextvars
 
@@ -53,6 +54,18 @@ class SymbolicExpression:
     def __eq__(self, other):
         return LogicalOperation(self, '==', other)
 
+    def in_(self, other):
+        """
+        Check if the symbolic expression is in another iterable or symbolic expression.
+        """
+        return LogicalOperation(self, 'in', other)
+
+    def __contains__(self, item):
+        return LogicalOperation(item, 'in', self)
+
+    def __bool__(self):
+        raise TypeError("Cannot evaluate symbolic expression to a boolean value.")
+
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self}>"
 
@@ -99,8 +112,12 @@ class SymbolicVariable(SymbolicExpression):
                                         for i in range(len(self.args)))
 
     @classmethod
-    def from_data(cls, clazz: Type, iterable):
+    def from_data(cls, iterable, clazz: Optional[Type] = None) -> SymbolicVariable:
         if in_symbolic_mode():
+            if not is_iterable(iterable):
+                iterable = make_list(iterable)
+            if not clazz:
+                clazz = type(next((iter(iterable)), None))
             return SymbolicVariable(clazz, data=iterable)
         raise TypeError(f"Method from_data of {clazz.__name__} is not usable outside RuleWriting")
 
@@ -151,18 +168,33 @@ class LogicalOperation(SymbolicExpression):
             right = make_list(right)
         self.operation = operation
         def operator_yield():
+            left_idx = 0
             for left_item in left:
+                right_idx = 0
                 for right_item in right:
                     if eval(f"left_item {self.operation} right_item"):
-                        yield (left_item, right_item)
-                        break
-
-        self.data = (v for v in operator_yield())
+                        yield left_idx, right_idx
+                    right_idx += 1
+                left_idx += 1
+        data1, data2 = itertools.tee(operator_yield())
         self.left = left
         self.right = right
-        self.variables_data_dict[self.variable] = (v[0] for v in self.data)
+        self.variables_data_dict[self.variable] = (v[0] for v in data1)
+
         if isinstance(right, SymbolicExpression):
-            self.variables_data_dict[right.variable] = (v[1] for v in self.data)
+            self.variables_data_dict[right.variable] = (v[1] for v in data2)
+
+
+class Mapped(SymbolicExpression):
+    """
+    A symbolic mapping that can be used to map symbolic variables to their attributes.
+    """
+
+    def __init__(self, expression: SymbolicExpression, mapper: Callable):
+        super().__init__(expression)
+        self.variables_data_dict[self.variable] = expression.data
+        for item, value in self.variables_data_dict.items():
+            self.variables_data_dict[item] = (mapper(v) for v in value)
 
 @dataclass_transform()
 def symbolic(cls):
