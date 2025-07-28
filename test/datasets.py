@@ -14,7 +14,7 @@ from ripple_down_rules.datastructures.case import Case, create_cases_from_datafr
 from ripple_down_rules.datastructures.enums import Category
 from ripple_down_rules import TrackedObjectMixin
 from ripple_down_rules.rdr_decorators import RDRDecorator
-from ripple_down_rules.symbolic_variable import symbolic
+from ripple_down_rules.symbolic import symbolic
 
 
 def load_cached_dataset(cache_file):
