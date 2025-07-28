@@ -1357,13 +1357,14 @@ class MultiClassRDR(RDRWithCodeWriter):
             next_rule = evaluated_rule(case_query.case)
             rule_conclusion = evaluated_rule.conclusion(case_query.case)
 
-            if evaluated_rule.fired:
-                if not make_set(rule_conclusion).issubset(target_value):
-                    # Rule fired and conclusion is different from target
-                    self.stop_wrong_conclusion_else_add_it(case_query, expert, evaluated_rule)
-                else:
-                    # Rule fired and target is correct or there is no target to compare
-                    self.add_conclusion(rule_conclusion)
+            for conclusion in rule_conclusion:
+                if evaluated_rule.fired:
+                    if conclusion not in target_value:
+                        # Rule fired and conclusion is different from target
+                        self.stop_wrong_conclusion_else_add_it(case_query, expert, evaluated_rule)
+                    else:
+                        # Rule fired and target is correct or there is no target to compare
+                        self.add_conclusion(rule_conclusion)
 
             if not next_rule:
                 if not make_set(target_value).issubset(make_set(self.conclusions)):
@@ -1377,9 +1378,6 @@ class MultiClassRDR(RDRWithCodeWriter):
     def write_rules_as_source_code_to_file(self, rule: Union[MultiClassTopRule, MultiClassStopRule],
                                            filename: str, parent_indent: str = "", defs_file: Optional[str] = None,
                                            cases_file: Optional[str] = None, package_name: Optional[str] = None):
-        if rule == self.start_rule:
-            with open(filename, "a") as file:
-                file.write(f"{parent_indent}conclusions = set()\n")
         if rule.conditions:
             rule.write_corner_case_as_source_code(cases_file, package_name=package_name)
             if_clause = rule.write_condition_as_source_code(parent_indent, defs_file)
@@ -1441,12 +1439,11 @@ class MultiClassRDR(RDRWithCodeWriter):
         else:
             return self.start_rule.furthest_alternative[-1]
 
-    def stop_wrong_conclusion_else_add_it(self, case_query: CaseQuery, expert: Expert,
+    def stop_wrong_conclusion_else_add_it(self, rule_conclusion: Any, case_query: CaseQuery, expert: Expert,
                                           evaluated_rule: MultiClassTopRule):
         """
         Stop a wrong conclusion by adding a stopping rule.
         """
-        rule_conclusion = evaluated_rule.conclusion(case_query.case)
         stop: bool = False
         add_filter_rule: bool = False
         if is_value_conflicting(rule_conclusion, case_query.target_value):

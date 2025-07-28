@@ -304,7 +304,7 @@ class Rule(SubclassJSONSerializer, ABC):
                     type_names = [t.__name__ for t in self.conclusion.conclusion_type]
                     hint = f"Union[{', '.join(type_names)}]"
             conclusion_lines[0] = conclusion_lines[0].replace("):", f") -> {hint}:")
-            func_call = f"{parent_indent}    return {new_function_name.replace('def ', '')}(case)\n"
+            func_call = f"{parent_indent}    yield {new_function_name.replace('def ', '')}(case)\n"
             return "\n".join(conclusion_lines).strip(' '), func_call
         else:
             raise ValueError(f"Conclusion format is not valid, it should contain a function definition."
@@ -625,7 +625,7 @@ class MultiClassFilterRule(MultiClassRefinementRule, HasRefinementRule):
         statement = (
             f"\n{parent_indent}    case_cp = get_an_updated_case_copy(case, {parent_to_filter.generated_conclusion_function_name},"
             f" attribute_name, conclusion_type, mutually_exclusive)")
-        statement += f"\n{parent_indent}    conclusions.update(make_set({conclusion_str}))\n"
+        statement += f"\n{parent_indent}    yield from {conclusion_str}\n"
         return func, statement
 
     def get_parent_to_filter(self, parent: Union[None, MultiClassRefinementRule, MultiClassTopRule] = None) \

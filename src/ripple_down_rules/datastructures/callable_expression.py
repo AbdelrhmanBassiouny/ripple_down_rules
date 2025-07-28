@@ -155,19 +155,15 @@ class CallableExpression(SubclassJSONSerializer):
                 if not isinstance(case, Case):
                     case = create_case(case, max_recursion_idx=3)
                 scope = {'case': case, **self.scope}
-                output = eval(self.code, scope)
-                if output is None:
-                    output = scope['_get_value'](case)
-                if self.conclusion_type is not None:
-                    if self.mutually_exclusive and issubclass(type(output), (list, set)):
-                        raise ValueError(f"Mutually exclusive types cannot be lists or sets, got {type(output)}")
-                    output_types = {type(o) for o in make_list(output)}
-                    if not are_results_subclass_of_types(output_types, self.expected_types):
-                        raise ValueError(f"Not all result types {output_types} are subclasses of expected types"
-                                         f" {self.conclusion_type}")
-                return output
+                eval(self.code, scope)
+                for output in scope[self.encapsulating_function_name](case):
+                    if self.expected_types is not None:
+                        if not issubclass(type(output), tuple(self.expected_types)):
+                            raise ValueError(f"Result type {type(output)} is not a subclass of expected types"
+                                             f" {self.expected_types}")
+                    yield output
             elif self.conclusion is not None:
-                return self.conclusion
+                yield self.conclusion
             else:
                 raise ValueError("Either user_input or conclusion must be provided.")
         except Exception as e:

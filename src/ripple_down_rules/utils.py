@@ -434,7 +434,7 @@ def is_value_conflicting(conclusion: Any, target: Any) -> bool:
     :param target: The target to compare the conclusion with.
     :return: Whether the conclusion is conflicting with the target by have different values for same type categories.
     """
-    return have_common_types(conclusion, target) and not make_set(conclusion).issubset(make_set(target))
+    return have_common_types(conclusion, target) and conclusion not in target
 
 
 def have_common_types(conclusion: Any, target: Any) -> bool:
@@ -443,10 +443,7 @@ def have_common_types(conclusion: Any, target: Any) -> bool:
     :param target: The target to compare the conclusion with.
     :return: Whether the conclusion shares some types with the target.
     """
-    target_types = {type(t) for t in make_set(target)}
-    conclusion_types = {type(c) for c in make_set(conclusion)}
-    common_types = conclusion_types.intersection(target_types)
-    return len(common_types) > 0
+    return any(type(conclusion) is type(t) for t in target)
 
 
 def calculate_precision_and_recall(pred_cat: Dict[str, Any], target: Dict[str, Any]) -> Tuple[

@@ -14,6 +14,7 @@ from ripple_down_rules.datastructures.case import Case, create_cases_from_datafr
 from ripple_down_rules.datastructures.enums import Category
 from ripple_down_rules import TrackedObjectMixin
 from ripple_down_rules.rdr_decorators import RDRDecorator
+from ripple_down_rules.symbolic_variable import symbolic
 
 
 def load_cached_dataset(cache_file):
@@ -233,12 +234,12 @@ class MappedAnimal(MappedAsDataclass, Base):
 class WorldEntity(TrackedObjectMixin):
     world: Optional[World] = field(default=None, kw_only=True, repr=False, hash=False)
 
-
+@symbolic
 @dataclass(unsafe_hash=True)
 class Body(WorldEntity):
     name: str
 
-
+@symbolic
 @dataclass(unsafe_hash=True)
 class Handle(Body):
     ...
