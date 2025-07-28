@@ -37,3 +37,7 @@ def test_construct_class_composition_and_dependency():
     assert next(has(Cabinet, Body))
     assert next(has(Cabinet, WorldEntity))
     assert not list(has(Cabinet, Connection, recursive=True))
+    assert list(has((Cabinet, Drawer), Handle)) == [(Drawer, Handle)]
+    assert list(has((Cabinet, Drawer), Handle, recursive=True)) == [(Cabinet, Handle), (Drawer, Handle)]
+    assert list(has((Cabinet, Drawer), X)) == [(Cabinet, Drawer), (Cabinet, Container), (Drawer, Container), (Drawer, Handle)]
+    assert list(has((Cabinet, Drawer), (Handle, Container))) == [(Cabinet, Container), (Drawer, Handle), (Drawer, Container)]
