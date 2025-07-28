@@ -1,4 +1,7 @@
+import itertools
+
 from .symbolic_variable import SymbolicVariable, SymbolicExpression
+from .utils import filter_data
 
 
 class Generate:
@@ -22,6 +25,7 @@ class Generate:
         """
         for condition in conditions:
             for item, values in condition.variables_data_dict.items():
-                item.data = (d for d, value in zip(item.data, values) if value)
-        return self
+                indices = list(values)
+                item.data = filter_data(item.data, indices)
+        return Generate(*self.symbolic_variables)
 

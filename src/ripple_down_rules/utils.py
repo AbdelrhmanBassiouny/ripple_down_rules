@@ -4,6 +4,7 @@ import builtins
 import codecs
 import copyreg
 import importlib
+import itertools
 import json
 import os
 import re
@@ -58,6 +59,19 @@ if TYPE_CHECKING:
     from .datastructures.dataclasses import CaseQuery
 
 import ast
+
+
+def filter_data(data, selected_indices):
+    data = iter(data)
+    prev = -1
+    for idx in selected_indices:
+        skip = idx - prev - 1
+        data = itertools.islice(data, skip, None)
+        try:
+            yield next(data)
+        except StopIteration:
+            break
+        prev = idx
 
 
 def fill_in_missing_kwargs(func: Callable, **kwargs) -> Dict[str, Any]:
