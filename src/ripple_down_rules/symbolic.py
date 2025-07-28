@@ -30,8 +30,8 @@ class SymbolicMode:
 
 class SymbolicExpression:
     data: Iterable[Any]
-    variable: SymbolicVariable
-    variables_data_dict: Dict[SymbolicVariable, Iterable[Any]]
+    variable: Variable
+    variables_data_dict: Dict[Variable, Iterable[Any]]
     parent_expression: Optional[SymbolicExpression] = None
 
     def __init__(self, parent_expression: Optional[SymbolicExpression] = None):
@@ -52,16 +52,22 @@ class SymbolicExpression:
         return Call(self, *args, **kwargs)
 
     def __eq__(self, other):
-        return LogicalOperation(self, '==', other)
+        return Comparator(self, '==', other)
 
     def in_(self, other):
         """
         Check if the symbolic expression is in another iterable or symbolic expression.
         """
-        return LogicalOperation(self, 'in', other)
+        return in_(self, other)
+
+    def contains_(self, item):
+        """
+        Check if the symbolic expression contains a specific item.
+        """
+        return self.__contains__(item)
 
     def __contains__(self, item):
-        return LogicalOperation(item, 'in', self)
+        return Comparator(item, 'in', self)
 
     def __bool__(self):
         raise TypeError("Cannot evaluate symbolic expression to a boolean value.")
@@ -82,22 +88,22 @@ class SymbolicExpression:
         return Not(self)
 
     def __ne__(self, other):
-        return LogicalOperation(self, '!=', other)
+        return Comparator(self, '!=', other)
 
     def __lt__(self, other):
-        return LogicalOperation(self, '<', other)
+        return Comparator(self, '<', other)
 
     def __le__(self, other):
-        return LogicalOperation(self, '<=', other)
+        return Comparator(self, '<=', other)
 
     def __gt__(self, other):
-        return LogicalOperation(self, '>', other)
+        return Comparator(self, '>', other)
 
     def __ge__(self, other):
-        return LogicalOperation(self, '>=', other)
+        return Comparator(self, '>=', other)
 
 
-class SymbolicVariable(SymbolicExpression):
+class Variable(SymbolicExpression):
 
     def __init__(self, cls, *args, data: Optional[Iterable] = None, **kwargs):
         super().__init__()
@@ -112,13 +118,13 @@ class SymbolicVariable(SymbolicExpression):
                                         for i in range(len(self.args)))
 
     @classmethod
-    def from_data(cls, iterable, clazz: Optional[Type] = None) -> SymbolicVariable:
+    def from_data(cls, iterable, clazz: Optional[Type] = None) -> Variable:
         if in_symbolic_mode():
             if not is_iterable(iterable):
                 iterable = make_list(iterable)
             if not clazz:
                 clazz = type(next((iter(iterable)), None))
-            return SymbolicVariable(clazz, data=iterable)
+            return Variable(clazz, data=iterable)
         raise TypeError(f"Method from_data of {clazz.__name__} is not usable outside RuleWriting")
 
     def __repr__(self):
@@ -157,15 +163,17 @@ class Call(SymbolicExpression):
             self.data = (item() for item in expression)
         self.variables_data_dict[self.variable] = self.data
 
-class LogicalOperation(SymbolicExpression):
+class Comparator(SymbolicExpression):
     """
     A symbolic equality check that can be used to compare symbolic variables.
     """
 
     def __init__(self, left: SymbolicExpression, operation: str, right: Any):
+        if not isinstance(left, SymbolicExpression):
+            left = Variable.from_data(left)
+        if not isinstance(right, SymbolicExpression):
+            right = Variable.from_data(right)
         super().__init__(left)
-        if not is_iterable(right):
-            right = make_list(right)
         self.operation = operation
         def operator_yield():
             left_idx = 0
@@ -183,6 +191,16 @@ class LogicalOperation(SymbolicExpression):
 
         if isinstance(right, SymbolicExpression):
             self.variables_data_dict[right.variable] = (v[1] for v in data2)
+
+class And(SymbolicExpression):
+    """
+    A symbolic AND operation that can be used to combine multiple symbolic expressions.
+    """
+
+    def __init__(self, left: SymbolicExpression, right: SymbolicExpression):
+        super().__init__(left)
+        common_variables = set(left.variables_data_dict.keys()).intersection(right.variables_data_dict.keys())
+
 
 
 class Mapped(SymbolicExpression):
@@ -204,9 +222,23 @@ def symbolic(cls):
         if in_symbolic_mode():
             if len(args) == 1 and isinstance(args[0], Iterable) and len(kwargs) == 0:
                 # If the first argument is an iterable, treat it as data
-                return SymbolicVariable.from_data(clazz=symbolic_cls, iterable=args[0])
-            return SymbolicVariable(symbolic_cls, *args, **kwargs)
+                return Variable.from_data(clazz=symbolic_cls, iterable=args[0])
+            return Variable(symbolic_cls, *args, **kwargs)
         return orig_new(symbolic_cls)
 
     cls.__new__ = symbolic_new
     return cls
+
+
+def in_(item, container):
+    """
+    Check if the symbolic expression is in another iterable or symbolic expression.
+    """
+    return Comparator(item, 'in', container)
+
+
+def contains(container, item):
+    """
+    Check if the symbolic expression contains a specific item.
+    """
+    return in_(item, container)
