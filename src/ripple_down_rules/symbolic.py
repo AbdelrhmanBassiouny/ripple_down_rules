@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import itertools
-from typing import dataclass_transform
+from typing_extensions import dataclass_transform
 
 from typing_extensions import Iterable, Any, Optional, Type, Dict, Callable
 

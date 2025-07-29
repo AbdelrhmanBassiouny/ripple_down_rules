@@ -1,6 +1,6 @@
 import itertools
 
-from typing_extensions import Dict, List
+from typing_extensions import Dict, List, TypeVar, Type
 
 from .symbolic import Variable, SymbolicExpression
 from .utils import filter_data
@@ -35,3 +35,16 @@ class Generate:
             item.data = filter_data(item.data, indices)
         return Generate(*self.symbolic_variables)
 
+
+def where(condition: SymbolicExpression):
+    """
+    Apply condition to filter the generated symbolic variables.
+
+    :param condition: Condition to apply to the generated variables.
+    :return: A new Generate instance with the filtered results.
+    """
+    for item, values in condition.variables_data_dict.items():
+        indices = list(values)
+        if len(indices) > 0 and type(indices[0]) == bool:
+            indices = [i for i, v in enumerate(indices) if v]
+        item.data = filter_data(item.data, indices)

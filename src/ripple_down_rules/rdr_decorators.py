@@ -115,7 +115,6 @@ class RDRDecorator:
     """
 
     def decorator(self, func: Callable) -> Callable:
-
         @wraps(func)
         def wrapper(*args, **kwargs) -> Optional[Any]:
 
