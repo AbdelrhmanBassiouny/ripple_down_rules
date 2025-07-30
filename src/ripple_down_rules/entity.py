@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, Type
+from typing import TypeVar, Type
 
 from typing_extensions import Any, Optional, Union, Iterable
 
@@ -12,4 +12,4 @@ def entity(name: str, entity_description: T) -> T:
 
 
 def an(entity_type: Type[T], from_: Optional[Any] = None) -> Union[T, Iterable[T]]:
-    return symbolic.Variable.from_data(from_, clazz=entity_type)
+    return symbolic.Variable.from_domain(from_, clazz=entity_type)
