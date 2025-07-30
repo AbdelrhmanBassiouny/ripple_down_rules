@@ -16,6 +16,7 @@ from collections import UserDict, defaultdict
 from copy import deepcopy, copy
 from dataclasses import is_dataclass, fields
 from enum import Enum
+from functools import lru_cache
 from os.path import dirname
 from pathlib import Path
 from subprocess import check_call
@@ -59,6 +60,28 @@ if TYPE_CHECKING:
     from .datastructures.dataclasses import CaseQuery
 
 import ast
+
+
+class IDGenerator:
+    """
+    A class that generates incrementing, unique IDs and caches them for every object this is called on.
+    """
+
+    _counter = 0
+    """
+    The counter of the unique IDs.
+    """
+
+    @lru_cache(maxsize=None)
+    def __call__(self, obj: Any) -> int:
+        """
+        Creates a unique ID and caches it for every object this is called on.
+
+        :param obj: The object to generate a unique ID for, must be hashable.
+        :return: The unique ID.
+        """
+        self._counter += 1
+        return self._counter
 
 
 def filter_data(data, selected_indices):

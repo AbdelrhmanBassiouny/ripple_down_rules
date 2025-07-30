@@ -28,12 +28,8 @@ class Generate:
         :param condition: Condition to apply to the generated variables.
         :return: A new Generate instance with the filtered results.
         """
-        for item, values in condition.variables_data_dict.items():
-            indices = list(values)
-            if len(indices) > 0 and type(indices[0]) == bool:
-                indices = [i for i, v in enumerate(indices) if v]
-            item.data = filter_data(item.data, indices)
-        return Generate(*self.symbolic_variables)
+        where(condition)
+        return self
 
 
 def where(condition: SymbolicExpression):
