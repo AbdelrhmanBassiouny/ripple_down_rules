@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import contextvars
 import itertools
+import weakref
 from abc import abstractmethod, ABC
 from collections import defaultdict
 from dataclasses import dataclass, field
 
 from anytree import Node
-from typing_extensions import Iterable, Any, Optional, Type, Dict, Callable, ClassVar
+from typing_extensions import Iterable, Any, Optional, Type, Dict, Set
 from typing_extensions import dataclass_transform, List, Tuple
 
 from .utils import is_iterable, filter_data
@@ -38,14 +39,15 @@ id_generator = IDGenerator()
 
 @dataclass(eq=False)
 class SymbolicExpression(ABC):
-    parent_: Optional[SymbolicExpression] = field(init=False)
+    child_: Optional[SymbolicExpression] = field(init=False)
     id_: int = field(init=False, repr=False)
     node_: Node = field(init=False, default=None, repr=False)
 
     def __post_init__(self):
         self.id_ = id_generator(self)
-        self.node_ = Node(self.name_ + f"_{self.id_}",
-                         parent=self.parent_.node if self.parent_ else None)
+        self.node_ = Node(self.name_ + f"_{self.id_}")
+        if self.child_ is not None:
+            self.child_.node_.parent = self.node_
         self.node_._expression = self
 
     @property
@@ -53,6 +55,7 @@ class SymbolicExpression(ABC):
     def name_(self) -> str:
         pass
 
+    @property
     def all_nodes_(self) -> List[SymbolicExpression]:
         return [self] + self.descendants_
 
@@ -65,6 +68,8 @@ class SymbolicExpression(ABC):
         return [c._expression for c in self.node_.children]
 
     def __getattr__(self, name):
+        if name in ['roots_', 'child_']:
+            raise AttributeError(name)
         return Attribute(self, name)
 
     def __call__(self, *args, **kwargs):
@@ -119,31 +124,85 @@ class SymbolicExpression(ABC):
         return hash(id(self))
 
 
+class _ManagedTeeIterator:
+    def __init__(self, base_iter, on_close, iterator_id):
+        self._iter = base_iter
+        self._on_close = on_close
+        self._id = iterator_id
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._iter)
+
+    def close(self):
+        self._on_close(self._id)
+
+    def __del__(self):
+        self.close()
+
+
+class TeeManager:
+    def __init__(self, source_iterable):
+        self._source = iter(source_iterable)
+        self._tee_root = itertools.tee(self._source, 1)[0]
+        self._iterators = []  # List of (weakref to iterator, id)
+
+    def get_iterator(self):
+        new_iter, self._tee_root = itertools.tee(self._tee_root, 2)
+        # Store weakref so it doesn't prevent garbage collection
+        ref = weakref.ref(new_iter)
+        self._iterators.append((ref, id(new_iter)))
+        return _ManagedTeeIterator(new_iter, self._unregister, id(new_iter))
+
+    def _unregister(self, iterator_id):
+        self._iterators = [(ref, iid) for (ref, iid) in self._iterators if iid != iterator_id]
+
+    def cleanup_dead_iterators(self):
+        # Optional: prune dead iterators
+        self._iterators = [(ref, iid) for (ref, iid) in self._iterators if ref() is not None]
+
+
 @dataclass(eq=False)
 class HasDomain(SymbolicExpression, ABC):
     domain_: Iterable[Any] = field(default=None, init=False)
+    # _domain_manager: TeeManager = field(init=False, default=None)
 
     def __iter__(self):
         return iter(self.domain_)
 
+    # def get_domain_(self):
+    #     if self._domain_manager is None:
+    #         self._domain_manager = TeeManager(self.domain_)
+    #     return self._domain_manager.get_iterator()
+
     def constrain(self, indices: Iterable[int]):
-        if self.parent_ is not None and isinstance(self.parent_, HasDomain):
-            self.parent_.constrain(indices)
-        elif self.parent_ is None:
+        if self.child_ is not None and isinstance(self.child_, HasDomain):
+            self.child_.constrain(indices)
+        elif self.child_ is None:
             self.domain_ = filter_data(self.domain_, indices)
+
+    @property
+    def leaves_(self) -> Set[HasDomain]:
+        if self.child_ is not None and hasattr(self.child_, 'leaves_'):
+            return self.child_.leaves_
+        else:
+            return {self}
 
 
 @dataclass(eq=False)
 class Variable(HasDomain):
-    cls_: Type
+    cls_: Optional[Type] = field(default=None)
     cls_kwargs_: Dict[str, Any] = field(default_factory=dict)
     domain_: Iterable[Any] = field(default=None, kw_only=True)
-    parent_: Optional[SymbolicExpression] = field(default=None, kw_only=True)
+    child_: Optional[SymbolicExpression] = field(default=None, kw_only=True)
 
     def __post_init__(self):
-        if self.domain_ is None:
+        super().__post_init__()
+        if self.domain_ is None and self.cls is not None:
             self.domain_: Iterable[Any] = (self.cls_(**{k: self.cls_kwargs_[k][i] for k in self.cls_kwargs_.keys()})
-                                          for i in enumerate(next(iter(self.cls_kwargs_.values()), [])))
+                                           for i in enumerate(next(iter(self.cls_kwargs_.values()), [])))
 
     @property
     def name_(self):
@@ -151,13 +210,13 @@ class Variable(HasDomain):
 
     @classmethod
     def from_domain_(cls, iterable, clazz: Optional[Type] = None,
-                     parent: Optional[SymbolicExpression] = None) -> Variable:
+                     child: Optional[SymbolicExpression] = None) -> Variable:
         if in_symbolic_mode():
             if not is_iterable(iterable):
                 iterable = make_list(iterable)
             if not clazz:
                 clazz = type(next((iter(iterable)), None))
-            return Variable(clazz, domain_=iterable, parent_=parent)
+            return Variable(clazz, domain_=iterable, child_=child)
         raise TypeError(f"Method from_data of {clazz.__name__} is not usable outside RuleWriting")
 
     def __repr__(self):
@@ -170,16 +229,21 @@ class Attribute(HasDomain):
     """
     A symbolic attribute that can be used to access attributes of symbolic variables.
     """
-    parent_: HasDomain
+    child_: HasDomain
     attr_name_: str
 
     def __post_init__(self):
+        super().__post_init__()
         if self.domain_ is None:
-            self.domain_ = (getattr(item, self.attr_name_) for item in self.parent_)
+            self.domain_ = (getattr(item, self.attr_name_) for item in self.child_)
 
     @property
     def name_(self):
-        return f"{self.parent_.name_}.{self.attr_name_}"
+        return f"{self.child_.name_}.{self.attr_name_}"
+
+    @property
+    def leaves_(self) -> Set[HasDomain]:
+        return self.child_.leaves_
 
 
 @dataclass(eq=False)
@@ -187,23 +251,28 @@ class Call(HasDomain):
     """
     A symbolic call that can be used to call methods on symbolic variables.
     """
-    parent_: HasDomain
+    child_: HasDomain
     args_: Tuple[Any, ...] = field(default_factory=tuple)
     kwargs_: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
+        super().__post_init__()
         if len(self.args_) > 0 and len(self.kwargs_) > 0:
-            self.domain_ = (item(*self.args_, **self.kwargs_) for item in self.parent_)
+            self.domain_ = [item(*self.args_, **self.kwargs_) for item in self.child_]
         elif len(self.args_) > 0:
-            self.domain_ = (item(*self.args_) for item in self.parent_)
+            self.domain_ = [item(*self.args_) for item in self.child_]
         elif len(self.kwargs_) > 0:
-            self.domain_ = (item(**self.kwargs_) for item in self.parent_)
+            self.domain_ = [item(**self.kwargs_) for item in self.child_]
         else:
-            self.domain_ = (item() for item in self.parent_)
+            self.domain_ = [item() for item in self.child_]
 
     @property
     def name_(self):
-        return f"{self.parent_.name_}()"
+        return f"{self.child_.name_}()"
+
+    @property
+    def leaves_(self) -> Set[HasDomain]:
+        return self.child_.leaves_
 
 
 @dataclass(eq=False)
@@ -234,6 +303,14 @@ class ConstrainingOperator(SymbolicExpression, ABC):
             else:
                 raise TypeError(f"Operand {operand} is not a HasDomain expression.")
 
+    @property
+    @abstractmethod
+    def leaves_(self) -> Set[HasDomain]:
+        """
+        :return: Set of leaves of symbolic expressions, these are the variables that will have their domains constrained.
+        """
+        ...
+
 
 @dataclass(eq=False)
 class UnaryOperator(ConstrainingOperator, ABC):
@@ -243,13 +320,17 @@ class UnaryOperator(ConstrainingOperator, ABC):
     operand_: HasDomain
 
     def __post_init__(self):
+        super().__post_init__()
         if not isinstance(self.operand_, SymbolicExpression):
-            self.operand_ = Variable.from_domain_(self.operand_, parent=self)
-        self.evaluate_()
+            self.operand_ = Variable.from_domain_(self.operand_)
 
     @property
     def name(self):
         return f"{self.operation} {self.operand_.name}"
+
+    @property
+    def leaves_(self) -> Set[HasDomain]:
+        return self.operand_.leaves_
 
 
 @dataclass(eq=False)
@@ -275,13 +356,16 @@ class BinaryOperator(ConstrainingOperator, ABC):
     left_: HasDomain
     operation_: str
     right_: HasDomain
+    child_: SymbolicExpression = field(init=False, default=None)
 
     def __post_init__(self):
         if not isinstance(self.left_, SymbolicExpression):
-            self.left_ = Variable.from_domain_(self.left_, parent=self)
+            self.left_ = Variable.from_domain_(self.left_)
         if not isinstance(self.right_, SymbolicExpression):
-            self.right_ = Variable.from_domain_(self.right_, parent=self)
-        self.evaluate_()
+            self.right_ = Variable.from_domain_(self.right_)
+        super().__post_init__()
+        self.left_.node_.parent = self.node_
+        self.right_.node_.parent = self.node_
 
     @abstractmethod
     def evaluate_(self):
@@ -294,6 +378,10 @@ class BinaryOperator(ConstrainingOperator, ABC):
     @property
     def name_(self):
         return f"{self.left_.name_} {self.operation_} {self.right_.name_}"
+
+    @property
+    def leaves_(self) -> Set[HasDomain]:
+        return self.left_.leaves_.union(self.right_.leaves_)
 
 
 @dataclass(eq=False)
@@ -309,9 +397,9 @@ class Comparator(BinaryOperator):
                     if eval(f"left_item {self.operation_} right_item"):
                         yield left_idx, right_idx
 
-        data1, data2 = itertools.tee(operator_yield())
-        self.operands_indices_[self.left_] = (v[0] for v in data1)
-        self.operands_indices_[self.right_] = (v[1] for v in data2)
+        data = list(operator_yield())
+        self.operands_indices_[self.left_.leaves_.pop()] = [v[0] for v in data]
+        self.operands_indices_[self.right_.leaves_.pop()] = [v[1] for v in data]
 
 
 @dataclass(eq=False)
@@ -320,14 +408,15 @@ class LogicalOperator(ConstrainingOperator, ABC):
     A symbolic operation that can be used to combine multiple symbolic expressions.
     """
     operands_: List[HasDomain]
+    child_: SymbolicExpression = field(init=False, default=None)
 
     def __post_init__(self):
-        if not self.operands_:
-            raise ValueError("LogicalOperator requires at least one operand.")
-        for i, operand in enumerate(self.operands_):
+        for operand in self.operands_:
             if not isinstance(operand, SymbolicExpression):
-                self.operands_[i] = Variable.from_domain_(operand, parent=self)
-        self.evaluate_()
+                self.operands_ = Variable.from_domain_(operand)
+        super().__post_init__()
+        for operand in self.operands_:
+            operand.node_.parent = self.node_
 
     @abstractmethod
     def evaluate_(self):
@@ -337,19 +426,28 @@ class LogicalOperator(ConstrainingOperator, ABC):
     def name_(self):
         return f" {self.__class__.__name__} ".join(operand.name_ for operand in self.operands_)
 
+    @property
+    def leaves_(self) -> Set[HasDomain]:
+        leaves = set()
+        for operand in self.operands_:
+             leaves.update(operand.leaves_)
+        return leaves
+
 
 @dataclass(eq=False)
 class And(LogicalOperator):
     """
     A symbolic AND operation that can be used to combine multiple symbolic expressions.
     """
+
     def evaluate_(self):
         for operand in self.operands_:
             if isinstance(operand, ConstrainingOperator):
-                operand.evaluate_()
+                # operand.constrain_()
                 self.operands_indices_.update(operand.operands_indices_)
-            else: # a boolean expression
+            else:  # a boolean expression
                 self.operands_indices_[operand] = (i for i, item in enumerate(operand) if item)
+                # operand.constrain(self.operands_indices_[operand])
 
 
 @dataclass(eq=False)
@@ -357,34 +455,26 @@ class Or(LogicalOperator):
     """
     A symbolic OR operation that can be used to combine multiple symbolic expressions.
     """
+    _leaves_replacements: Dict[HasDomain, HasDomain] = field(init=False, default_factory=dict)
 
     def evaluate_(self):
         """
         Constrain the symbolic expression based on the indices of the operands.
         This method overrides the base class method to handle OR logic.
         """
-        if not self.operands_:
-            return
         # Combine indices from all operands
         for operand in self.operands_:
             if isinstance(operand, ConstrainingOperator):
                 for item, indices in operand.operands_indices_.items():
                     self.operands_indices_[item] = itertools.chain(self.operands_indices_[item], indices)
-            else: # a boolean expression
-                self.operands_indices_[operand] = itertools.chain(self.operands_indices_[operand],
-                                                                  (i for i, item in enumerate(operand) if item))
+            else:  # a boolean expression
+                self.operands_indices_[operand.leaves_.pop()] = itertools.chain(self.operands_indices_[operand.leaves_.pop()],
+                                                                                (i for i, item in enumerate(operand) if item))
+        # for operand, indices in self.operands_indices_.items():
+        #     operand.constrain(self.operands_indices_[operand])
 
-
-class Mapped(SymbolicExpression):
-    """
-    A symbolic mapping that can be used to map symbolic variables to their attributes.
-    """
-
-    def __init__(self, expression: SymbolicExpression, mapper: Callable):
-        super().__init__(expression)
-        self.variables_data_dict[self.variable] = expression.data
-        for item, value in self.variables_data_dict.items():
-            self.variables_data_dict[item] = (mapper(v) for v in value)
+    def replace_leaf(self, old_leaf, new_leaf):
+        self._roots_replacements[old_leaf] = new_leaf
 
 
 @dataclass_transform()
@@ -401,6 +491,20 @@ def symbolic(cls):
 
     cls.__new__ = symbolic_new
     return cls
+
+
+def and_(*conditions):
+    """
+    A symbolic AND operation that can be used to combine multiple symbolic expressions.
+    """
+    return And(list(conditions))
+
+
+def or_(*conditions):
+    """
+    A symbolic OR operation that can be used to combine multiple symbolic expressions.
+    """
+    return Or(list(conditions))
 
 
 def in_(item, container):

@@ -39,9 +39,9 @@ def where(*conditions: SymbolicExpression):
     :param conditions: Condition to apply to the generated variables.
     :return: A new Generate instance with the filtered results.
     """
-    for condition in conditions:
-        if isinstance(condition, ConstrainingOperator):
-            condition.constrain_()
-        else: # a boolean expression
-            condition_indices = (i for i, value in enumerate(condition) if value)
-            condition.parent_.constrain(condition_indices)
+    # for condition in conditions:
+    #     if isinstance(condition, ConstrainingOperator):
+    #         condition.constrain_()
+    #     else: # a boolean expression
+    #         condition_indices = (i for i, value in enumerate(condition) if value)
+    #         condition.parent_.constrain(condition_indices)

@@ -3,13 +3,25 @@ from typing import TypeVar, Type
 from typing_extensions import Any, Optional, Union, Iterable
 
 from . import symbolic
+from .symbolic import Variable, and_, SymbolicExpression, LogicalOperator, Comparator, ConstrainingOperator, Or
+from .utils import render_tree
 
 T = TypeVar('T')  # Define type variable "T"
 
 
-def entity(name: str, entity_description: T) -> T:
-    return entity_description
+def entity(entity_var: T, *properties: SymbolicExpression) -> T:
+    for prop in properties:
+        render_tree(prop.node_.root, True, "query_tree", view=True, use_legend=False)
+        for node in prop.all_nodes_:
+            if isinstance(node, Or):
+                print(node)
+        if not isinstance(prop, LogicalOperator):
+            if isinstance(prop, ConstrainingOperator):
+                prop.constrain_()
+            else:
+                prop.root_.constrain([i for i, v in enumerate(prop) if v])
+    return entity_var
 
 
-def an(entity_type: Type[T], from_: Optional[Any] = None) -> Union[T, Iterable[T]]:
-    return symbolic.Variable.from_domain_(from_, clazz=entity_type)
+def an(entity_type: Type[T], domain: Optional[Any] = None) -> Union[T, Iterable[T]]:
+    return symbolic.Variable.from_domain_(domain, clazz=entity_type)
