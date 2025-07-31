@@ -12,4 +12,4 @@ def entity(name: str, entity_description: T) -> T:
 
 
 def an(entity_type: Type[T], from_: Optional[Any] = None) -> Union[T, Iterable[T]]:
-    return symbolic.Variable.from_domain(from_, clazz=entity_type)
+    return symbolic.Variable.from_domain_(from_, clazz=entity_type)

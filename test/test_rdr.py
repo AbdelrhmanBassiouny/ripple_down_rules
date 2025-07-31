@@ -90,7 +90,7 @@ class TestRDR(TestCase):
             assert rule.conditions.split('conditions_')[1] == rule.conclusion.split("conclusion_")[1] == rule.uid
             assert rule.uid == og_rule.uid
             if not rule.parent:
-                assert not og_rule.parent
+                assert not og_rule.parent_
             else:
                 assert rule.parent.uid == og_rule.parent.uid
             rule.name = f"{rule.conditions[:14]}\n -> {rule.conclusion[:14]} "

@@ -4,7 +4,7 @@ from typing_extensions import Iterable, Union
 from ripple_down_rules.entity import an, entity
 from ripple_down_rules.query import Generate, where
 from ripple_down_rules import symbolic
-from ripple_down_rules.symbolic import contains, in_
+from ripple_down_rules.symbolic import contains, in_, And
 from .datasets import Handle, Body
 
 
@@ -52,7 +52,7 @@ def test_generate_with_using_in(handles_and_containers_world):
     assert len(handles) == 2, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
 
-@pytest.mark.skip(reason="This test is not implemented yet.")
+
 def test_generate_with_using_and(handles_and_containers_world):
     """
     Test the generation of handles in the HandlesAndContainersWorld.
@@ -62,9 +62,9 @@ def test_generate_with_using_and(handles_and_containers_world):
         with symbolic.SymbolicMode():
             body = entity("Handle", an(Body, from_=world.bodies))
             where(
-                contains(body.name, "Handle") and contains(body.name, '1')
+                And([contains(body.name, "Handle"), contains(body.name, '1')])
             )
             yield from Handle(body)
     handles = list(generate_handles())
-    assert len(handles) == 2, "Should generate at least one handle."
+    assert len(handles) == 1, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."

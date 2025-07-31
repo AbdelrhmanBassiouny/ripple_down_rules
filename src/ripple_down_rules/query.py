@@ -2,7 +2,7 @@ import itertools
 
 from typing_extensions import Dict, List, TypeVar, Type
 
-from .symbolic import Variable, SymbolicExpression
+from .symbolic import Variable, SymbolicExpression, ConstrainingOperator
 from .utils import filter_data
 
 
@@ -32,15 +32,16 @@ class Generate:
         return self
 
 
-def where(condition: SymbolicExpression):
+def where(*conditions: SymbolicExpression):
     """
-    Apply condition to filter the generated symbolic variables.
+    Apply conditions to filter the generated symbolic variables.
 
-    :param condition: Condition to apply to the generated variables.
+    :param conditions: Condition to apply to the generated variables.
     :return: A new Generate instance with the filtered results.
     """
-    for item, values in condition.variables_data_dict.items():
-        indices = list(values)
-        if len(indices) > 0 and type(indices[0]) == bool:
-            indices = [i for i, v in enumerate(indices) if v]
-        item.data = filter_data(item.data, indices)
+    for condition in conditions:
+        if isinstance(condition, ConstrainingOperator):
+            condition.constrain_()
+        else: # a boolean expression
+            condition_indices = (i for i, value in enumerate(condition) if value)
+            condition.parent_.constrain(condition_indices)
