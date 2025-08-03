@@ -12,14 +12,12 @@ T = TypeVar('T')  # Define type variable "T"
 def entity(entity_var: T, *properties: SymbolicExpression) -> T:
     for prop in properties:
         render_tree(prop.node_.root, True, "query_tree", view=True, use_legend=False)
-        for node in prop.all_nodes_:
-            if isinstance(node, Or):
-                print(node)
-        if not isinstance(prop, LogicalOperator):
-            if isinstance(prop, ConstrainingOperator):
-                prop.constrain_()
-            else:
-                prop.root_.constrain([i for i, v in enumerate(prop) if v])
+        prop.root_.evaluate_()
+        # if not isinstance(prop, LogicalOperator):
+        #     if isinstance(prop, ConstrainingOperator):
+        #         prop.constrain_()
+        #     else:
+        #         prop.root_.constrain([i for i, v in enumerate(prop) if v])
     return entity_var
 
 
