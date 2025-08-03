@@ -5,10 +5,12 @@ import itertools
 import weakref
 from abc import abstractmethod, ABC
 from collections import defaultdict
+from copy import copy
 from dataclasses import dataclass, field
 
 from anytree import Node
-from typing_extensions import Iterable, Any, Optional, Type, Dict, Set
+from ordered_set import OrderedSet
+from typing_extensions import Iterable, Any, Optional, Type, Dict, Set, ClassVar
 from typing_extensions import dataclass_transform, List, Tuple
 
 from .utils import is_iterable, filter_data
@@ -40,15 +42,41 @@ id_generator = IDGenerator()
 @dataclass(eq=False)
 class SymbolicExpression(ABC):
     child_: Optional[SymbolicExpression] = field(init=False)
-    id_: int = field(init=False, repr=False)
+    id_: int = field(init=False, repr=False, default=None)
     node_: Node = field(init=False, default=None, repr=False)
+    id_expression_map_: ClassVar[Dict[int, SymbolicExpression]] = {}
 
     def __post_init__(self):
         self.id_ = id_generator(self)
-        self.node_ = Node(self.name_ + f"_{self.id_}")
+        node_name = self.name_ + f"_{self.id_}"
+        self.node_ = Node(node_name)
         if self.child_ is not None:
+            if self.child_.node_.parent is not None:
+                child_cp = self.child_.__new__(self.child_.__class__)
+                child_cp.__dict__.update(self.child_.__dict__)
+                child_cp.node_ = Node(self.child_.node_.name + f"_{self.id_}")
+                child_cp.node_._expression = child_cp
+                self.child_ = child_cp
             self.child_.node_.parent = self.node_
         self.node_._expression = self
+        if self.id_ not in self.id_expression_map_:
+            self.id_expression_map_[self.id_] = self
+
+
+    @abstractmethod
+    def evaluate_(self):
+        """
+        Evaluate the symbolic expression and set the operands indices.
+        This method should be implemented by subclasses.
+        """
+        pass
+
+    @property
+    def root_(self) -> SymbolicExpression:
+        """
+        Get the root of the symbolic expression tree.
+        """
+        return self.node_.root._expression
 
     @property
     @abstractmethod
@@ -60,6 +88,10 @@ class SymbolicExpression(ABC):
         return [self] + self.descendants_
 
     @property
+    def all_node_names_(self) -> List[str]:
+        return [node.node_.name for node in self.all_nodes_]
+
+    @property
     def descendants_(self) -> List[SymbolicExpression]:
         return [d._expression for d in self.node_.descendants]
 
@@ -68,7 +100,7 @@ class SymbolicExpression(ABC):
         return [c._expression for c in self.node_.children]
 
     def __getattr__(self, name):
-        if name in ['roots_', 'child_']:
+        if name.startswith('_') or name in ['leaves_', 'child_']:
             raise AttributeError(name)
         return Attribute(self, name)
 
@@ -93,8 +125,10 @@ class SymbolicExpression(ABC):
     def __contains__(self, item):
         return Comparator(item, 'in', self)
 
-    def __bool__(self):
-        raise TypeError("Cannot evaluate symbolic expression to a boolean value.")
+    # def __bool__(self):
+    #     import pdb; pdb.set_trace()
+    #     raise TypeError(f"Cannot evaluate symbolic expression {self} to a boolean value.")
+        # return True
 
     def __and__(self, other):
         return And([self, other])
@@ -121,7 +155,10 @@ class SymbolicExpression(ABC):
         return Comparator(self, '>=', other)
 
     def __hash__(self):
-        return hash(id(self))
+        # if self.id_ is None:
+        # return hash(id(self))
+        # else:
+        return hash(self.id_)
 
 
 class _ManagedTeeIterator:
@@ -177,10 +214,11 @@ class HasDomain(SymbolicExpression, ABC):
     #         self._domain_manager = TeeManager(self.domain_)
     #     return self._domain_manager.get_iterator()
 
-    def constrain(self, indices: Iterable[int]):
+    def constrain_(self, indices: Iterable[int]):
         if self.child_ is not None and isinstance(self.child_, HasDomain):
-            self.child_.constrain(indices)
+            self.child_.constrain_(indices)
         elif self.child_ is None:
+            # self.domain_ = values
             self.domain_ = filter_data(self.domain_, indices)
 
     @property
@@ -203,6 +241,11 @@ class Variable(HasDomain):
         if self.domain_ is None and self.cls is not None:
             self.domain_: Iterable[Any] = (self.cls_(**{k: self.cls_kwargs_[k][i] for k in self.cls_kwargs_.keys()})
                                            for i in enumerate(next(iter(self.cls_kwargs_.values()), [])))
+
+    def evaluate_(self):
+        # This method is intentionally left empty as Variable does not perform any evaluation.
+        # Variables are leaves in the symbolic expression tree and their domains are set during initialization.
+        pass
 
     @property
     def name_(self):
@@ -232,10 +275,14 @@ class Attribute(HasDomain):
     child_: HasDomain
     attr_name_: str
 
-    def __post_init__(self):
-        super().__post_init__()
+
+    def evaluate_(self):
+        self.child_.evaluate_()
         if self.domain_ is None:
             self.domain_ = (getattr(item, self.attr_name_) for item in self.child_)
+        if self.root_ is self:
+            leaf_id = self.leaves_.pop().id_
+            self.id_expression_map_[leaf_id].constrain_(OrderedSet(i for i, v in enumerate(self) if v))
 
     @property
     def name_(self):
@@ -255,8 +302,9 @@ class Call(HasDomain):
     args_: Tuple[Any, ...] = field(default_factory=tuple)
     kwargs_: Dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
-        super().__post_init__()
+
+    def evaluate_(self):
+        self.child_.evaluate_()
         if len(self.args_) > 0 and len(self.kwargs_) > 0:
             self.domain_ = [item(*self.args_, **self.kwargs_) for item in self.child_]
         elif len(self.args_) > 0:
@@ -265,6 +313,9 @@ class Call(HasDomain):
             self.domain_ = [item(**self.kwargs_) for item in self.child_]
         else:
             self.domain_ = [item() for item in self.child_]
+        if self.root_ is self:
+            leaf_id = self.leaves_.pop().id_
+            self.id_expression_map_[leaf_id].constrain_(OrderedSet(i for i, v in enumerate(self) if v))
 
     @property
     def name_(self):
@@ -282,26 +333,16 @@ class ConstrainingOperator(SymbolicExpression, ABC):
     This is used to ensure that the operator can be applied to symbolic expressions
     and that it can constrain the results based on indices.
     """
-    operands_indices_: Dict[HasDomain, Iterable[int]] = field(default_factory=lambda: defaultdict(list), init=False)
+    operands_indices_: Dict[int, OrderedSet[int]] = field(default_factory=lambda: defaultdict(OrderedSet), init=False)
 
-    @abstractmethod
-    def evaluate_(self):
-        """
-        Evaluate the operator and set the operands indices.
-        This method should be implemented by subclasses.
-        """
-        pass
 
     def constrain_(self):
         """
         Constrain the symbolic expression based on the indices.
         This method should be implemented by subclasses.
         """
-        for operand, indices in self.operands_indices_.items():
-            if isinstance(operand, HasDomain):
-                operand.constrain(indices)
-            else:
-                raise TypeError(f"Operand {operand} is not a HasDomain expression.")
+        for operand_id, indices in self.operands_indices_.items():
+            self.id_expression_map_[operand_id].constrain_(indices)
 
     @property
     @abstractmethod
@@ -325,7 +366,7 @@ class UnaryOperator(ConstrainingOperator, ABC):
             self.operand_ = Variable.from_domain_(self.operand_)
 
     @property
-    def name(self):
+    def name_(self):
         return f"{self.operation} {self.operand_.name}"
 
     @property
@@ -377,7 +418,7 @@ class BinaryOperator(ConstrainingOperator, ABC):
 
     @property
     def name_(self):
-        return f"{self.left_.name_} {self.operation_} {self.right_.name_}"
+        return self.operation_
 
     @property
     def leaves_(self) -> Set[HasDomain]:
@@ -392,14 +433,20 @@ class Comparator(BinaryOperator):
 
     def evaluate_(self):
         def operator_yield():
+            self.left_.evaluate_()
+            self.right_.evaluate_()
             for left_idx, left_item in enumerate(self.left_):
                 for right_idx, right_item in enumerate(self.right_):
                     if eval(f"left_item {self.operation_} right_item"):
                         yield left_idx, right_idx
 
         data = list(operator_yield())
-        self.operands_indices_[self.left_.leaves_.pop()] = [v[0] for v in data]
-        self.operands_indices_[self.right_.leaves_.pop()] = [v[1] for v in data]
+        self.operands_indices_[self.left_.leaves_.pop().id_] = OrderedSet(v[0] for v in data)
+        self.operands_indices_[self.right_.leaves_.pop().id_] = OrderedSet(v[1] for v in data)
+
+        if self.root_ is self:
+            for item_id, indices in self.operands_indices_.items():
+                self.id_expression_map_[item_id].constrain_(indices)
 
 
 @dataclass(eq=False)
@@ -424,7 +471,7 @@ class LogicalOperator(ConstrainingOperator, ABC):
 
     @property
     def name_(self):
-        return f" {self.__class__.__name__} ".join(operand.name_ for operand in self.operands_)
+        return self.__class__.__name__
 
     @property
     def leaves_(self) -> Set[HasDomain]:
@@ -442,12 +489,16 @@ class And(LogicalOperator):
 
     def evaluate_(self):
         for operand in self.operands_:
+            operand.evaluate_()
             if isinstance(operand, ConstrainingOperator):
-                # operand.constrain_()
+                operand.constrain_()
                 self.operands_indices_.update(operand.operands_indices_)
-            else:  # a boolean expression
-                self.operands_indices_[operand] = (i for i, item in enumerate(operand) if item)
-                # operand.constrain(self.operands_indices_[operand])
+            elif isinstance(operand, HasDomain):  # a boolean expression
+                leaf = operand.leaves_.pop()
+                self.operands_indices_[leaf.id_] = OrderedSet(i for i, v in enumerate(operand) if v)
+                operand.constrain_(self.operands_indices_[leaf.id_])
+            else:
+                raise TypeError(f"Operand {operand} is neither a ConstrainingOperator nor a HasDomain expression.")
 
 
 @dataclass(eq=False)
@@ -457,6 +508,24 @@ class Or(LogicalOperator):
     """
     _leaves_replacements: Dict[HasDomain, HasDomain] = field(init=False, default_factory=dict)
 
+    def __post_init__(self):
+        super().__post_init__()
+        # Find common leaves between operands and split them into separate leaves, each connected to a separate operand.
+        # This is necessary to ensure that the leaves of the OR operator are not shared between operands, which would
+        # make the evaluation of each operand affect the others. Instead, we want each operand to have a copy of the
+        # leaves, so that they can be evaluated independently. The leaves here are the symbolic variables that will be
+        # constrained by the OR operator.
+        all_leaves = [operand.leaves_ for operand in self.operands_]
+        shared_leaves = set.intersection(*all_leaves)
+        for leaf in shared_leaves:
+            first_occurrence = True
+            for operand_leaves in all_leaves:
+                if leaf in operand_leaves:
+                    if first_occurrence:
+                        first_occurrence = False
+                        continue
+                    leaf.domain_ = copy(leaf.domain_)
+
     def evaluate_(self):
         """
         Constrain the symbolic expression based on the indices of the operands.
@@ -464,17 +533,19 @@ class Or(LogicalOperator):
         """
         # Combine indices from all operands
         for operand in self.operands_:
+            operand.evaluate_()
             if isinstance(operand, ConstrainingOperator):
-                for item, indices in operand.operands_indices_.items():
-                    self.operands_indices_[item] = itertools.chain(self.operands_indices_[item], indices)
+                for item_id, indices in operand.operands_indices_.items():
+                    self.operands_indices_[item_id].update(indices)
             else:  # a boolean expression
-                self.operands_indices_[operand.leaves_.pop()] = itertools.chain(self.operands_indices_[operand.leaves_.pop()],
-                                                                                (i for i, item in enumerate(operand) if item))
-        # for operand, indices in self.operands_indices_.items():
-        #     operand.constrain(self.operands_indices_[operand])
+                leaf = operand.leaves_.pop()
+                self.operands_indices_[leaf.id_].update(OrderedSet(i for i, v in enumerate(leaf) if v))
+        if self.root_ is self:
+            for operand_id, indices in self.operands_indices_.items():
+                self.id_expression_map_[operand_id].constrain_(indices)
 
     def replace_leaf(self, old_leaf, new_leaf):
-        self._roots_replacements[old_leaf] = new_leaf
+        self._leaves_replacements[old_leaf] = new_leaf
 
 
 @dataclass_transform()
