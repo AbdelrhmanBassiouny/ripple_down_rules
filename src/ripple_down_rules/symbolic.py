@@ -9,8 +9,7 @@ from copy import copy
 from dataclasses import dataclass, field
 
 from anytree import Node
-from ordered_set import OrderedSet
-from typing_extensions import Iterable, Any, Optional, Type, Dict, Set, ClassVar
+from typing_extensions import Iterable, Any, Optional, Type, Dict, Set, ClassVar, Callable
 from typing_extensions import dataclass_transform, List, Tuple
 
 from .utils import is_iterable, filter_data
@@ -35,6 +34,125 @@ class SymbolicMode:
     def __exit__(self, exc_type, exc_val, exc_tb):
         _set_symbolic_mode(False)
 
+
+@dataclass
+class HashedValue:
+    value: Any
+    id_: Optional[int] = field(default=None, repr=False)
+
+    def __post_init__(self):
+        if self.id_ is None:
+            self.id_ = id(self.value)
+
+    def __hash__(self):
+        return hash(self.id_)
+
+
+@dataclass
+class HashedIterable:
+    """
+    A wrapper for an iterable that hashes its items.
+    This is useful for ensuring that the items in the iterable are unique and can be used as keys in a dictionary.
+    """
+    values: Dict[int, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_iterable(cls, iterable: Iterable[Any]) -> HashedIterable:
+        """
+        Create a HashedIterable from an iterable.
+
+        :param iterable: An iterable of values to hash.
+        :return: A new HashedIterable instance.
+        """
+        if not isinstance(iterable, HashedIterable):
+            return cls({k: v for k, v in enumerate(iterable)})
+        return iterable
+
+    @property
+    def ids(self) -> Set[int]:
+        """
+        Get the ids of the hashed values.
+
+        :return: A set of ids of the hashed values.
+        """
+        return set(self.values.keys())
+
+    def map(self, func: Callable[[Any], Any]):
+        """
+        Apply a function to each value in the HashedIterable and return a new HashedIterable.
+
+        :param func: The function to apply to each value.
+        :return: A new HashedIterable with the transformed values.
+        """
+        return HashedIterable({k: func(v) for k, v in self.values.items()})
+
+    def filter(self, selected_ids: Iterable[int]):
+        """
+        Filter the HashedIterable based on a set of selected ids.
+
+        :param selected_ids: An iterable of ids to keep in the HashedIterable.
+        :return: A new HashedIterable containing only the items with the specified ids.
+        """
+        self.values = {k: self.values[k] for k in selected_ids}
+        return HashedIterable(self.values)
+
+    def update(self, values: HashedIterable):
+        """
+        Update the hashed values with another HashedIterable.
+
+        :param values: The HashedIterable to update with.
+        """
+        self.values.update(values.values)
+
+    def add(self, value: HashedValue):
+        """
+        Add a HashedValue to the hashed values.
+
+        :param value: The HashedValue to add.
+        """
+        if value.id_ not in self.values:
+            self.values[value.id_] = value
+        else:
+            raise ValueError(f"Value with id {value.id_} already exists in the hashed values.")
+
+    def union(self, other: HashedIterable) -> HashedIterable:
+        """
+        Create a union of two HashedIterables.
+
+        :param other: The other HashedIterable to union with.
+        :return: A new HashedIterable containing the union of both.
+        """
+        all_keys = self.values.keys() | other.values.keys()
+        return HashedIterable({k: self.values.get(k, other.values[k]) for k in all_keys})
+
+    def intersection(self, other: HashedIterable) -> HashedIterable:
+        common_keys = self.values.keys() & other.values.keys()
+        return HashedIterable({k: self.values[k] for k in common_keys})
+
+    def __iter__(self):
+        """
+        Iterate over the hashed values.
+
+        :return: An iterator over the hashed values.
+        """
+        return iter(self.values.items())
+
+    def __getitem__(self, id_: int) -> HashedValue:
+        """
+        Get the HashedValue by its id.
+
+        :param id_: The id of the HashedValue to get.
+        :return: The HashedValue with the given id.
+        """
+        return self.values[id_]
+
+    def __copy__(self):
+        """
+        Create a shallow copy of the HashedIterable.
+
+        :return: A new HashedIterable instance with the same values.
+        """
+        return HashedIterable(values=self.values.copy())
 
 id_generator = IDGenerator()
 
@@ -100,7 +218,7 @@ class SymbolicExpression(ABC):
         return [c._expression for c in self.node_.children]
 
     def __getattr__(self, name):
-        if name.startswith('_') or name in ['leaves_', 'child_']:
+        if name.startswith('_') or name in ['leaves_', 'child_', 'all_leaf_instances_']:
             raise AttributeError(name)
         return Attribute(self, name)
 
@@ -124,11 +242,6 @@ class SymbolicExpression(ABC):
 
     def __contains__(self, item):
         return Comparator(item, 'in', self)
-
-    # def __bool__(self):
-    #     import pdb; pdb.set_trace()
-    #     raise TypeError(f"Cannot evaluate symbolic expression {self} to a boolean value.")
-        # return True
 
     def __and__(self, other):
         return And([self, other])
@@ -203,8 +316,17 @@ class TeeManager:
 
 @dataclass(eq=False)
 class HasDomain(SymbolicExpression, ABC):
-    domain_: Iterable[Any] = field(default=None, init=False)
+    domain_: HashedIterable = field(default=None, init=False)
     # _domain_manager: TeeManager = field(init=False, default=None)
+    
+    def __post_init__(self):
+        if self.domain_ is not None and not isinstance(self.domain_, HashedIterable):
+            self.domain_ = HashedIterable.from_iterable(self.domain_)
+        super().__post_init__()
+
+    # def evaluate_(self):
+    #     if self.domain_ is not None :
+    #         self.domain_ = HashedIterable.from_iterable(self.domain_)
 
     def __iter__(self):
         return iter(self.domain_)
@@ -214,38 +336,44 @@ class HasDomain(SymbolicExpression, ABC):
     #         self._domain_manager = TeeManager(self.domain_)
     #     return self._domain_manager.get_iterator()
 
-    def constrain_(self, indices: Iterable[int]):
+    def constrain_(self, ids: Iterable[int]):
         if self.child_ is not None and isinstance(self.child_, HasDomain):
-            self.child_.constrain_(indices)
+            self.child_.constrain_(ids)
         elif self.child_ is None:
-            # self.domain_ = values
-            self.domain_ = filter_data(self.domain_, indices)
+            self.domain_.filter(ids)
 
     @property
     def leaves_(self) -> Set[HasDomain]:
+        child_leaves = set()
         if self.child_ is not None and hasattr(self.child_, 'leaves_'):
             return self.child_.leaves_
         else:
             return {self}
+
+    @property
+    def all_leaf_instances_(self) -> List[HasDomain]:
+        """
+        Get the leaf instances of the symbolic expression.
+        This is useful for accessing the leaves of the symbolic expression tree.
+        """
+        child_leaves = []
+        if self.child_ is not None and hasattr(self.child_, 'all_leaf_instances_'):
+            child_leaves = self.child_.all_leaf_instances_
+        return [self] + child_leaves
 
 
 @dataclass(eq=False)
 class Variable(HasDomain):
     cls_: Optional[Type] = field(default=None)
     cls_kwargs_: Dict[str, Any] = field(default_factory=dict)
-    domain_: Iterable[Any] = field(default=None, kw_only=True)
+    domain_: HashedIterable = field(default=None, kw_only=True)
     child_: Optional[SymbolicExpression] = field(default=None, kw_only=True)
 
-    def __post_init__(self):
-        super().__post_init__()
-        if self.domain_ is None and self.cls is not None:
-            self.domain_: Iterable[Any] = (self.cls_(**{k: self.cls_kwargs_[k][i] for k in self.cls_kwargs_.keys()})
-                                           for i in enumerate(next(iter(self.cls_kwargs_.values()), [])))
-
     def evaluate_(self):
-        # This method is intentionally left empty as Variable does not perform any evaluation.
-        # Variables are leaves in the symbolic expression tree and their domains are set during initialization.
-        pass
+        if self.domain_ is None and self.cls is not None:
+            domain_values = (self.cls_(**{k: self.cls_kwargs_[k][i] for k in self.cls_kwargs_.keys()})
+                             for i in enumerate(next(iter(self.cls_kwargs_.values()), [])))
+            self.domain_: HashedIterable = HashedIterable.from_iterable(domain_values)
 
     @property
     def name_(self):
@@ -279,10 +407,10 @@ class Attribute(HasDomain):
     def evaluate_(self):
         self.child_.evaluate_()
         if self.domain_ is None:
-            self.domain_ = (getattr(item, self.attr_name_) for item in self.child_)
+            self.domain_ = self.child_.domain_.map(lambda v: getattr(v, self.attr_name_))
+        leaf = self.leaves_.pop()
         if self.root_ is self:
-            leaf_id = self.leaves_.pop().id_
-            self.id_expression_map_[leaf_id].constrain_(OrderedSet(i for i, v in enumerate(self) if v))
+            leaf.domain_.filter([id_ for id_, value in self if value])
 
     @property
     def name_(self):
@@ -306,16 +434,16 @@ class Call(HasDomain):
     def evaluate_(self):
         self.child_.evaluate_()
         if len(self.args_) > 0 and len(self.kwargs_) > 0:
-            self.domain_ = [item(*self.args_, **self.kwargs_) for item in self.child_]
+            self.domain_ = self.child_.domain_.map(lambda v: v(*self.args_, **self.kwargs_))
         elif len(self.args_) > 0:
-            self.domain_ = [item(*self.args_) for item in self.child_]
+            self.domain_ = self.child_.domain_.map(lambda v: v(*self.args_))
         elif len(self.kwargs_) > 0:
-            self.domain_ = [item(**self.kwargs_) for item in self.child_]
+            self.domain_ = self.child_.domain_.map(lambda v: v(**self.kwargs_))
         else:
-            self.domain_ = [item() for item in self.child_]
+            self.domain_ = self.child_.domain_.map(lambda v: v())
+        leaf = self.leaves_.pop()
         if self.root_ is self:
-            leaf_id = self.leaves_.pop().id_
-            self.id_expression_map_[leaf_id].constrain_(OrderedSet(i for i, v in enumerate(self) if v))
+            leaf.domain_.filter([id_ for id_, value in self if value])
 
     @property
     def name_(self):
@@ -333,7 +461,7 @@ class ConstrainingOperator(SymbolicExpression, ABC):
     This is used to ensure that the operator can be applied to symbolic expressions
     and that it can constrain the results based on indices.
     """
-    operands_indices_: Dict[int, OrderedSet[int]] = field(default_factory=lambda: defaultdict(OrderedSet), init=False)
+    operands_values_: Dict[int, HashedIterable] = field(default_factory=lambda: defaultdict(HashedIterable), init=False)
 
 
     def constrain_(self):
@@ -341,14 +469,23 @@ class ConstrainingOperator(SymbolicExpression, ABC):
         Constrain the symbolic expression based on the indices.
         This method should be implemented by subclasses.
         """
-        for operand_id, indices in self.operands_indices_.items():
-            self.id_expression_map_[operand_id].constrain_(indices)
+        for operand_id, values in self.operands_values_.items():
+            self.id_expression_map_[operand_id].constrain_(values.ids)
 
     @property
     @abstractmethod
     def leaves_(self) -> Set[HasDomain]:
         """
         :return: Set of leaves of symbolic expressions, these are the variables that will have their domains constrained.
+        """
+        ...
+
+    @property
+    @abstractmethod
+    def all_leaf_instances_(self) -> List[HasDomain]:
+        """
+        :return: List of all leaf instances of the symbolic expression.
+        This is useful for accessing the leaves of the symbolic expression tree.
         """
         ...
 
@@ -373,6 +510,10 @@ class UnaryOperator(ConstrainingOperator, ABC):
     def leaves_(self) -> Set[HasDomain]:
         return self.operand_.leaves_
 
+    @property
+    def all_leaf_instances_(self) -> List[HasDomain]:
+        return self.operand_.all_leaf_instances_
+
 
 @dataclass(eq=False)
 class Not(UnaryOperator):
@@ -382,11 +523,10 @@ class Not(UnaryOperator):
 
     def evaluate_(self):
         def operator_yield():
-            for idx, item in enumerate(self.operand_):
-                if eval(f"not item"):
-                    yield idx
+            yield from (id_ for id_, value in self.operand_ if not value)
 
-        self.operands_indices_[self.operand_] = operator_yield()
+        operand_leaf = self.operand_.leaves_.pop()
+        operand_leaf.domain_.filter(operator_yield())
 
 
 @dataclass(eq=False)
@@ -424,6 +564,14 @@ class BinaryOperator(ConstrainingOperator, ABC):
     def leaves_(self) -> Set[HasDomain]:
         return self.left_.leaves_.union(self.right_.leaves_)
 
+    @property
+    def all_leaf_instances_(self) -> List[HasDomain]:
+        """
+        Get the leaf instances of the symbolic expression.
+        This is useful for accessing the leaves of the symbolic expression tree.
+        """
+        return self.left_.all_leaf_instances_ + self.right_.all_leaf_instances_
+
 
 @dataclass(eq=False)
 class Comparator(BinaryOperator):
@@ -435,18 +583,19 @@ class Comparator(BinaryOperator):
         def operator_yield():
             self.left_.evaluate_()
             self.right_.evaluate_()
-            for left_idx, left_item in enumerate(self.left_):
-                for right_idx, right_item in enumerate(self.right_):
-                    if eval(f"left_item {self.operation_} right_item"):
-                        yield left_idx, right_idx
+            for left_id, left_value in self.left_:
+                for right_id, right_value in self.right_:
+                    if eval(f"left_value {self.operation_} right_value"):
+                        yield left_id, right_id
 
         data = list(operator_yield())
-        self.operands_indices_[self.left_.leaves_.pop().id_] = OrderedSet(v[0] for v in data)
-        self.operands_indices_[self.right_.leaves_.pop().id_] = OrderedSet(v[1] for v in data)
+        for i, operand in enumerate([self.left_, self.right_]):
+            # operand_leaf = operand.leaves_.pop()
+            operand.constrain_([v[i] for v in data])
 
-        if self.root_ is self:
-            for item_id, indices in self.operands_indices_.items():
-                self.id_expression_map_[item_id].constrain_(indices)
+        # if self.root_ is self:
+        #     for item_id, values in self.operands_values_.items():
+        #         self.id_expression_map_[item_id].constrain_(values)
 
 
 @dataclass(eq=False)
@@ -480,6 +629,17 @@ class LogicalOperator(ConstrainingOperator, ABC):
              leaves.update(operand.leaves_)
         return leaves
 
+    @property
+    def all_leaf_instances_(self) -> List[HasDomain]:
+        """
+        Get the leaf instances of the symbolic expression.
+        This is useful for accessing the leaves of the symbolic expression tree.
+        """
+        all_leaves = []
+        for operand in self.operands_:
+            all_leaves.extend(operand.all_leaf_instances_)
+        return all_leaves
+
 
 @dataclass(eq=False)
 class And(LogicalOperator):
@@ -490,15 +650,15 @@ class And(LogicalOperator):
     def evaluate_(self):
         for operand in self.operands_:
             operand.evaluate_()
-            if isinstance(operand, ConstrainingOperator):
-                operand.constrain_()
-                self.operands_indices_.update(operand.operands_indices_)
-            elif isinstance(operand, HasDomain):  # a boolean expression
-                leaf = operand.leaves_.pop()
-                self.operands_indices_[leaf.id_] = OrderedSet(i for i, v in enumerate(operand) if v)
-                operand.constrain_(self.operands_indices_[leaf.id_])
-            else:
-                raise TypeError(f"Operand {operand} is neither a ConstrainingOperator nor a HasDomain expression.")
+            # if isinstance(operand, ConstrainingOperator):
+            #     operand.constrain_()
+                # self.operands_values_.update(operand.operands_values_)
+            if not isinstance(operand, ConstrainingOperator):
+                if isinstance(operand, HasDomain):  # a boolean expression
+                    leaf = operand.leaves_.pop()
+                    operand.constrain_([id_ for id_, value in operand if value])
+                else:
+                    raise TypeError(f"Operand {operand} is neither a ConstrainingOperator nor a HasDomain expression.")
 
 
 @dataclass(eq=False)
@@ -515,8 +675,8 @@ class Or(LogicalOperator):
         # make the evaluation of each operand affect the others. Instead, we want each operand to have a copy of the
         # leaves, so that they can be evaluated independently. The leaves here are the symbolic variables that will be
         # constrained by the OR operator.
-        all_leaves = [operand.leaves_ for operand in self.operands_]
-        shared_leaves = set.intersection(*all_leaves)
+        all_leaves = [operand.all_leaf_instances_ for operand in self.operands_]
+        shared_leaves = set.intersection(*[set(operand_leaves) for operand_leaves in all_leaves])
         for leaf in shared_leaves:
             first_occurrence = True
             for operand_leaves in all_leaves:
@@ -524,7 +684,10 @@ class Or(LogicalOperator):
                     if first_occurrence:
                         first_occurrence = False
                         continue
-                    leaf.domain_ = copy(leaf.domain_)
+                    leaf_instances = [l for l in operand_leaves if l.id_ == leaf.id_]
+                    leaf_instances[0].domain_ = copy(leaf.domain_)
+                    for leaf_instance in leaf_instances[1:]:
+                        leaf_instance.domain_ = leaf_instances[0].domain_
 
     def evaluate_(self):
         """
@@ -535,14 +698,13 @@ class Or(LogicalOperator):
         for operand in self.operands_:
             operand.evaluate_()
             if isinstance(operand, ConstrainingOperator):
-                for item_id, indices in operand.operands_indices_.items():
-                    self.operands_indices_[item_id].update(indices)
+                for leaf in operand.leaves_:
+                    self.operands_values_[leaf.id_].update(leaf.domain_)
             else:  # a boolean expression
                 leaf = operand.leaves_.pop()
-                self.operands_indices_[leaf.id_].update(OrderedSet(i for i, v in enumerate(leaf) if v))
-        if self.root_ is self:
-            for operand_id, indices in self.operands_indices_.items():
-                self.id_expression_map_[operand_id].constrain_(indices)
+                self.operands_values_[leaf.id_].update(leaf.domain_.filter(i for i, v in enumerate(leaf) if v))
+        for operand_id, values in self.operands_values_.items():
+            self.id_expression_map_[operand_id].domain_ = values
 
     def replace_leaf(self, old_leaf, new_leaf):
         self._leaves_replacements[old_leaf] = new_leaf
