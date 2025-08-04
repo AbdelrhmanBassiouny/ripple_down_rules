@@ -323,8 +323,8 @@ class Variable(HasDomain):
     def __post_init__(self):
         super().__post_init__()
         if self.domain_ is None and self.cls is not None:
-            domain_values = (self.cls_(**{k: self.cls_kwargs_[k][i] for k in self.cls_kwargs_.keys()})
-                             for i in enumerate(next(iter(self.cls_kwargs_.values()), [])))
+            domain_values = (self.cls_(**{k: self.cls_kwargs_[k].domain_[i] for k in self.cls_kwargs_.keys()})
+                             for i, v in enumerate(next(iter(self.cls_kwargs_.values()), [])))
             self.domain_: HashedIterable = HashedIterable.from_iterable(domain_values)
 
     def evaluate_(self):
@@ -660,7 +660,7 @@ def symbolic(cls):
             if len(args) == 1 and isinstance(args[0], Iterable) and len(kwargs) == 0:
                 # If the first argument is an iterable, treat it as data
                 return Variable.from_domain_(clazz=symbolic_cls, iterable=args[0])
-            return Variable(symbolic_cls, *args, **kwargs)
+            return Variable(symbolic_cls, cls_kwargs_=kwargs)
         return orig_new(symbolic_cls)
 
     cls.__new__ = symbolic_new

@@ -286,7 +286,7 @@ class World:
 class View(WorldEntity):
     ...
 
-
+@symbolic
 @dataclass
 class Drawer(View):
     handle: Handle

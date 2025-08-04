@@ -17,4 +17,4 @@ def entity(entity_var: T, *properties: SymbolicExpression) -> T:
 
 
 def an(entity_type: Type[T], domain: Optional[Any] = None) -> Union[T, Iterable[T]]:
-    return symbolic.Variable.from_domain_(domain, clazz=entity_type)
+    return symbolic.Variable.from_domain_((v for v in domain if isinstance(v, entity_type)), clazz=entity_type)
