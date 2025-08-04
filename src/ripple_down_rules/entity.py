@@ -18,7 +18,7 @@ def entity(entity_var: T, *properties: SymbolicExpression) -> T:
         #         prop.constrain_()
         #     else:
         #         prop.root_.constrain([i for i, v in enumerate(prop) if v])
-    return entity_var
+    return iter((v for _, v in entity_var))
 
 
 def an(entity_type: Type[T], domain: Optional[Any] = None) -> Union[T, Iterable[T]]:

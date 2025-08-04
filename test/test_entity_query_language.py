@@ -91,3 +91,15 @@ def test_generate_with_using_multi_or(handles_and_containers_world):
     handles_and_container1 = list(generate_handles_and_container1())
     assert len(handles_and_container1) == 3, "Should generate at least one handle."
     # assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
+
+def test_generate_with_and_or(handles_and_containers_world):
+    world = handles_and_containers_world
+
+    def generate_handles_and_container1():
+        with symbolic.SymbolicMode():
+            body = an(Body, domain=world.bodies)
+            yield from entity(body, (contains(body.name, "Handle") & contains(body.name, '1'))
+                              | (contains(body.name, 'Container') & contains(body.name, '1')))
+
+    handles_and_container1 = list(generate_handles_and_container1())
+    assert len(handles_and_container1) == 2, "Should generate at least one handle."
