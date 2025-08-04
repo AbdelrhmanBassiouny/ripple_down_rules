@@ -1,11 +1,12 @@
 import pytest
 from typing_extensions import Iterable, Union
 
+from datasets import PrismaticConnection
 from ripple_down_rules.entity import an, entity
 from ripple_down_rules.query import Generate, where
 from ripple_down_rules import symbolic
 from ripple_down_rules.symbolic import contains, in_, And
-from .datasets import Handle, Body
+from .datasets import Handle, Body, Container, Drawer, FixedConnection
 
 
 def test_generate_with_using_attribute_and_callables(handles_and_containers_world):
@@ -103,3 +104,36 @@ def test_generate_with_and_or(handles_and_containers_world):
 
     handles_and_container1 = list(generate_handles_and_container1())
     assert len(handles_and_container1) == 2, "Should generate at least one handle."
+
+
+def test_generate_with_multi_and(handles_and_containers_world):
+    world = handles_and_containers_world
+
+    def generate_container1():
+        with symbolic.SymbolicMode():
+            body = an(Body, domain=world.bodies)
+            yield from entity(body, contains(body.name, "n") & contains(body.name, '1')
+                              & contains(body.name, 'C'))
+
+    container1 = list(generate_container1())
+    assert len(container1) == 1, "Should generate one container."
+    assert isinstance(container1[0], Container), "The generated item should be of type Container."
+
+
+def test_generate_with_more_than_one_source(handles_and_containers_world):
+    world = handles_and_containers_world
+
+    def generate_drawers():
+        with symbolic.SymbolicMode():
+            container = an(Container, domain=world.bodies)
+            handle = an(Handle, domain=world.bodies)
+            fixed_connection = an(FixedConnection, domain=world.connections)
+            prismatic_connection = an(PrismaticConnection, domain=world.connections)
+            entity(fixed_connection,
+                   (container == fixed_connection.parent) & (handle == fixed_connection.child) &
+                   (container == prismatic_connection.child))
+            print(fixed_connection.domain_)
+            print(container.domain_)
+
+    handles_and_container1 = list(generate_drawers())
+    assert len(handles_and_container1) > 0, "Should generate at least one drawer."
