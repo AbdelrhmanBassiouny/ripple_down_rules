@@ -13,11 +13,6 @@ def entity(entity_var: T, *properties: SymbolicExpression) -> T:
     for prop in properties:
         render_tree(prop.node_.root, True, "query_tree", view=True, use_legend=False)
         prop.root_.evaluate_()
-        # if not isinstance(prop, LogicalOperator):
-        #     if isinstance(prop, ConstrainingOperator):
-        #         prop.constrain_()
-        #     else:
-        #         prop.root_.constrain([i for i, v in enumerate(prop) if v])
     return iter((v for _, v in entity_var))
 
 

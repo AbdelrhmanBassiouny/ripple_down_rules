@@ -38,14 +38,9 @@ class SymbolicMode:
 @dataclass
 class HashedValue:
     value: Any
-    id_: Optional[int] = field(default=None, repr=False)
-
-    def __post_init__(self):
-        if self.id_ is None:
-            self.id_ = id(self.value)
 
     def __hash__(self):
-        return hash(self.id_)
+        return hash(self.value.id_)
 
 
 @dataclass
@@ -167,18 +162,28 @@ class SymbolicExpression(ABC):
     def __post_init__(self):
         self.id_ = id_generator(self)
         node_name = self.name_ + f"_{self.id_}"
-        self.node_ = Node(node_name)
+        self._create_node_(node_name)
         if self.child_ is not None:
-            if self.child_.node_.parent is not None:
-                child_cp = self.child_.__new__(self.child_.__class__)
-                child_cp.__dict__.update(self.child_.__dict__)
-                child_cp.node_ = Node(self.child_.node_.name + f"_{self.id_}")
-                child_cp.node_._expression = child_cp
-                self.child_ = child_cp
-            self.child_.node_.parent = self.node_
-        self.node_._expression = self
+            self._update_child_()
         if self.id_ not in self.id_expression_map_:
             self.id_expression_map_[self.id_] = self
+
+    def _update_child_(self):
+        if self.child_.node_.parent is not None:
+            child_cp = self._copy_child_expression_()
+            self.child_ = child_cp
+        self.child_.node_.parent = self.node_
+
+    def _copy_child_expression_(self):
+        child_cp = self.child_.__new__(self.child_.__class__)
+        child_cp.__dict__.update(self.child_.__dict__)
+        child_cp._create_node_(self.child_.node_.name + f"_{self.id_}")
+        return child_cp
+
+
+    def _create_node_(self, name: str):
+        self.node_ = Node(name)
+        self.node_._expression = self
 
 
     @abstractmethod
@@ -268,73 +273,20 @@ class SymbolicExpression(ABC):
         return Comparator(self, '>=', other)
 
     def __hash__(self):
-        # if self.id_ is None:
-        # return hash(id(self))
-        # else:
-        return hash(self.id_)
-
-
-class _ManagedTeeIterator:
-    def __init__(self, base_iter, on_close, iterator_id):
-        self._iter = base_iter
-        self._on_close = on_close
-        self._id = iterator_id
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        return next(self._iter)
-
-    def close(self):
-        self._on_close(self._id)
-
-    def __del__(self):
-        self.close()
-
-
-class TeeManager:
-    def __init__(self, source_iterable):
-        self._source = iter(source_iterable)
-        self._tee_root = itertools.tee(self._source, 1)[0]
-        self._iterators = []  # List of (weakref to iterator, id)
-
-    def get_iterator(self):
-        new_iter, self._tee_root = itertools.tee(self._tee_root, 2)
-        # Store weakref so it doesn't prevent garbage collection
-        ref = weakref.ref(new_iter)
-        self._iterators.append((ref, id(new_iter)))
-        return _ManagedTeeIterator(new_iter, self._unregister, id(new_iter))
-
-    def _unregister(self, iterator_id):
-        self._iterators = [(ref, iid) for (ref, iid) in self._iterators if iid != iterator_id]
-
-    def cleanup_dead_iterators(self):
-        # Optional: prune dead iterators
-        self._iterators = [(ref, iid) for (ref, iid) in self._iterators if ref() is not None]
+        return hash(id(self))
 
 
 @dataclass(eq=False)
 class HasDomain(SymbolicExpression, ABC):
     domain_: HashedIterable = field(default=None, init=False)
-    # _domain_manager: TeeManager = field(init=False, default=None)
-    
+
     def __post_init__(self):
-        if self.domain_ is not None and not isinstance(self.domain_, HashedIterable):
+        if self.domain_ is not None:
             self.domain_ = HashedIterable.from_iterable(self.domain_)
         super().__post_init__()
 
-    # def evaluate_(self):
-    #     if self.domain_ is not None :
-    #         self.domain_ = HashedIterable.from_iterable(self.domain_)
-
     def __iter__(self):
         return iter(self.domain_)
-
-    # def get_domain_(self):
-    #     if self._domain_manager is None:
-    #         self._domain_manager = TeeManager(self.domain_)
-    #     return self._domain_manager.get_iterator()
 
     def constrain_(self, ids: Iterable[int]):
         if self.child_ is not None and isinstance(self.child_, HasDomain):
@@ -343,12 +295,11 @@ class HasDomain(SymbolicExpression, ABC):
             self.domain_.filter(ids)
 
     @property
-    def leaves_(self) -> Set[HasDomain]:
-        child_leaves = set()
+    def leaves_(self) -> Set[HashedValue]:
         if self.child_ is not None and hasattr(self.child_, 'leaves_'):
             return self.child_.leaves_
         else:
-            return {self}
+            return {HashedValue(self)}
 
     @property
     def all_leaf_instances_(self) -> List[HasDomain]:
@@ -369,11 +320,18 @@ class Variable(HasDomain):
     domain_: HashedIterable = field(default=None, kw_only=True)
     child_: Optional[SymbolicExpression] = field(default=None, kw_only=True)
 
-    def evaluate_(self):
+    def __post_init__(self):
+        super().__post_init__()
         if self.domain_ is None and self.cls is not None:
             domain_values = (self.cls_(**{k: self.cls_kwargs_[k][i] for k in self.cls_kwargs_.keys()})
                              for i in enumerate(next(iter(self.cls_kwargs_.values()), [])))
             self.domain_: HashedIterable = HashedIterable.from_iterable(domain_values)
+
+    def evaluate_(self):
+        """
+        A variable does not need to evaluate anything by default.
+        """
+        pass
 
     @property
     def name_(self):
@@ -408,7 +366,7 @@ class Attribute(HasDomain):
         self.child_.evaluate_()
         if self.domain_ is None:
             self.domain_ = self.child_.domain_.map(lambda v: getattr(v, self.attr_name_))
-        leaf = self.leaves_.pop()
+        leaf = self.leaves_.pop().value
         if self.root_ is self:
             leaf.domain_.filter([id_ for id_, value in self if value])
 
@@ -417,7 +375,7 @@ class Attribute(HasDomain):
         return f"{self.child_.name_}.{self.attr_name_}"
 
     @property
-    def leaves_(self) -> Set[HasDomain]:
+    def leaves_(self) -> Set[HashedValue]:
         return self.child_.leaves_
 
 
@@ -433,15 +391,11 @@ class Call(HasDomain):
 
     def evaluate_(self):
         self.child_.evaluate_()
-        if len(self.args_) > 0 and len(self.kwargs_) > 0:
+        if len(self.args_) > 0 or len(self.kwargs_) > 0:
             self.domain_ = self.child_.domain_.map(lambda v: v(*self.args_, **self.kwargs_))
-        elif len(self.args_) > 0:
-            self.domain_ = self.child_.domain_.map(lambda v: v(*self.args_))
-        elif len(self.kwargs_) > 0:
-            self.domain_ = self.child_.domain_.map(lambda v: v(**self.kwargs_))
         else:
             self.domain_ = self.child_.domain_.map(lambda v: v())
-        leaf = self.leaves_.pop()
+        leaf = self.leaves_.pop().value
         if self.root_ is self:
             leaf.domain_.filter([id_ for id_, value in self if value])
 
@@ -450,7 +404,7 @@ class Call(HasDomain):
         return f"{self.child_.name_}()"
 
     @property
-    def leaves_(self) -> Set[HasDomain]:
+    def leaves_(self) -> Set[HashedValue]:
         return self.child_.leaves_
 
 
@@ -474,7 +428,7 @@ class ConstrainingOperator(SymbolicExpression, ABC):
 
     @property
     @abstractmethod
-    def leaves_(self) -> Set[HasDomain]:
+    def leaves_(self) -> Set[HashedValue]:
         """
         :return: Set of leaves of symbolic expressions, these are the variables that will have their domains constrained.
         """
@@ -507,7 +461,7 @@ class UnaryOperator(ConstrainingOperator, ABC):
         return f"{self.operation} {self.operand_.name}"
 
     @property
-    def leaves_(self) -> Set[HasDomain]:
+    def leaves_(self) -> Set[HashedValue]:
         return self.operand_.leaves_
 
     @property
@@ -525,7 +479,7 @@ class Not(UnaryOperator):
         def operator_yield():
             yield from (id_ for id_, value in self.operand_ if not value)
 
-        operand_leaf = self.operand_.leaves_.pop()
+        operand_leaf = self.operand_.leaves_.pop().value
         operand_leaf.domain_.filter(operator_yield())
 
 
@@ -561,8 +515,8 @@ class BinaryOperator(ConstrainingOperator, ABC):
         return self.operation_
 
     @property
-    def leaves_(self) -> Set[HasDomain]:
-        return self.left_.leaves_.union(self.right_.leaves_)
+    def leaves_(self) -> Set[HashedValue]:
+        return self.left_.leaves_ | self.right_.leaves_
 
     @property
     def all_leaf_instances_(self) -> List[HasDomain]:
@@ -590,12 +544,7 @@ class Comparator(BinaryOperator):
 
         data = list(operator_yield())
         for i, operand in enumerate([self.left_, self.right_]):
-            # operand_leaf = operand.leaves_.pop()
             operand.constrain_([v[i] for v in data])
-
-        # if self.root_ is self:
-        #     for item_id, values in self.operands_values_.items():
-        #         self.id_expression_map_[item_id].constrain_(values)
 
 
 @dataclass(eq=False)
@@ -607,9 +556,9 @@ class LogicalOperator(ConstrainingOperator, ABC):
     child_: SymbolicExpression = field(init=False, default=None)
 
     def __post_init__(self):
-        for operand in self.operands_:
+        for i, operand in enumerate(self.operands_):
             if not isinstance(operand, SymbolicExpression):
-                self.operands_ = Variable.from_domain_(operand)
+                self.operands_[i] = Variable.from_domain_(operand)
         super().__post_init__()
         for operand in self.operands_:
             operand.node_.parent = self.node_
@@ -623,11 +572,11 @@ class LogicalOperator(ConstrainingOperator, ABC):
         return self.__class__.__name__
 
     @property
-    def leaves_(self) -> Set[HasDomain]:
-        leaves = set()
+    def leaves_(self) -> Set[HashedValue]:
+        all_leaves = set()
         for operand in self.operands_:
-             leaves.update(operand.leaves_)
-        return leaves
+            all_leaves.update(operand.leaves_)
+        return all_leaves
 
     @property
     def all_leaf_instances_(self) -> List[HasDomain]:
@@ -650,15 +599,8 @@ class And(LogicalOperator):
     def evaluate_(self):
         for operand in self.operands_:
             operand.evaluate_()
-            # if isinstance(operand, ConstrainingOperator):
-            #     operand.constrain_()
-                # self.operands_values_.update(operand.operands_values_)
             if not isinstance(operand, ConstrainingOperator):
-                if isinstance(operand, HasDomain):  # a boolean expression
-                    leaf = operand.leaves_.pop()
-                    operand.constrain_([id_ for id_, value in operand if value])
-                else:
-                    raise TypeError(f"Operand {operand} is neither a ConstrainingOperator nor a HasDomain expression.")
+                operand.constrain_([id_ for id_, value in operand if value])
 
 
 @dataclass(eq=False)
@@ -666,8 +608,6 @@ class Or(LogicalOperator):
     """
     A symbolic OR operation that can be used to combine multiple symbolic expressions.
     """
-    _leaves_replacements: Dict[HasDomain, HasDomain] = field(init=False, default_factory=dict)
-
     def __post_init__(self):
         super().__post_init__()
         # Find common leaves between operands and split them into separate leaves, each connected to a separate operand.
@@ -676,18 +616,21 @@ class Or(LogicalOperator):
         # leaves, so that they can be evaluated independently. The leaves here are the symbolic variables that will be
         # constrained by the OR operator.
         all_leaves = [operand.all_leaf_instances_ for operand in self.operands_]
-        shared_leaves = set.intersection(*[set(operand_leaves) for operand_leaves in all_leaves])
-        for leaf in shared_leaves:
+        unique_leaves = [operand.leaves_ for operand in self.operands_]
+        shared_leaves = set.intersection(*unique_leaves)
+        for leaf_hashed_value in shared_leaves:
+            leaf = leaf_hashed_value.value
             first_occurrence = True
             for operand_leaves in all_leaves:
-                if leaf in operand_leaves:
-                    if first_occurrence:
-                        first_occurrence = False
-                        continue
-                    leaf_instances = [l for l in operand_leaves if l.id_ == leaf.id_]
-                    leaf_instances[0].domain_ = copy(leaf.domain_)
-                    for leaf_instance in leaf_instances[1:]:
-                        leaf_instance.domain_ = leaf_instances[0].domain_
+                if leaf.id_ not in {l.id_ for l in operand_leaves}:
+                    continue
+                if first_occurrence:
+                    first_occurrence = False
+                    continue
+                leaf_instances = [l for l in operand_leaves if l.id_ == leaf.id_]
+                leaf_instances[0].domain_ = copy(leaf.domain_)
+                for leaf_instance in leaf_instances[1:]:
+                    leaf_instance.domain_ = leaf_instances[0].domain_
 
     def evaluate_(self):
         """
@@ -698,16 +641,14 @@ class Or(LogicalOperator):
         for operand in self.operands_:
             operand.evaluate_()
             if isinstance(operand, ConstrainingOperator):
-                for leaf in operand.leaves_:
+                for leaf_hashed_value in operand.leaves_:
+                    leaf = leaf_hashed_value.value
                     self.operands_values_[leaf.id_].update(leaf.domain_)
             else:  # a boolean expression
-                leaf = operand.leaves_.pop()
+                leaf = operand.leaves_.pop().value
                 self.operands_values_[leaf.id_].update(leaf.domain_.filter(i for i, v in enumerate(leaf) if v))
         for operand_id, values in self.operands_values_.items():
             self.id_expression_map_[operand_id].domain_ = values
-
-    def replace_leaf(self, old_leaf, new_leaf):
-        self._leaves_replacements[old_leaf] = new_leaf
 
 
 @dataclass_transform()
