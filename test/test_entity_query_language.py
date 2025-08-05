@@ -1,11 +1,7 @@
-import pytest
-from typing_extensions import Iterable, Union
-
-from ripple_down_rules.entity import an, entity
-from ripple_down_rules.query import Generate, where
 from ripple_down_rules import symbolic
-from ripple_down_rules.symbolic import contains, in_, And
-from .datasets import Handle, Body, Container, Drawer, FixedConnection, PrismaticConnection
+from ripple_down_rules.entity import an, entity
+from ripple_down_rules.symbolic import contains, in_
+from .datasets import Handle, Body, Container, FixedConnection, PrismaticConnection
 
 
 def test_generate_with_using_attribute_and_callables(handles_and_containers_world):
@@ -13,10 +9,12 @@ def test_generate_with_using_attribute_and_callables(handles_and_containers_worl
     Test the generation of handles in the HandlesAndContainersWorld.
     """
     world = handles_and_containers_world
+
     def generate_handles():
         with symbolic.SymbolicMode():
             body = an(Body, domain=world.bodies)
             yield from entity(body, body.name.startswith("Handle"))
+
     handles = list(generate_handles())
     assert len(handles) == 3, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
@@ -27,10 +25,12 @@ def test_generate_with_using_contains(handles_and_containers_world):
     Test the generation of handles in the HandlesAndContainersWorld.
     """
     world = handles_and_containers_world
+
     def generate_handles():
         with symbolic.SymbolicMode():
             body = an(Body, domain=world.bodies)
             yield from entity(body, contains(body.name, "Handle"))
+
     handles = list(generate_handles())
     assert len(handles) == 3, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
@@ -41,10 +41,12 @@ def test_generate_with_using_in(handles_and_containers_world):
     Test the generation of handles in the HandlesAndContainersWorld.
     """
     world = handles_and_containers_world
+
     def generate_handles():
         with symbolic.SymbolicMode():
             body = an(Body, domain=world.bodies)
             yield from entity(body, in_("Handle", body.name))
+
     handles = list(generate_handles())
     assert len(handles) == 3, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
@@ -55,10 +57,12 @@ def test_generate_with_using_and(handles_and_containers_world):
     Test the generation of handles in the HandlesAndContainersWorld.
     """
     world = handles_and_containers_world
+
     def generate_handles():
         with symbolic.SymbolicMode():
             body = an(Body, domain=world.bodies)
             yield from entity(body, contains(body.name, "Handle") & contains(body.name, '1'))
+
     handles = list(generate_handles())
     assert len(handles) == 1, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
@@ -69,10 +73,12 @@ def test_generate_with_using_or(handles_and_containers_world):
     Test the generation of handles in the HandlesAndContainersWorld.
     """
     world = handles_and_containers_world
+
     def generate_handles():
         with symbolic.SymbolicMode():
             body = an(Body, domain=world.bodies)
-            yield from entity(body,contains(body.name, "Handle1") | contains(body.name, 'Handle2'))
+            yield from entity(body, contains(body.name, "Handle1") | contains(body.name, 'Handle2'))
+
     handles = list(generate_handles())
     assert len(handles) == 2, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
@@ -83,14 +89,17 @@ def test_generate_with_using_multi_or(handles_and_containers_world):
     Test the generation of handles in the HandlesAndContainersWorld.
     """
     world = handles_and_containers_world
+
     def generate_handles_and_container1():
         with symbolic.SymbolicMode():
             body = an(Body, domain=world.bodies)
-            yield from entity(body,contains(body.name, "Handle1") | contains(body.name, 'Handle2')
+            yield from entity(body, contains(body.name, "Handle1") | contains(body.name, 'Handle2')
                               | contains(body.name, 'Container1'))
+
     handles_and_container1 = list(generate_handles_and_container1())
     assert len(handles_and_container1) == 3, "Should generate at least one handle."
     # assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
+
 
 def test_generate_with_and_or(handles_and_containers_world):
     world = handles_and_containers_world
@@ -107,35 +116,40 @@ def test_generate_with_and_or(handles_and_containers_world):
 
 def test_generate_with_multi_and(handles_and_containers_world):
     world = handles_and_containers_world
+    body = an(Body, domain=world.bodies)
 
     def generate_container1():
-        with symbolic.SymbolicMode():
-            body = an(Body, domain=world.bodies)
-            yield from entity(body, contains(body.name, "n") & contains(body.name, '1')
-                              & contains(body.name, 'C'))
+        # with symbolic.SymbolicMode():
+        yield from entity(body, contains(body.name, "n") & contains(body.name, '1')
+                          & contains(body.name, 'C'))
 
-    container1 = list(generate_container1())
-    assert len(container1) == 1, "Should generate one container."
-    assert isinstance(container1[0], Container), "The generated item should be of type Container."
+    all_solutions = list(generate_container1())
+    assert len(all_solutions) == 1, "Should generate one container."
+    assert isinstance(all_solutions[0][body], Container), "The generated item should be of type Container."
+    assert all_solutions[0][body].name == "Container1"
 
 
 def test_generate_with_more_than_one_source(handles_and_containers_world):
     world = handles_and_containers_world
 
+    container = an(Container, domain=world.bodies)
+    handle = an(Handle, domain=world.bodies)
+    fixed_connection = an(FixedConnection, domain=world.connections)
+    prismatic_connection = an(PrismaticConnection, domain=world.connections)
+
     def generate_drawers():
-        with symbolic.SymbolicMode():
-            container = an(Container, domain=world.bodies)
-            handle = an(Handle, domain=world.bodies)
-            fixed_connection = an(FixedConnection, domain=world.connections)
-            prismatic_connection = an(PrismaticConnection, domain=world.connections)
-            entity(fixed_connection,
-                   (container == fixed_connection.parent) & (handle == fixed_connection.child) &
-                   (container == prismatic_connection.child))
-            yield from zip(container, handle, fixed_connection, prismatic_connection)
-    for c, h, fc, pc in generate_drawers():
-        assert c[1] == fc[1].parent
-        assert h[1] == fc[1].child
-        assert pc[1].child == fc[1].parent
+        # with symbolic.SymbolicMode():
+        solutions = entity((container, handle, fixed_connection, prismatic_connection),
+                           (container == fixed_connection.parent) & (handle == fixed_connection.child) &
+                           (container == prismatic_connection.child))
+        yield from solutions
+
+    all_solutions = list(generate_drawers())
+    assert len(all_solutions) == 2, "Should generate one drawer."
+    for sol in all_solutions:
+        assert sol[container] == sol[fixed_connection].parent
+        assert sol[handle] == sol[fixed_connection].child
+        assert sol[prismatic_connection].child == sol[fixed_connection].parent
 
     # handles_and_container1 = list(generate_drawers())
     # assert len(handles_and_container1) > 0, "Should generate at least one drawer."
