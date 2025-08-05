@@ -1,12 +1,11 @@
 import pytest
 from typing_extensions import Iterable, Union
 
-from datasets import PrismaticConnection
 from ripple_down_rules.entity import an, entity
 from ripple_down_rules.query import Generate, where
 from ripple_down_rules import symbolic
 from ripple_down_rules.symbolic import contains, in_, And
-from .datasets import Handle, Body, Container, Drawer, FixedConnection
+from .datasets import Handle, Body, Container, Drawer, FixedConnection, PrismaticConnection
 
 
 def test_generate_with_using_attribute_and_callables(handles_and_containers_world):
