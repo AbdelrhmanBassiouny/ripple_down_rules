@@ -245,22 +245,26 @@ class Handle(Body):
     ...
 
 
+@symbolic
 @dataclass(unsafe_hash=True)
 class Container(Body):
     ...
 
 
+@symbolic
 @dataclass(unsafe_hash=True)
 class Connection(WorldEntity):
     parent: Body
     child: Body
 
 
+@symbolic
 @dataclass(unsafe_hash=True)
 class FixedConnection(Connection):
     ...
 
 
+@symbolic
 @dataclass(unsafe_hash=True)
 class PrismaticConnection(Connection):
     ...

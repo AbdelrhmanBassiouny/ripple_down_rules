@@ -20,6 +20,11 @@ class Handle2(HandleConf):
 
 
 @dataclass
+class Handle3(HandleConf):
+    name: str = "Handle3"
+
+
+@dataclass
 class Container1(ContainerConf):
     name: str = "Container1"
 
@@ -29,10 +34,17 @@ class Container2(ContainerConf):
     name: str = "Container2"
 
 
+@dataclass
+class Container3(ContainerConf):
+    name: str = "Container3"
+
+
 def bodies():
     return [
         Handle1(),
         Handle2(),
+        Handle3(),
+        Container3(),
         Container1(),
         Container2()
     ]
@@ -42,8 +54,12 @@ def bodies():
 class HandlesAndContainersWorld(WorldConf):
     bodies: List[BodyConf] = field(default_factory=bodies, init=False)
     connections: List[Connection] = field(default_factory=lambda: [
+        FixedConnectionConf(parent=Container1(), child=Container2()),
+        FixedConnectionConf(parent=Container3(), child=Handle3()),
+        PrismaticConnectionConf(parent=Container2(), child=Container1()),
+        PrismaticConnectionConf(parent=Container2(), child=Container3()),
         FixedConnectionConf(parent=Container1(), child=Handle1()),
-        PrismaticConnectionConf(parent=Container2(), child=Container1())], init=False)
+    ], init=False)
     factory_method: Callable = field(default=create_world_with_handles_and_containers, init=False)
 
 
