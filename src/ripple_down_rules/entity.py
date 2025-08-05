@@ -4,16 +4,18 @@ from typing_extensions import Any, Optional, Union, Iterable
 
 from . import symbolic
 from .symbolic import Variable, and_, SymbolicExpression, LogicalOperator, Comparator, ConstrainingOperator, Or
-from .utils import render_tree
+from .utils import render_tree, make_tuple, make_list
 
 T = TypeVar('T')  # Define type variable "T"
 
 
-def entity(entity_var: T, *properties: SymbolicExpression) -> T:
-    for prop in properties:
-        render_tree(prop.node_.root, True, "query_tree", view=True, use_legend=False)
-        prop.root_.evaluate_()
-    return iter((v for _, v in entity_var))
+def entity(entity_var: T, properties: SymbolicExpression) -> T:
+    render_tree(properties.node_.root, True, "query_tree", view=True, use_legend=False)
+    sol_gen = properties.root_.evaluate_()
+    # if isinstance(entity_var, SymbolicExpression):
+    #     entity_var = [entity_var]
+    for sol in sol_gen:
+        yield {var: sol[var.id_].value for var in entity_var}
 
 
 def an(entity_type: Type[T], domain: Optional[Any] = None) -> Union[T, Iterable[T]]:
