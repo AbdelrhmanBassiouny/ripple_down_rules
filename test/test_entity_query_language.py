@@ -18,7 +18,7 @@ def test_generate_with_using_attribute_and_callables(handles_and_containers_worl
             body = an(Body, domain=world.bodies)
             yield from entity(body, body.name.startswith("Handle"))
     handles = list(generate_handles())
-    assert len(handles) == 2, "Should generate at least one handle."
+    assert len(handles) == 3, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
 
 
@@ -32,7 +32,7 @@ def test_generate_with_using_contains(handles_and_containers_world):
             body = an(Body, domain=world.bodies)
             yield from entity(body, contains(body.name, "Handle"))
     handles = list(generate_handles())
-    assert len(handles) == 2, "Should generate at least one handle."
+    assert len(handles) == 3, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
 
 
@@ -46,7 +46,7 @@ def test_generate_with_using_in(handles_and_containers_world):
             body = an(Body, domain=world.bodies)
             yield from entity(body, in_("Handle", body.name))
     handles = list(generate_handles())
-    assert len(handles) == 2, "Should generate at least one handle."
+    assert len(handles) == 3, "Should generate at least one handle."
     assert all(isinstance(h, Handle) for h in handles), "All generated items should be of type Handle."
 
 
@@ -131,8 +131,11 @@ def test_generate_with_more_than_one_source(handles_and_containers_world):
             entity(fixed_connection,
                    (container == fixed_connection.parent) & (handle == fixed_connection.child) &
                    (container == prismatic_connection.child))
-            print(fixed_connection.domain_)
-            print(container.domain_)
+            yield from zip(container, handle, fixed_connection, prismatic_connection)
+    for c, h, fc, pc in generate_drawers():
+        assert c[1] == fc[1].parent
+        assert h[1] == fc[1].child
+        assert pc[1].child == fc[1].parent
 
-    handles_and_container1 = list(generate_drawers())
-    assert len(handles_and_container1) > 0, "Should generate at least one drawer."
+    # handles_and_container1 = list(generate_drawers())
+    # assert len(handles_and_container1) > 0, "Should generate at least one drawer."

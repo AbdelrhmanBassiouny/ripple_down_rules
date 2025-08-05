@@ -7,6 +7,7 @@ from abc import abstractmethod, ABC
 from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from anytree import Node
 from typing_extensions import Iterable, Any, Optional, Type, Dict, Set, ClassVar, Callable
@@ -295,6 +296,17 @@ class HasDomain(SymbolicExpression, ABC):
             self.domain_.filter(ids)
 
     @property
+    @lru_cache(maxsize=None)
+    def leaf_id_(self):
+        return self.leaf_.id_
+
+    @property
+    @lru_cache(maxsize=None)
+    def leaf_(self):
+        return list(self.leaves_)[0].value
+
+    @property
+    @lru_cache(maxsize=None)
     def leaves_(self) -> Set[HashedValue]:
         if self.child_ is not None and hasattr(self.child_, 'leaves_'):
             return self.child_.leaves_
@@ -302,6 +314,7 @@ class HasDomain(SymbolicExpression, ABC):
             return {HashedValue(self)}
 
     @property
+    @lru_cache(maxsize=None)
     def all_leaf_instances_(self) -> List[HasDomain]:
         """
         Get the leaf instances of the symbolic expression.
@@ -366,17 +379,13 @@ class Attribute(HasDomain):
         self.child_.evaluate_()
         if self.domain_ is None:
             self.domain_ = self.child_.domain_.map(lambda v: getattr(v, self.attr_name_))
-        leaf = self.leaves_.pop().value
+        leaf = self.leaf_
         if self.root_ is self:
             leaf.domain_.filter([id_ for id_, value in self if value])
 
     @property
     def name_(self):
         return f"{self.child_.name_}.{self.attr_name_}"
-
-    @property
-    def leaves_(self) -> Set[HashedValue]:
-        return self.child_.leaves_
 
 
 @dataclass(eq=False)
@@ -387,7 +396,6 @@ class Call(HasDomain):
     child_: HasDomain
     args_: Tuple[Any, ...] = field(default_factory=tuple)
     kwargs_: Dict[str, Any] = field(default_factory=dict)
-
 
     def evaluate_(self):
         self.child_.evaluate_()
@@ -402,10 +410,6 @@ class Call(HasDomain):
     @property
     def name_(self):
         return f"{self.child_.name_}()"
-
-    @property
-    def leaves_(self) -> Set[HashedValue]:
-        return self.child_.leaves_
 
 
 @dataclass(eq=False)
@@ -461,10 +465,12 @@ class UnaryOperator(ConstrainingOperator, ABC):
         return f"{self.operation} {self.operand_.name}"
 
     @property
+    @lru_cache(maxsize=None)
     def leaves_(self) -> Set[HashedValue]:
         return self.operand_.leaves_
 
     @property
+    @lru_cache(maxsize=None)
     def all_leaf_instances_(self) -> List[HasDomain]:
         return self.operand_.all_leaf_instances_
 
@@ -515,10 +521,12 @@ class BinaryOperator(ConstrainingOperator, ABC):
         return self.operation_
 
     @property
+    @lru_cache(maxsize=None)
     def leaves_(self) -> Set[HashedValue]:
         return self.left_.leaves_ | self.right_.leaves_
 
     @property
+    @lru_cache(maxsize=None)
     def all_leaf_instances_(self) -> List[HasDomain]:
         """
         Get the leaf instances of the symbolic expression.

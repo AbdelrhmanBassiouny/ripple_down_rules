@@ -2220,9 +2220,9 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
                                  include_nodes=only_nodes,
                                  nodenamefunc=unique_node_names,
                                  edgeattrfunc=edge_attr_setter,
-                                 nodeattrfunc=lambda node: f'style=filled,'
-                                                           f' fillcolor={color_map(node)
-                                                           if color_map else getattr(node, "color", "white")}',
+                                 nodeattrfunc=lambda node: \
+                                     f'style=filled,'
+                                     f' fillcolor={color_map(node) if color_map else getattr(node, "color", "white")}',
                                  use_legend=use_legend
                                  )
         if view:
