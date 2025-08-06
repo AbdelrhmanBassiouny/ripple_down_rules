@@ -1,5 +1,5 @@
 from ripple_down_rules import symbolic
-from ripple_down_rules.entity import an, entity
+from ripple_down_rules.entity import an, entity, entities
 from ripple_down_rules.symbolic import contains, in_
 from .datasets import Handle, Body, Container, FixedConnection, PrismaticConnection
 
@@ -119,14 +119,13 @@ def test_generate_with_multi_and(handles_and_containers_world):
     body = an(Body, domain=world.bodies)
 
     def generate_container1():
-        # with symbolic.SymbolicMode():
         yield from entity(body, contains(body.name, "n") & contains(body.name, '1')
                           & contains(body.name, 'C'))
 
     all_solutions = list(generate_container1())
     assert len(all_solutions) == 1, "Should generate one container."
-    assert isinstance(all_solutions[0][body], Container), "The generated item should be of type Container."
-    assert all_solutions[0][body].name == "Container1"
+    assert isinstance(all_solutions[0], Container), "The generated item should be of type Container."
+    assert all_solutions[0].name == "Container1"
 
 
 def test_generate_with_more_than_one_source(handles_and_containers_world):
@@ -138,8 +137,7 @@ def test_generate_with_more_than_one_source(handles_and_containers_world):
     prismatic_connection = an(PrismaticConnection, domain=world.connections)
 
     def generate_drawers():
-        # with symbolic.SymbolicMode():
-        solutions = entity((container, handle, fixed_connection, prismatic_connection),
+        solutions = entities((container, handle, fixed_connection, prismatic_connection),
                            (container == fixed_connection.parent) & (handle == fixed_connection.child) &
                            (container == prismatic_connection.child))
         yield from solutions
@@ -150,6 +148,3 @@ def test_generate_with_more_than_one_source(handles_and_containers_world):
         assert sol[container] == sol[fixed_connection].parent
         assert sol[handle] == sol[fixed_connection].child
         assert sol[prismatic_connection].child == sol[fixed_connection].parent
-
-    # handles_and_container1 = list(generate_drawers())
-    # assert len(handles_and_container1) > 0, "Should generate at least one drawer."
