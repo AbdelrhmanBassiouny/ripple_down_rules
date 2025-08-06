@@ -1,7 +1,7 @@
 from ripple_down_rules import symbolic
 from ripple_down_rules.entity import an, entity, entities
 from ripple_down_rules.symbolic import contains, in_
-from .datasets import Handle, Body, Container, FixedConnection, PrismaticConnection
+from .datasets import Handle, Body, Container, FixedConnection, PrismaticConnection, Drawer
 
 
 def test_generate_with_using_attribute_and_callables(handles_and_containers_world):
@@ -136,13 +136,11 @@ def test_generate_with_more_than_one_source(handles_and_containers_world):
     fixed_connection = an(FixedConnection, domain=world.connections)
     prismatic_connection = an(PrismaticConnection, domain=world.connections)
 
-    def generate_drawers():
-        solutions = entities((container, handle, fixed_connection, prismatic_connection),
-                           (container == fixed_connection.parent) & (handle == fixed_connection.child) &
-                           (container == prismatic_connection.child))
-        yield from solutions
+    solutions = entities((container, handle, fixed_connection, prismatic_connection),
+                       (container == fixed_connection.parent) & (handle == fixed_connection.child) &
+                       (container == prismatic_connection.child))
 
-    all_solutions = list(generate_drawers())
+    all_solutions = list(solutions)
     assert len(all_solutions) == 2, "Should generate one drawer."
     for sol in all_solutions:
         assert sol[container] == sol[fixed_connection].parent
