@@ -9,15 +9,17 @@ from .utils import render_tree, make_tuple, make_list
 T = TypeVar('T')  # Define type variable "T"
 
 
-def entity(entity_var: T, properties: Union[SymbolicExpression, bool]) -> Iterable[T]:
-    render_tree(properties.node_.root, True, "query_tree", view=True, use_legend=False)
+def entity(entity_var: T, properties: Union[SymbolicExpression, bool], show_tree: bool = False) -> Iterable[T]:
+    if show_tree:
+        render_tree(properties.node_.root, True, "query_tree", view=True, use_legend=False)
     sol_gen = properties.root_.evaluate_()
     for sol in sol_gen:
         yield sol[entity_var.id_].value
 
 
-def entities(entity_var: Iterable[T], properties: Union[SymbolicExpression, bool]) -> Iterable[Dict[T, T]]:
-    render_tree(properties.node_.root, True, "query_tree", view=True, use_legend=False)
+def entities(entity_var: Iterable[T], properties: Union[SymbolicExpression, bool], show_tree: bool = False) -> Iterable[Dict[T, T]]:
+    if show_tree:
+        render_tree(properties.node_.root, True, "query_tree", view=True, use_legend=False)
     sol_gen = properties.root_.evaluate_()
     if isinstance(entity_var, SymbolicExpression):
         entity_var = [entity_var]

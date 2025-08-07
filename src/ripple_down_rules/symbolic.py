@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import contextvars
 import itertools
-import weakref
 from abc import abstractmethod, ABC
-from collections import defaultdict, deque
+from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -394,13 +393,11 @@ class Variable(HasDomain):
     @classmethod
     def from_domain_(cls, iterable, clazz: Optional[Type] = None,
                      child: Optional[SymbolicExpression] = None) -> Variable:
-        # if in_symbolic_mode():
         if not is_iterable(iterable):
             iterable = make_list(iterable)
         if not clazz:
             clazz = type(next((iter(iterable)), None))
         return Variable(clazz, domain_=iterable, child_=child)
-        # raise TypeError(f"Method from_data of {clazz.__name__} is not usable outside RuleWriting")
 
     def __repr__(self):
         return (f"Symbolic({self.cls_.__name__}("
