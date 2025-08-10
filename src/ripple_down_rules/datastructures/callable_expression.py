@@ -129,6 +129,11 @@ class CallableExpression(SubclassJSONSerializer):
             else:
                 conclusion_type = (conclusion_type,)
         self.conclusion_type = conclusion_type
+        self.expected_types: Set[Type] = set(conclusion_type) if conclusion_type is not None else set()
+        if list in self.expected_types:
+            self.expected_types.remove(list)
+        if set in self.expected_types:
+            self.expected_types.add(set)
         self.scope: Optional[Dict[str, Any]] = scope if scope is not None else {}
         self.scope = get_used_scope(self.user_input, self.scope)
         self.expression_tree: AST = expression_tree if expression_tree else parse_string_to_expression(self.user_input)
@@ -157,8 +162,7 @@ class CallableExpression(SubclassJSONSerializer):
                     if self.mutually_exclusive and issubclass(type(output), (list, set)):
                         raise ValueError(f"Mutually exclusive types cannot be lists or sets, got {type(output)}")
                     output_types = {type(o) for o in make_list(output)}
-                    output_types.add(type(output))
-                    if not are_results_subclass_of_types(output_types, self.conclusion_type):
+                    if not are_results_subclass_of_types(output_types, self.expected_types):
                         raise ValueError(f"Not all result types {output_types} are subclasses of expected types"
                                          f" {self.conclusion_type}")
                 return output

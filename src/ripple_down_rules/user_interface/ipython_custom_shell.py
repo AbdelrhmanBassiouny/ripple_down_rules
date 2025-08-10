@@ -24,10 +24,16 @@ class MyMagics(Magics):
         self.case_query: Optional[CaseQuery] = case_query
         self.rule_editor = TemplateFileCreator(case_query, prompt_for=prompt_for, code_to_modify=code_to_modify)
         self.all_code_lines: Optional[List[str]] = None
+        self.edited: bool = False
+        self.loaded: bool = False
 
     @line_magic
     def edit(self, line):
-        self.rule_editor.edit()
+        if self.edited:
+            self.rule_editor.open_file_in_editor()
+        else:
+            self.rule_editor.edit()
+            self.edited = True
 
     @line_magic
     def load(self, line):
@@ -35,6 +41,8 @@ class MyMagics(Magics):
                                                              self.rule_editor.func_name,
                                                              self.rule_editor.print_func)
         self.shell.user_ns.update(updates)
+        self.case_query.scope.update(updates)
+        self.loaded = True
 
     @line_magic
     def current_value(self, line):
@@ -165,7 +173,7 @@ class IPythonShell:
         """
         if self.shell.all_lines[-1] in ['quit', 'exit']:
             self.user_input = 'exit'
-        elif self.shell.all_lines[0].replace('return', '').strip() == '':
+        elif self.shell.all_lines[-1].replace('return', '').strip() == '':
             self.user_input = None
         else:
             self.all_code_lines = extract_dependencies(self.shell.all_lines)

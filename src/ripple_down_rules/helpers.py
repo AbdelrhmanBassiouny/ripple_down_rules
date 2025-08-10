@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import importlib
+import inspect
 import os
+import sys
+from functools import wraps
 from types import ModuleType
-from typing import Tuple
+from typing import Tuple, Callable, Dict, Any, Optional, Sequence, get_type_hints
 
 from typing_extensions import Type, Optional, Callable, Any, Dict, TYPE_CHECKING, Union
 
 from .datastructures.case import create_case, Case
 from .datastructures.dataclasses import CaseQuery
-from .utils import calculate_precision_and_recall
+from .utils import calculate_precision_and_recall, get_method_args_as_dict, get_func_rdr_model_name
 from .utils import get_func_rdr_model_name, copy_case, make_set, update_case
 
 if TYPE_CHECKING:
@@ -90,7 +94,7 @@ def load_or_create_func_rdr_model(func, model_dir: str, rdr_type: Type[RippleDow
     :param rdr_kwargs: Additional arguments to pass to the RDR constructor in the case of a new model.
     """
     model_name = get_func_rdr_model_name(func)
-    model_path = os.path.join(model_dir, model_name, "rdr_metadata", f"{model_name}.json")
+    model_path = os.path.join(model_dir, model_name, f"{model_name}.py")
     if os.path.exists(model_path):
         rdr = rdr_type.load(load_dir=model_dir, model_name=model_name)
     else:
@@ -116,3 +120,99 @@ def get_an_updated_case_copy(case: Case, conclusion: Callable, attribute_name: s
         output = {attribute_name: output}
     update_case(temp_case_query, output)
     return case_cp
+
+def enable_gui():
+    """
+    Enable the GUI for Ripple Down Rules if available.
+    """
+    try:
+        from .user_interface.gui import RDRCaseViewer
+        viewer = RDRCaseViewer()
+    except ImportError:
+        pass
+
+
+def create_case_from_method(func: Callable,
+                            func_output: Dict[str, Any],
+                            *args, **kwargs) -> Tuple[Case, Dict[str, Any]]:
+    """
+    Create a Case from the function and its arguments.
+
+    :param func: The function to create a case from.
+    :param func_output: A dictionary containing the output of the function, where the key is the output name.
+    :param args: The positional arguments of the function.
+    :param kwargs: The keyword arguments of the function.
+    :return: A Case object representing the case.
+    """
+    case_dict = get_method_args_as_dict(func, *args, **kwargs)
+    case_dict.update(func_output)
+    case_name = get_func_rdr_model_name(func)
+    return Case(dict, id(case_dict), case_name, case_dict, **case_dict), case_dict
+
+
+class MockRDRDecorator:
+    def __init__(self, models_dir: str):
+        self.models_dir = models_dir
+    def decorator(self, func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> Optional[Any]:
+            model_dir = get_func_rdr_model_name(func, include_file_name=True)
+            model_name = get_func_rdr_model_name(func, include_file_name=False)
+            rdr = importlib.import_module(os.path.join(self.models_dir, model_dir, f"{model_name}_rdr.py"))
+            func_output = {"output_": func(*args, **kwargs)}
+            case, case_dict = create_case_from_method(func, func_output, *args, **kwargs)
+            return rdr.classify(case)
+        return wrapper
+
+
+def create_case_query_from_method(func: Callable,
+                                  func_output: Dict[str, Any],
+                                  output_type: Sequence[Type],
+                                  mutual_exclusive: bool,
+                                  func_args: Tuple[Any, ...], func_kwargs: Dict[str, Any],
+                                  case: Optional[Case] = None,
+                                  case_dict: Optional[Dict[str, Any]] = None,
+                                  scenario: Optional[Callable] = None,
+                                  this_case_target_value: Optional[Any] = None,) -> CaseQuery:
+    """
+    Create a CaseQuery from the function and its arguments.
+
+    :param func: The function to create a case from.
+    :param func_output: The output of the function as a dictionary, where the key is the output name.
+    :param output_type: The type of the output as a sequence of types.
+    :param mutual_exclusive: If True, the output types are mutually exclusive.
+    :param func_args: The positional arguments of the function.
+    :param func_kwargs: The keyword arguments of the function.
+    :param case: The case to create.
+    :param case_dict: The dictionary of the case.
+    :param scenario: The scenario that produced the given case.
+    :param this_case_target_value: The target value for the case.
+    :return: A CaseQuery object representing the case.
+    """
+    output_type = make_set(output_type)
+    if case is None or case_dict is None:
+        case, case_dict = create_case_from_method(func, func_output, *func_args, **func_kwargs)
+    scope = func.__globals__
+    scope.update(case_dict)
+    try:
+        func_args_type_hints = get_type_hints(func)
+    except NameError:
+        # use inspect to get the type hints if get_type_hints fails
+        func_args_type_hints = {k: v.annotation for k, v in inspect.signature(func).parameters.items()
+                                  if v.annotation is not inspect._empty}
+        # add return type hint from the function signature
+        return_annotation = inspect.signature(func).return_annotation
+        if return_annotation is not inspect._empty:
+            func_args_type_hints['return'] = return_annotation
+        types_dict = {t.__name__: t for t in output_type}
+        scope.update(types_dict)
+        types_names = list(types_dict.keys())
+        for k, v in func_args_type_hints.items():
+            for t_name in types_names:
+                if isinstance(v, str) and t_name in v:
+                    func_args_type_hints[k] = eval(v, scope)
+    output_name = list(func_output.keys())[0]
+    func_args_type_hints.update({output_name: Union[tuple(output_type)]})
+    return CaseQuery(case, output_name, tuple(output_type),
+                     mutual_exclusive, scope=scope, scenario=scenario, this_case_target_value=this_case_target_value,
+                     is_function=True, function_args_type_hints=func_args_type_hints)

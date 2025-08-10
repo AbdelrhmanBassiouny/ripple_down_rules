@@ -20,7 +20,7 @@ from pathlib import Path
 from subprocess import check_call
 from tempfile import NamedTemporaryFile
 from textwrap import dedent
-from types import NoneType
+from types import NoneType, ModuleType
 import inspect
 
 import six
@@ -51,13 +51,72 @@ from sqlalchemy import MetaData, inspect as sql_inspect
 from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
 from tabulate import tabulate
 from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
-    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Iterable
+    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Iterable, Sequence
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
     from .datastructures.dataclasses import CaseQuery
 
 import ast
+
+
+def fill_in_missing_kwargs(func: Callable, **kwargs) -> Dict[str, Any]:
+    """
+    Fill in missing kwargs with kwargs from the function signature.
+
+    :param func: The function object.
+    :param kwargs: The kwargs to complete.
+    :return: The complete kwargs.
+    """
+    original_kwargs = {pname: p for pname, p in inspect.signature(func).parameters.items() if
+                       p.default != inspect._empty}
+    for og_kwarg in original_kwargs:
+        if og_kwarg not in kwargs:
+            kwargs[og_kwarg] = original_kwargs[og_kwarg].default
+    return kwargs
+
+
+def get_and_import_python_modules_in_a_package(file_paths: List[str],
+                                               parent_package_name: Optional[str] = None) -> List[Optional[ModuleType]]:
+    """
+    :param file_paths: The paths to the python files to import.
+    :param parent_package_name: The name of the parent package to use for relative imports.
+    :return: The imported modules.
+    """
+    package_path = dirname(file_paths[0])
+    package_import_path = get_import_path_from_path(package_path)
+    file_names = [Path(file_path).name.replace(".py", "") for file_path in file_paths]
+    module_import_paths = [
+        f"{package_import_path}.{file_name}" if package_import_path else file_name
+        for file_name in file_names
+    ]
+    modules = [
+        importlib.import_module(module_import_path, package=parent_package_name)
+        if os.path.exists(file_paths[i]) else None
+        for i, module_import_path in enumerate(module_import_paths)
+    ]
+    for module in modules:
+        if module is not None:
+            importlib.reload(module)
+    return modules
+
+
+def get_and_import_python_module(python_file_path: str, package_import_path: Optional[str] = None,
+                                 parent_package_name: Optional[str] = None) -> ModuleType:
+    """
+    :param python_file_path: The path to the python file to import.
+    :param package_import_path: The import path of the package that contains the python file.
+    :param parent_package_name: The name of the parent package to use for relative imports.
+    :return: The imported module.
+    """
+    if package_import_path is None:
+        package_path = dirname(python_file_path)
+        package_import_path = get_import_path_from_path(package_path)
+    file_name = Path(python_file_path).name.replace(".py", "")
+    module_import_path = f"{package_import_path}.{file_name}" if package_import_path else file_name
+    module = importlib.import_module(module_import_path, package=parent_package_name)
+    importlib.reload(module)
+    return module
 
 
 def str_to_snake_case(snake_str: str) -> str:
@@ -88,6 +147,59 @@ def are_results_subclass_of_types(result_types: List[Any], types_: List[Type]) -
         if not any(issubclass(rt, t) for t in types_):
             return False
     return True
+
+
+def get_origin_type_of_function_output(func: Callable) -> Optional[Type]:
+    """
+    Get the origin type of a function return type.
+
+    :param func: The function object.
+    """
+    origin_type: Optional[Type] = None
+    try:
+        origin_type = get_origin(get_type_hints(func)['return'])
+    except NameError:
+        return_annotation = inspect.signature(func).return_annotation
+        if any(return_annotation.startswith(t) for t in ['List', 'list', 'typing.List']):
+            origin_type = list
+        elif any(return_annotation.startswith(t) for t in ['Type', 'type', 'typing.Type']):
+            origin_type = type
+    if origin_type:
+        origin_type = get_type_from_type_hint(origin_type)
+    return origin_type
+
+
+def get_arg_type_of_function_output(func: Callable, output_type: Type, *func_args, package_name: Optional[str] = None):
+    if output_type is Self and len(func_args) > 0:
+        func_class = get_method_class_if_exists(func, *func_args)
+        if func_class is not None:
+            return func_class
+        else:
+            raise ValueError(f"The function {func} is not a method of a class,"
+                             f" and the output type is {Self}.")
+    elif type(output_type) is str:
+        # If the type is a string, it might be a forward reference or a type hint.
+        # We can try to resolve it using the current module's globals.
+        if output_type in func.__globals__:
+            return func.__globals__[output_type]
+        else:
+            if package_name:
+                # If a package name is provided, try to resolve it as a module import.
+                try:
+                    module = sys.modules[package_name]
+                    return module.__dict__[output_type]
+                except (ImportError, KeyError):
+                    pass
+            try:
+                module_name = '.'.join(output_type.split('.')[:-1])
+                if package_name:
+                    module_name = f"{package_name}.{module_name}"
+                type_name = output_type.split('.')[-1]
+                return importlib.import_module(module_name).__dict__[type_name]
+            except (ImportError, KeyError):
+                raise ValueError(f"Output type '{output_type}' could not be resolved in the current scope.")
+    else:
+        return output_type
 
 
 def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
@@ -125,20 +237,28 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                 try:
                     scope[asname] = importlib.import_module(module_name, package=package_name)
                 except ImportError as e:
-                    print(f"Could not import {module_name}: {e}")
+                    logger.warning(f"Could not import {module_name}: {e}")
         elif isinstance(node, ast.ImportFrom):
             module_name = node.module
             for alias in node.names:
                 name = alias.name
                 asname = alias.asname or name
                 try:
+                    if node.level > 0:  # Handle relative imports
+                        package_name = get_import_path_from_path(Path(os.path.join(file_path, *['..'] * node.level)).resolve())
                     if package_name is not None and node.level > 0:  # Handle relative imports
                         module_rel_path = Path(os.path.join(file_path, *['..'] * node.level, module_name)).resolve()
                         idx = str(module_rel_path).rfind(package_name)
                         if idx != -1:
                             module_name = str(module_rel_path)[idx:].replace(os.path.sep, '.')
-                    module = importlib.import_module(module_name, package=package_name)
-                    scope[asname] = getattr(module, name)
+                    try:
+                        module = importlib.import_module(module_name, package=package_name)
+                    except ModuleNotFoundError:
+                        module = importlib.import_module(f"{package_name}.{module_name}")
+                    if name == "*":
+                        scope.update(module.__dict__)
+                    else:
+                        scope[asname] = getattr(module, name)
                 except (ImportError, AttributeError) as e:
                     logger.warning(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
 
@@ -218,7 +338,8 @@ def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optio
     :param func_doc: The function docstring to use for encapsulation.
     :return: The encapsulated user input string.
     """
-    if func_signature not in user_input:
+    func_name = func_signature.split('(')[0].strip()
+    if func_name not in user_input:
         new_user_input = func_signature + "\n    "
         if func_doc is not None:
             new_user_input += f"\"\"\"{func_doc}\"\"\"" + "\n    "
@@ -620,6 +741,8 @@ def typing_to_python_type(typing_hint: Type) -> Type:
         return set
     elif typing_hint in [dict, Dict]:
         return dict
+    elif typing_hint in [type, Type]:
+        return type
     else:
         return typing_hint
 
@@ -646,18 +769,21 @@ def capture_variable_assignment(code: str, variable_name: str) -> Optional[str]:
     return assignment
 
 
-def get_func_rdr_model_path(func: Callable, model_dir: str) -> str:
+def get_func_rdr_model_path(func: Callable, model_dir: str, include_file_name: bool = False) -> str:
     """
     :param func: The function to get the model path for.
     :param model_dir: The directory to save the model to.
+    :param include_file_name: Whether to include the file name in the model name.
     :return: The path to the model file.
     """
-    return os.path.join(model_dir, f"{get_func_rdr_model_name(func)}.json")
+    return os.path.join(model_dir, get_func_rdr_model_name(func, include_file_name=include_file_name),
+                        f"{get_func_rdr_model_name(func)}_rdr.py")
 
 
 def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> str:
     """
     :param func: The function to get the model name for.
+    :param include_file_name: Whether to include the file name in the model name.
     :return: The name of the model.
     """
     func_name = get_method_name(func)
@@ -669,7 +795,7 @@ def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> 
         model_name = ''
     model_name += f"{func_class_name}_" if func_class_name else ""
     model_name += f"{func_name}"
-    return model_name
+    return str_to_snake_case(model_name)
 
 
 def stringify_hint(tp):
@@ -713,6 +839,46 @@ origin_type_to_hint = {
     dict: Dict,
     tuple: Tuple,
 }
+
+
+def get_file_that_ends_with(directory_path: str, suffix: str) -> Optional[str]:
+    """
+    Get the file that ends with the given suffix in the model directory.
+
+    :param directory_path: The path to the directory where the file is located.
+    :param suffix: The suffix to search for.
+    :return: The path to the file that ends with the given suffix, or None if not found.
+    """
+    files = [f for f in os.listdir(directory_path) if f.endswith(suffix)]
+    if files:
+        return files[0]
+    return None
+
+def get_function_return_type(func: Callable) -> Union[Type, None, Tuple[Type, ...]]:
+    """
+    Get the return type of a function.
+
+    :param func: The function to get the return type for.
+    :return: The return type of the function, or None if not specified.
+    """
+    sig = inspect.signature(func)
+    if sig.return_annotation == inspect.Signature.empty:
+        return None
+    type_hint = sig.return_annotation
+    return get_type_from_type_hint(type_hint)
+
+
+def get_type_from_type_hint(type_hint: Type) -> Union[Type, Tuple[Type, ...]]:
+    origin = get_origin(type_hint)
+    args = get_args(type_hint)
+    if origin not in [list, set, None, Union]:
+        raise TypeError(f"{origin} is not a handled return type for type hint {type_hint}")
+    if origin is None:
+        return typing_to_python_type(type_hint)
+    if args is None or len(args) == 0:
+        return typing_to_python_type(type_hint)
+    return args
+
 
 
 def extract_types(tp, seen: Set = None) -> Set[type]:
@@ -1025,7 +1191,8 @@ def get_method_class_name_if_exists(method: Callable) -> Optional[str]:
             return method.__self__.__name__
         elif hasattr(method.__self__, "__class__"):
             return method.__self__.__class__.__name__
-    return method.__qualname__.split('.')[0] if hasattr(method, "__qualname__") else None
+    return (method.__qualname__.split('.')[0]
+            if hasattr(method, "__qualname__") and '.' in method.__qualname__ else None)
 
 
 def get_method_class_if_exists(method: Callable, *args) -> Optional[Type]:
@@ -1123,6 +1290,7 @@ def get_full_class_name(cls):
 def recursive_subclasses(cls):
     """
     Copied from: https://github.com/tomsch420/random-events/blob/master/src/random_events/utils.py#L6C1-L21C101
+
     :param cls: The class.
     :return: A list of the classes subclasses.
     """
@@ -1593,6 +1761,13 @@ def get_all_subclasses(cls: Type) -> Dict[str, Type]:
     return all_subclasses
 
 
+def make_tuple(value: Any) -> Any:
+    """
+    Make a tuple from a value.
+    """
+    return tuple(value) if is_iterable(value) else (value,)
+
+
 def make_set(value: Any) -> Set:
     """
     Make a set from a value.
@@ -2012,7 +2187,10 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
         else:
             filename = filename or "rule_tree"
             de.to_dotfile(f"{filename}{'.dot'}")
-            de.to_picture(f"{filename}{'.svg'}")
+            try:
+                de.to_picture(f"{filename}{'.svg'}")
+            except FileNotFoundError as e:
+                logger.warning(f"{e}")
 
 
 def draw_tree(root: Node, fig: Figure):
@@ -2061,3 +2239,17 @@ def encapsulate_code_lines_into_a_function(code_lines: List[str], function_name:
     if f"return {function_name}({args})" not in code:
         code = code.strip() + f"\nreturn {function_name}({args})"
     return code
+
+
+def get_method_object_from_pytest_request(request) -> Callable:
+    test_module = request.module.__name__  # e.g., "test_my_module"
+    test_class = request.cls.__name__ if request.cls else None  # if inside a class
+    test_name = request.node.name
+    func = importlib.import_module(test_module)
+    if test_class:
+        func = getattr(getattr(func, test_class), test_name)
+    else:
+        func = getattr(func, test_name)
+    return func
+
+

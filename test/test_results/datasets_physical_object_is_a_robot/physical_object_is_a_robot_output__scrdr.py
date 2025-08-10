@@ -7,6 +7,9 @@ from .physical_object_is_a_robot_output__scrdr_defs import *
 attribute_name = 'output_'
 conclusion_type = (bool,)
 mutually_exclusive = True
+name = 'output_'
+case_type = Dict
+case_name = 'PhysicalObject_is_a_robot'
 
 
 def classify(case: Dict, **kwargs) -> Optional[bool]:

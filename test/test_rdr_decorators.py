@@ -14,7 +14,6 @@ class RDRDecoratorsTestCase(unittest.TestCase):
         self.physical_object._is_a_robot_rdr.fit = False
         self.assertFalse(self.physical_object.is_a_robot())
         self.assertTrue(self.robot.is_a_robot())
-        self.physical_object._is_a_robot_rdr.save()
 
     def test_select_objects_that_are_parts_of_robots(self):
         self.physical_object._select_parts_rdr.fit = False
@@ -24,4 +23,3 @@ class RDRDecoratorsTestCase(unittest.TestCase):
             self.assertIn(part, self.robot.parts)
         self.assertNotIn(self.part_3, selected_parts)
         self.assertNotIn(self.robot, selected_parts)
-        self.physical_object._select_parts_rdr.save()

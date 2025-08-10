@@ -1,9 +1,10 @@
-import importlib
 import sys
 from os.path import dirname
 
 import pytest
 from typing_extensions import Callable, Type
+
+from ripple_down_rules.utils import get_method_object_from_pytest_request
 
 try:
     from PyQt6.QtWidgets import QApplication
@@ -31,6 +32,7 @@ if RDRCaseViewer is not None and QApplication is not None and use_gui:
 def handles_and_containers_world() -> World:
     return HandlesAndContainersWorld().create()
 
+
 def get_possible_drawers() -> List[Drawer]:
     """
     Get all possible drawer types.
@@ -42,6 +44,7 @@ def get_possible_drawers() -> List[Drawer]:
             view = Drawer(handle, container, world=world)
             all_possible_drawers.append(view)
     return all_possible_drawers
+
 
 @pytest.fixture
 def drawer_case_queries() -> List[CaseQuery]:
@@ -124,16 +127,6 @@ def drawer_rdr(drawer_case_query, drawer_cabinet_human_expert) -> GeneralRDR:
     possibilities_rdr_verification(rdr, drawer_case_query)
     return rdr
 
-def get_method_object_from_pytest_request(request) -> Callable:
-    test_module = request.module.__name__  # e.g., "test_my_module"
-    test_class = request.cls.__name__ if request.cls else None  # if inside a class
-    test_name = request.node.name
-    func = importlib.import_module(test_module)
-    if test_class:
-        func = getattr(getattr(func, test_class), test_name)
-    else:
-        func = getattr(func, test_name)
-    return func
 
 @pytest.fixture
 def drawer_cabinet_rdr(request, drawer_cabinet_human_expert) -> GeneralRDR:

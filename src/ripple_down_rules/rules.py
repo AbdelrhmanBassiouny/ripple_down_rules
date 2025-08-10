@@ -1,72 +1,143 @@
 from __future__ import annotations
 
-import logging
 import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from types import NoneType
 from uuid import uuid4
 
-from anytree import NodeMixin
-from sqlalchemy.orm import DeclarativeBase as SQLTable
+from anytree import Node
 from typing_extensions import List, Optional, Self, Union, Dict, Any, Tuple, Type, Set
 
 from .datastructures.callable_expression import CallableExpression
 from .datastructures.case import Case
 from .datastructures.dataclasses import CaseFactoryMetaData, CaseQuery
 from .datastructures.enums import RDREdge, Stop
-from .datastructures.tracked_object import TrackedObjectMixin
-from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_type_from_string
 from .helpers import get_an_updated_case_copy
+from .utils import SubclassJSONSerializer, conclusion_to_json, get_full_class_name, get_type_from_string
 
 
-class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
-    fired: Optional[bool] = None
+@dataclass
+class Rule(SubclassJSONSerializer, ABC):
+    conditions: Optional[CallableExpression] = field(default=None)
+    """
+    The conditions of the rule, which is a callable expression that takes a case and returns a boolean.
+    """
+    conclusion: Optional[CallableExpression] = field(default=None)
+    """
+    The conclusion of the rule, which is a callable expression that takes a case and returns a value.
+    """
+    _parent: Optional[Rule] = field(default=None)
+    """
+    The parent rule of this rule in the ripple down rules tree.
+    """
+    corner_case: Optional[Any] = field(default=None)
+    """
+    The corner case for which this rule was created.
+    """
+    _weight: Optional[RDREdge] = field(default=None)
+    """
+    The weight of the rule, which is the type of edge connecting the rule to its parent.
+    """
+    conclusion_name: Optional[str] = field(default=None)
+    """
+    The name of the conclusion of the rule, which is used to identify the conclusion
+    """
+    uid: str = field(default_factory=lambda: str(uuid4().int))
+    """
+    A unique id for the rule using uuid4
+    """
+    corner_case_metadata: Optional[CaseFactoryMetaData] = field(default=None)
+    """
+    Metadata about the corner case, such as the factory that created it or the scenario it is based on.
+    """
+    json_serialization: Optional[Dict[str, Any]] = field(init=False, default=None)
+    """
+    The JSON serialization of the rule, which is used to serialize the rule to JSON.
+    """
+    _name: Optional[str] = field(init=False, default=None)
+    """
+    The name of the rule, which is the names of the conditions and the conclusion
+    """
+    evaluated: bool = field(init=False, default=False)
+    """
+    Whether the rule has been evaluated or not (i.e. whether the rule has been reached during evaluation of the ripple 
+    down rules tree and the conditions have been checked).
+    """
+    last_conclusion: Optional[Any] = field(init=False, default=None)
+    """
+    The last conclusion of the rule, which is the conclusion of the rule when it was last evaluated.
+    """
+    contributed: bool = field(init=False, default=False)
+    """
+    Whether the rule has contributed by a value, meaning that it has fired and the conclusion has been added to the case.
+    """
+    contributed_to_case_query: bool = field(init=False, default=False)
+    """
+    Whether the rule has contributed to the case query, meaning that it has fired and the conclusion is relevant to the
+    case query.
+    """
+    fired: Optional[bool] = field(init=False, default=None)
     """
     Whether the rule has fired or not.
     """
-    mutually_exclusive: bool
+    mutually_exclusive: bool = field(init=False, default=True)
     """
     Whether the rule is mutually exclusive with other rules.
     """
+    node: Optional[Node] = field(init=False, default=None)
 
-    def __init__(self, conditions: Optional[CallableExpression] = None,
-                 conclusion: Optional[CallableExpression] = None,
-                 parent: Optional[Rule] = None,
-                 corner_case: Optional[Union[Case, SQLTable]] = None,
-                 weight: Optional[str] = None,
-                 conclusion_name: Optional[str] = None,
-                 uid: Optional[str] = None,
-                 corner_case_metadata: Optional[CaseFactoryMetaData] = None):
-        """
-        A rule in the ripple down rules classifier.
+    def __post_init__(self):
+        self.node = Node(self.name, parent=self.parent.node if self.parent else None)
+        self.node.weight = self.weight.value if self.weight else None
+        self.node._rdr_rule = self
 
-        :param conditions: The conditions of the rule.
-        :param conclusion: The conclusion of the rule when the conditions are met.
-        :param parent: The parent rule of this rule.
-        :param corner_case: The corner case that this rule is based on/created from.
-        :param weight: The weight of the rule, which is the type of edge connecting the rule to its parent.
-        :param conclusion_name: The name of the conclusion of the rule.
-        :param uid: The unique id of the rule.
-        :param corner_case_metadata: Metadata about the corner case, such as the factory that created it or the
-         scenario it is based on.
+    @property
+    def descendants(self) -> List[Rule]:
         """
-        super(Rule, self).__init__()
-        self.conclusion = conclusion
-        self.corner_case = corner_case
-        self.corner_case_metadata: Optional[CaseFactoryMetaData] = corner_case_metadata
-        self.parent = parent
-        self.weight: Optional[str] = weight
-        self.conditions = conditions if conditions else None
-        self.conclusion_name: Optional[str] = conclusion_name
-        self.json_serialization: Optional[Dict[str, Any]] = None
-        self._name: Optional[str] = None
-        # generate a unique id for the rule using uuid4
-        self.uid: str = uid if uid else str(uuid4().int)
-        self.evaluated: bool = False
-        self._user_defined_name: Optional[str] = None
-        self.last_conclusion: Optional[Any] = None
-        self.contributed: bool = False
-        self.contributed_to_case_query: bool = False
+        :return: the descendants of this rule, which are the rules that are children of this rule in the ripple down
+         rules tree.
+        """
+        return [child._rdr_rule for child in self.node.descendants]
+
+    @property
+    def children(self) -> List[Rule]:
+        """
+        :return: the children of this rule, which are the rules that are direct children of this rule in the ripple down
+         rules tree.
+        """
+        return [child._rdr_rule for child in self.node.children]
+
+    @property
+    def parent(self):
+        """
+        :return: The parent rule of this rule.
+        """
+        return self._parent
+
+    @parent.setter
+    def parent(self, new_parent: Optional[Rule]):
+        """
+        Set the parent rule of this rule.
+        :param new_parent: The new parent rule to set.
+        """
+        self._parent = new_parent
+        if self.node:
+            self.node.parent = new_parent.node
+
+    @property
+    def weight(self) -> RDREdge:
+        return self._weight
+
+    @weight.setter
+    def weight(self, new_weight: RDREdge):
+        """
+        Set the weight of the rule, which is the type of edge connecting the rule to its parent.
+        :param new_weight: The new weight to set.
+        """
+        self._weight = new_weight
+        if self.node:
+            self.node.weight = new_weight.value
 
     def get_an_updated_case_copy(self, case: Case) -> Case:
         """
@@ -97,23 +168,6 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
         else:
             return "white"
 
-    @property
-    def user_defined_name(self) -> Optional[str]:
-        """
-        Get the user defined name of the rule, if it exists.
-        """
-        if self._user_defined_name is None:
-            if self.conditions and self.conditions.user_input and "def " in self.conditions.user_input:
-                # If the conditions have a user input, use it as the name
-                func_name = self.conditions.user_input.split('(')[0].replace('def ', '').strip()
-                if func_name == self.conditions.encapsulating_function_name:
-                    self._user_defined_name = str(self.conditions)
-                else:
-                    self._user_defined_name = func_name
-            else:
-                self._user_defined_name = f"Rule_{self.uid}"
-        return self._user_defined_name
-
     @classmethod
     def from_case_query(cls, case_query: CaseQuery, parent: Optional[Rule] = None) -> Rule:
         """
@@ -125,7 +179,7 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
         """
         corner_case_metadata = CaseFactoryMetaData.from_case_query(case_query)
         return cls(conditions=case_query.conditions, conclusion=case_query.target,
-                   corner_case=case_query.case, parent=parent,
+                   corner_case=case_query.case, _parent=parent,
                    corner_case_metadata=corner_case_metadata,
                    conclusion_name=case_query.attribute_name)
 
@@ -215,6 +269,10 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
     def generated_conditions_function_name(self) -> str:
         return f"conditions_{self.uid}"
 
+    @property
+    def generated_corner_case_object_name(self) -> str:
+        return f"corner_case_{self.uid}"
+
     def get_conclusion_as_source_code(self, conclusion: Any, parent_indent: str = "") -> Tuple[Optional[str], str]:
         """
         Convert the conclusion of a rule to source code.
@@ -283,34 +341,22 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
         pass
 
     def _to_json(self) -> Dict[str, Any]:
-        try:
-            corner_case = SubclassJSONSerializer.to_json_static(self.corner_case) if self.corner_case else None
-        except Exception as e:
-            logging.debug("Failed to serialize corner case to json, setting it to None. Error: %s", e)
-            corner_case = None
         json_serialization = {"_type": get_full_class_name(type(self)),
                               "conditions": self.conditions.to_json(),
                               "conclusion": conclusion_to_json(self.conclusion),
                               "parent": self.parent.json_serialization if self.parent else None,
-                              "corner_case": corner_case,
                               "conclusion_name": self.conclusion_name,
-                              "weight": self.weight,
+                              "weight": self.weight.value,
                               "uid": self.uid}
         return json_serialization
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any]) -> Rule:
-        try:
-            corner_case = Case.from_json(data["corner_case"])
-        except Exception as e:
-            logging.debug("Failed to load corner case from json, setting it to None.")
-            corner_case = None
         loaded_rule = cls(conditions=CallableExpression.from_json(data["conditions"]),
                           conclusion=CallableExpression.from_json(data["conclusion"]),
-                          parent=cls.from_json(data["parent"]),
-                          corner_case=corner_case,
+                          _parent=cls.from_json(data["parent"]),
                           conclusion_name=data["conclusion_name"],
-                          weight=data["weight"],
+                          _weight=RDREdge.from_value(data["weight"]),
                           uid=data["uid"])
         return loaded_rule
 
@@ -327,20 +373,25 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
         Set the name of the rule.
         """
         self._name = new_name
+        self.node.name = new_name
 
     @property
     def semantic_condition_name(self) -> Optional[str]:
         """
         Get the name of the conditions of the rule, which is the user input of the conditions.
         """
-        return self.expression_name(self.conditions)
+        if isinstance(self.conditions, CallableExpression):
+            return self.expression_name(self.conditions)
+        return None
 
     @property
     def semantic_conclusion_name(self) -> Optional[str]:
         """
         Get the name of the conclusion of the rule, which is the user input of the conclusion.
         """
-        return self.expression_name(self.conclusion)
+        if isinstance(self.conclusion, CallableExpression):
+            return self.expression_name(self.conclusion)
+        return None
 
     @staticmethod
     def expression_name(expression: CallableExpression) -> str:
@@ -350,7 +401,8 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
         """
         if expression.user_defined_name is not None and expression.user_defined_name != expression.encapsulating_function_name:
             return expression.user_defined_name.strip()
-        func_name = expression.user_input.split('(')[0].replace('def ', '').strip() if "def " in expression.user_input else None
+        func_name = expression.user_input.split('(')[0].replace('def ',
+                                                                '').strip() if "def " in expression.user_input else None
         if func_name is not None and func_name != expression.encapsulating_function_name:
             return func_name
         elif expression.user_input:
@@ -367,20 +419,29 @@ class Rule(NodeMixin, SubclassJSONSerializer, TrackedObjectMixin, ABC):
     def __repr__(self):
         return self.__str__()
 
+    def __eq__(self, other):
+        if not isinstance(other, Rule):
+            return False
+        return other.uid == self.uid
 
+    def __hash__(self):
+        return hash(self.uid)
+
+
+@dataclass
 class HasAlternativeRule:
     """
     A mixin class for rules that have an alternative rule.
     """
-    _alternative: Optional[Rule] = None
+    _alternative: Optional[Rule] = field(init=False, default=None)
     """
     The alternative rule of the rule, which is evaluated when the rule doesn't fire.
     """
-    furthest_alternative: Optional[List[Rule]] = None
+    furthest_alternative: Optional[List[Rule]] = field(init=False, default=None)
     """
     The furthest alternative rule of the rule, which is the last alternative rule in the chain of alternative rules.
     """
-    all_alternatives: Optional[List[Rule]] = None
+    all_alternatives: Optional[List[Rule]] = field(init=False, default=None)
     """
     All alternative rules of the rule, which is all the alternative rules in the chain of alternative rules.
     """
@@ -388,9 +449,6 @@ class HasAlternativeRule:
     @property
     def alternative(self) -> Optional[Rule]:
         return self._alternative
-
-    def set_immediate_alternative(self, alternative: Optional[Rule]):
-        self._alternative = alternative
 
     @alternative.setter
     def alternative(self, new_rule: Rule):
@@ -404,13 +462,14 @@ class HasAlternativeRule:
             self.furthest_alternative[-1].alternative = new_rule
         else:
             new_rule.parent = self
-            new_rule.weight = RDREdge.Alternative.value if not new_rule.weight else new_rule.weight
+            new_rule.weight = RDREdge.Alternative if not new_rule.weight else new_rule.weight
             self._alternative = new_rule
         self.furthest_alternative = [new_rule]
 
 
+@dataclass
 class HasRefinementRule:
-    _refinement: Optional[HasAlternativeRule] = None
+    _refinement: Optional[HasAlternativeRule] = field(init=False, default=None)
     """
     The refinement rule of the rule, which is evaluated when the rule fires.
     """
@@ -431,16 +490,18 @@ class HasRefinementRule:
             self.refinement.alternative = new_rule
         else:
             new_rule.parent = self
-            new_rule.weight = RDREdge.Refinement.value if not isinstance(new_rule, MultiClassFilterRule) else new_rule.weight
+            new_rule.weight = RDREdge.Refinement if not isinstance(new_rule,
+                                                                   MultiClassFilterRule) else new_rule.weight
             self._refinement = new_rule
 
 
+@dataclass(eq=False)
 class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
     """
     A rule in the SingleClassRDR classifier, it can have a refinement or an alternative rule or both.
     """
 
-    mutually_exclusive: bool = True
+    mutually_exclusive: bool = field(init=False, default=True)
 
     def evaluate_next_rule(self, x: Case) -> SingleClassRule:
         if self.fired:
@@ -452,7 +513,7 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
     def fit_rule(self, case_query: CaseQuery):
         corner_case_metadata = CaseFactoryMetaData.from_case_query(case_query)
         new_rule = SingleClassRule(case_query.conditions, case_query.target,
-                                   corner_case=case_query.case, parent=self,
+                                   corner_case=case_query.case, _parent=self,
                                    corner_case_metadata=corner_case_metadata,
                                    )
         if self.fired:
@@ -474,18 +535,19 @@ class SingleClassRule(Rule, HasAlternativeRule, HasRefinementRule):
         return loaded_rule
 
     def _if_statement_source_code_clause(self) -> str:
-        return "elif" if self.weight == RDREdge.Alternative.value else "if"
+        return "elif" if self.weight == RDREdge.Alternative else "if"
 
 
+@dataclass(eq=False)
 class MultiClassRefinementRule(Rule, HasAlternativeRule, ABC):
     """
     A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule.
     """
-    top_rule: Optional[MultiClassTopRule] = None
+    top_rule: Optional[MultiClassTopRule] = field(init=False, default=None)
     """
     The top rule of the rule, which is the nearest ancestor that fired and this rule is a refinement of.
     """
-    mutually_exclusive: bool = False
+    mutually_exclusive: bool = field(init=False, default=False)
 
     def _to_json(self) -> Dict[str, Any]:
         self.json_serialization = {**Rule._to_json(self),
@@ -504,18 +566,20 @@ class MultiClassRefinementRule(Rule, HasAlternativeRule, ABC):
         return loaded_rule
 
     def _if_statement_source_code_clause(self) -> str:
-        return "elif" if self.weight == RDREdge.Alternative.value else "if"
+        return "elif" if self.weight == RDREdge.Alternative else "if"
 
 
+@dataclass(eq=False)
 class MultiClassStopRule(MultiClassRefinementRule):
     """
     A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
     the conclusion of the rule is a Stop category meant to stop the parent conclusion from being made.
     """
-
-    def __init__(self, *args, **kwargs):
-        super(MultiClassRefinementRule, self).__init__(*args, **kwargs)
-        self.conclusion = CallableExpression(conclusion_type=(Stop,), conclusion=Stop.stop)
+    conclusion: CallableExpression = field(default_factory=lambda: CallableExpression(conclusion_type=(Stop,),
+                                                                                      conclusion=Stop.stop))
+    """
+    The conclusion of the rule, which is a CallableExpression that returns a Stop category.
+    """
 
     def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassRefinementRule, MultiClassTopRule]]:
         if self.fired:
@@ -530,15 +594,13 @@ class MultiClassStopRule(MultiClassRefinementRule):
         return None, f"{parent_indent}{' ' * 4}pass\n"
 
 
+@dataclass(eq=False)
 class MultiClassFilterRule(MultiClassRefinementRule, HasRefinementRule):
     """
     A rule in the MultiClassRDR classifier, it can have an alternative rule and a top rule,
     the conclusion of the rule is a Filter category meant to filter the parent conclusion.
     """
-
-    def __init__(self, *args, **kwargs):
-        super(MultiClassRefinementRule, self).__init__(*args, **kwargs)
-        self.weight = RDREdge.Filter.value
+    weight: RDREdge = field(init=False, default_factory=lambda: RDREdge.Filter)
 
     def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassRefinementRule, MultiClassTopRule]]:
         if self.fired:
@@ -588,15 +650,13 @@ class MultiClassFilterRule(MultiClassRefinementRule, HasRefinementRule):
         return loaded_rule
 
 
+@dataclass(eq=False)
 class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
     """
     A rule in the MultiClassRDR classifier, it can have a refinement and a next rule.
     """
-    mutually_exclusive: bool = False
-
-    def __init__(self, *args, **kwargs):
-        super(MultiClassTopRule, self).__init__(*args, **kwargs)
-        self.weight = RDREdge.Next.value
+    mutually_exclusive: bool = field(init=False, default=False)
+    weight: RDREdge = field(init=False, default_factory=lambda: RDREdge.Next)
 
     def evaluate_next_rule(self, x: Case) -> Optional[Union[MultiClassStopRule, MultiClassTopRule]]:
         if self.fired and self.refinement:
@@ -612,7 +672,7 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         if self.fired and case_query.target != self.conclusion:
             if refinement_type in [None, MultiClassStopRule]:
                 new_rule = MultiClassStopRule(case_query.conditions, corner_case=case_query.case,
-                                                     parent=self)
+                                              _parent=self)
             elif refinement_type is MultiClassFilterRule:
                 new_rule = MultiClassFilterRule.from_case_query(case_query, parent=self)
             else:
@@ -623,7 +683,7 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
             self.alternative = MultiClassTopRule.from_case_query(case_query, parent=self)
 
     def _to_json(self) -> Dict[str, Any]:
-        self.json_serialization = {**Rule._to_json(self),
+        self.json_serialization = {**super()._to_json(),
                                    "refinement": self.refinement.to_json() if self.refinement is not None else None,
                                    "alternative": self.alternative.to_json() if self.alternative is not None else None}
         return self.json_serialization

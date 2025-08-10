@@ -1,0 +1,60 @@
+{
+    "_type": "ripple_down_rules.rdr.GeneralRDR",
+    "start_rules": {
+        "output_": {
+            "_type": "ripple_down_rules.rdr.MultiClassRDR",
+            "start_rule": {
+                "_type": "ripple_down_rules.rules.MultiClassTopRule",
+                "conditions": {
+                    "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
+                    "user_input": "def _get_value(case):\n    def conditions_for_robot_get_contained_objects(self_: Robot, output_: PhysicalObject) -> bool:\n        \"\"\"Get conditions on whether it's possible to conclude a value for Robot_get_contained_objects.output_  of type PhysicalObject.\"\"\"\n        return len(self_.parts) > 0\n    return conditions_for_robot_get_contained_objects(**case)\n    ",
+                    "conclusion_type": [
+                        "builtins.bool"
+                    ],
+                    "scope": {
+                        "PhysicalObject": "relational_model.PhysicalObject",
+                        "Robot": "decorator_model.Robot"
+                    },
+                    "conclusion": {
+                        "_type": "builtins.NoneType",
+                        "value": null
+                    },
+                    "mutually_exclusive": false
+                },
+                "conclusion": {
+                    "_type": "ripple_down_rules.datastructures.callable_expression.CallableExpression",
+                    "user_input": "def _get_value(case):\n    def robot_get_contained_objects(self_: Robot, output_: PhysicalObject) -> List[PhysicalObject]:\n        \"\"\"Get possible value(s) for Robot_get_contained_objects.output_  of type PhysicalObject.\"\"\"\n        contained_objects = []\n        for part in self_.parts:\n            contained_objects.extend(part.contained_objects)\n        return contained_objects\n    return robot_get_contained_objects(**case)\n    ",
+                    "conclusion_type": [
+                        "relational_model.PhysicalObject",
+                        "builtins.set",
+                        "builtins.list"
+                    ],
+                    "scope": {
+                        "PhysicalObject": "relational_model.PhysicalObject",
+                        "List": "typing.List",
+                        "Robot": "decorator_model.Robot"
+                    },
+                    "conclusion": {
+                        "_type": "builtins.NoneType",
+                        "value": null
+                    },
+                    "mutually_exclusive": false
+                },
+                "parent": null,
+                "conclusion_name": "output_",
+                "weight": "",
+                "uid": "167615852950279355863004646114673699744",
+                "refinement": null,
+                "alternative": null
+            },
+            "generated_python_file_name": "robot_get_contained_objects_output__mcrdr",
+            "name": "output_",
+            "case_type": "typing.Dict",
+            "case_name": "Robot_get_contained_objects"
+        }
+    },
+    "generated_python_file_name": "robot_get_contained_objects_rdr",
+    "name": "output_",
+    "case_type": "typing.Dict",
+    "case_name": "Robot_get_contained_objects"
+}

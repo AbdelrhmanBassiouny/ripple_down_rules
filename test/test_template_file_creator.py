@@ -5,6 +5,7 @@ from typing_extensions import List
 
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import PromptFor
+from ripple_down_rules.helpers import create_case_query_from_method
 from ripple_down_rules.rdr_decorators import RDRDecorator
 from ripple_down_rules.user_interface.template_file_creator import TemplateFileCreator
 from ripple_down_rules.utils import make_set
@@ -30,10 +31,11 @@ def test_func_name_with_two_type():
     case_query: CaseQuery = CaseQuery(world, "views", (Handle, Container), False)
 
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, case_query)
-    assert func_name == "world_views_of_type_handle_or_container"
+    assert func_name in ["world_views_of_type_handle_or_container", "world_views_of_type_container_or_handle"]
 
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conditions, case_query)
-    assert func_name == "conditions_for_world_views_of_type_handle_or_container"
+    assert func_name in ["conditions_for_world_views_of_type_handle_or_container",
+                         "conditions_for_world_views_of_type_container_or_handle"]
 
 def test_func_name_with_not_needed_types():
     # Test the function name
@@ -53,7 +55,8 @@ def test_rdr_decorator_func_name():
         def select_objects_that_are_parts_of_robot(self, objects: List[PhysicalObject], robot: Robot) -> List[PhysicalObject]:
             pass
     example = Example()
-    cq = RDRDecorator.create_case_query_from_method(example.is_a_robot, {"output_": None}, bool, True)
+    cq = create_case_query_from_method(example.is_a_robot, {"output_": None}, bool, True,
+                                                    func_args=(), func_kwargs={})
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, cq)
     assert func_name == "example_is_a_robot"
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conditions, cq)
@@ -61,9 +64,9 @@ def test_rdr_decorator_func_name():
 
     objects = [Part("Object1"), Part("Object2"), Part("Object3")]
     robot = Robot("Robot1", objects[:2])
-    cq = RDRDecorator.create_case_query_from_method(
+    cq = create_case_query_from_method(
         example.select_objects_that_are_parts_of_robot, {"output_": None}, (List[PhysicalObject],),
-        False, args=(objects, robot))
+        False, func_args=(objects, robot), func_kwargs={})
 
     func_name = TemplateFileCreator.get_func_name(PromptFor.Conclusion, cq)
     assert func_name == "example_select_objects_that_are_parts_of_robot"

@@ -7,6 +7,24 @@ from typing_extensions import List, Dict, Any, Type
 from ripple_down_rules.utils import SubclassJSONSerializer
 
 
+class InferMode(Enum):
+    """
+    The infer mode of a predicate, whether to infer new relations or retrieve current relations.
+    """
+    Auto = auto()
+    """
+    Inference is done automatically depending on the world state.
+    """
+    Always = auto()
+    """
+    Inference is always performed.
+    """
+    Never = auto()
+    """
+    Inference is never performed.
+    """
+
+
 class ExitStatus(Enum):
     """
     Describes the status at exit of the user interface.
@@ -93,20 +111,6 @@ class Stop(Category):
     stop = "stop"
 
 
-class ExpressionParser(Enum):
-    """
-    Parsers for expressions to evaluate and encapsulate the expression into a callable function.
-    """
-    ASTVisitor: int = auto()
-    """
-    Generic python Abstract Syntax Tree that detects variables, attributes, binary/boolean expressions , ...etc.
-    """
-    SQLAlchemy: int = auto()
-    """
-    Specific for SQLAlchemy expressions on ORM Tables.
-    """
-
-
 class PromptFor(Enum):
     """
     The reason of the prompt. (e.g. get conditions, conclusions, or affirmation).
@@ -129,51 +133,6 @@ class PromptFor(Enum):
 
     def __repr__(self):
         return self.__str__()
-
-
-class CategoricalValue(Enum):
-    """
-    A categorical value is a value that is a category.
-    """
-
-    def __eq__(self, other):
-        if isinstance(other, CategoricalValue):
-            return self.name == other.name
-        elif isinstance(other, str):
-            return self.name == other
-        return self.name == other
-
-    def __hash__(self):
-        return hash(self.name)
-
-    @classmethod
-    def to_list(cls):
-        return list(cls._value2member_map_.keys())
-
-    @classmethod
-    def from_str(cls, category: str):
-        return cls[category.lower()]
-
-    @classmethod
-    def from_strs(cls, categories: List[str]):
-        return [cls.from_str(c) for c in categories]
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return self.__str__()
-
-
-class RDRMode(Enum):
-    Propositional = auto()
-    """
-    Propositional mode, the mode where the rules are propositional.
-    """
-    Relational = auto()
-    """
-    Relational mode, the mode where the rules are relational.
-    """
 
 
 class MCRDRMode(Enum):
@@ -213,33 +172,19 @@ class RDREdge(Enum):
     """
     Filter edge, the edge that represents the filter condition.
     """
+    Empty = ""
+    """
+    Empty edge, used for example for the root/input node of the tree.
+    """
 
-class ValueType(Enum):
-    Unary = auto()
-    """
-    Unary value type (eg. null).
-    """
-    Binary = auto()
-    """
-    Binary value type (eg. True, False).
-    """
-    Discrete = auto()
-    """
-    Discrete value type (eg. 1, 2, 3).
-    """
-    Continuous = auto()
-    """
-    Continuous value type (eg. 1.0, 2.5, 3.4).
-    """
-    Nominal = auto()
-    """
-    Nominal value type (eg. red, blue, green), categories where the values have no natural order.
-    """
-    Ordinal = auto()
-    """
-    Ordinal value type (eg. low, medium, high), categories where the values have a natural order.
-    """
-    Iterable = auto()
-    """
-    Iterable value type (eg. [1, 2, 3]).
-    """
+    @classmethod
+    def from_value(cls, value: str) -> RDREdge:
+        """
+        Convert a string value to an RDREdge enum.
+
+        :param value: The string that represents the edge type.
+        :return: The RDREdge enum.
+        """
+        if value not in cls._value2member_map_:
+            raise ValueError(f"RDREdge {value} is not supported.")
+        return cls._value2member_map_[value]
