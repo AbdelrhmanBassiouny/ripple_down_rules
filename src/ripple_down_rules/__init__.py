@@ -1,4 +1,4 @@
-__version__ = "0.6.70"
+__version__ = "0.6.71"
 
 import logging
 import sys
@@ -10,7 +10,7 @@ try:
     from PyQt6.QtWidgets import QApplication
     app = QApplication(sys.argv)
 except ImportError:
-    pass
+    app = None
 
 
 # Trigger patch

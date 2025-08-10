@@ -2,7 +2,6 @@ import os
 from os.path import dirname
 
 from IPython import embed
-from hypothesis.strategies import recursive
 
 from ripple_down_rules import *
 from ripple_down_rules.datastructures.tracked_object import X
