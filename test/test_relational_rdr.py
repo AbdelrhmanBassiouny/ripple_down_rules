@@ -10,6 +10,7 @@ from ripple_down_rules.datastructures.case import CaseAttribute
 from ripple_down_rules.datastructures.dataclasses import CaseQuery, CallableExpression
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR
+from ripple_down_rules.utils import flatten_list
 
 
 class RelationalRDRTestCase(TestCase):
@@ -70,7 +71,7 @@ class RelationalRDRTestCase(TestCase):
         self.assertEqual(conditions(self.robot), (self.robot.parts is not None and len(self.robot.parts) > 0))
 
     def test_parse_relational_conclusions(self):
-        user_input = "case.parts.contained_objects"
+        user_input = "flatten_list([p.contained_objects for p in case.parts])"
         conclusion = CallableExpression(user_input, (CaseAttribute, PhysicalObject,),
-        mutually_exclusive=False)
+                                        scope={"flatten_list": flatten_list}, mutually_exclusive=False)
         self.assertEqual(conclusion(self.robot), self.target)

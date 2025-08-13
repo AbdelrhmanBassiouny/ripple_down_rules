@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import sqlalchemy
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import MappedAsDataclass, Mapped, mapped_column, relationship, MappedColumn
-from typing_extensions import Tuple, List, Set, Optional, Self
+from typing_extensions import Tuple, List, Set, Optional, Self, ClassVar
 from ucimlrepo import fetch_ucirepo
 
 from ripple_down_rules.datastructures.case import Case, create_cases_from_dataframe
@@ -124,29 +124,33 @@ class Habitat(Category):
     water = "water"
     air = "air"
 
-
+@dataclass(eq=False)
 class PhysicalObject:
     """
     A physical object is an object that can be contained in a container.
     """
-    _rdr_json_dir: str = os.path.join(os.path.dirname(__file__), "test_results")
+    name: str
+    """
+    The name of the object.
+    """
+    _contained_objects: List[PhysicalObject] = field(default_factory=list)
+    """
+    The list of objects contained in this object.
+    """
+    _rdr_json_dir: ClassVar[str] = os.path.join(os.path.dirname(__file__), "test_results")
     """
     The directory where the RDR serialized JSON files are stored.
     """
-    _is_a_robot_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (bool,), True,
+    _is_a_robot_rdr: ClassVar[RDRDecorator] = RDRDecorator(_rdr_json_dir, (bool,), True,
                                                  package_name="test")
     """
     The RDR decorator that is used to determine if the object is a robot or not.
     """
-    _select_parts_rdr: RDRDecorator = RDRDecorator(_rdr_json_dir, (Self,), False,
+    _select_parts_rdr: ClassVar[RDRDecorator] = RDRDecorator(_rdr_json_dir, (Self,), False,
                                                    package_name="test")
     """
     The RDR decorator that is used to determine if the object is a robot or not.
     """
-
-    def __init__(self, name: str, contained_objects: Optional[List[PhysicalObject]] = None):
-        self.name: str = name
-        self._contained_objects: List[PhysicalObject] = contained_objects or []
 
     @property
     def contained_objects(self) -> List[PhysicalObject]:
@@ -170,16 +174,21 @@ class PhysicalObject:
     def __repr__(self):
         return self.name
 
+    def __eq__(self, other):
+        if not isinstance(other, PhysicalObject):
+            return False
+        return self.name == other.name
 
+    def __hash__(self):
+        return hash(self.name)
+
+@dataclass(eq=False)
 class Part(PhysicalObject):
     ...
 
-
+@dataclass(eq=False)
 class Robot(PhysicalObject):
-
-    def __init__(self, name: str, parts: Optional[List[Part]] = None):
-        super().__init__(name)
-        self.parts: List[Part] = parts if parts else []
+    parts: List[Part] = field(default_factory=list)
 
 
 class Base(sqlalchemy.orm.DeclarativeBase):
