@@ -6,7 +6,7 @@ class RDRDecoratorsTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.robot = Robot("Robot1", [Part("Part1"), Part("Part2")])
+        cls.robot = Robot("Robot1", parts=[Part("Part1"), Part("Part2")])
         cls.physical_object = PhysicalObject("Object1", [cls.robot])
         cls.part_3 = Part("Part3")
 
