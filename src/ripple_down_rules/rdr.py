@@ -43,7 +43,7 @@ try:
 except ImportError as e:
     RDRCaseViewer = None
 from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_type_from_string, \
-    is_value_conflicting, extract_function_source, extract_imports, get_full_class_name, \
+    is_value_conflicting, extract_function_or_class_file, extract_imports, get_full_class_name, \
     is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree, \
     get_types_to_import_from_func_type_hints, get_function_return_type, get_file_that_ends_with, \
     get_and_import_python_module, get_and_import_python_modules_in_a_package, get_type_from_type_hint, \
@@ -892,8 +892,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
 
         self.update_rdr_metadata_from_python(main_module)
 
-        functions_source = extract_function_source(defs_module.__file__,
-                                                   all_func_names, include_signature=True)
+        functions_source = extract_function_or_class_file(defs_module.__file__,
+                                                          all_func_names, include_signature=True)
         scope = extract_imports(defs_module.__file__, package_name=parent_package_name)
 
         cases_source, cases_scope = None, None

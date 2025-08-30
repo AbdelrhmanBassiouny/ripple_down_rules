@@ -12,7 +12,7 @@ from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import MCRDRMode
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR, RDRWithCodeWriter
-from ripple_down_rules.utils import render_tree, make_set, extract_function_source
+from ripple_down_rules.utils import render_tree, make_set, extract_function_or_class_file
 from .test_helpers.helpers import get_fit_scrdr, get_fit_mcrdr, get_fit_grdr
 
 try:
@@ -337,10 +337,10 @@ class TestRDR(TestCase):
         main_file_path = os.path.join(modified_model_dir, f"{scrdr.generated_python_file_name}.py")
         filepath = main_file_path.replace(".py", "_defs.py")
         func_name = f"conditions_{scrdr.start_rule.uid}"
-        first_rule_conditions, line_numbers = extract_function_source(filepath,
-                                                                               func_name,
-                                                                               join_lines=False,
-                                                                               return_line_numbers=True)
+        first_rule_conditions, line_numbers = extract_function_or_class_file(filepath,
+                                                                             func_name,
+                                                                             join_lines=False,
+                                                                             return_line_numbers=True)
         self.assertEqual(first_rule_conditions[func_name][-1], "    return case.milk == 1")
         # modify the condition to be case.milk==0
         with open(filepath, "r") as f:
@@ -348,10 +348,10 @@ class TestRDR(TestCase):
         lines[line_numbers[func_name][-1]-1] = "    return case.milk == 0\n"
         with open(filepath, "w") as f:
             f.writelines(lines)
-        first_rule_conditions, line_numbers = extract_function_source(filepath,
-                                                                               func_name,
-                                                                               join_lines=False,
-                                                                               return_line_numbers=True)
+        first_rule_conditions, line_numbers = extract_function_or_class_file(filepath,
+                                                                             func_name,
+                                                                             join_lines=False,
+                                                                             return_line_numbers=True)
         self.assertEqual(first_rule_conditions[func_name][-1], "    return case.milk == 0")
         scrdr: RDRWithCodeWriter
         scrdr.update_from_python(modified_model_dir, python_file_path=main_file_path)

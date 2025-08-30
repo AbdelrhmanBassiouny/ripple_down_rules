@@ -14,7 +14,8 @@ from ..datastructures.case import Case
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import Editor, PromptFor
 from ..utils import str_to_snake_case, get_imports_from_scope, make_list, stringify_hint, \
-    get_imports_from_types, extract_function_source, extract_imports, get_types_to_import_from_type_hints
+    get_imports_from_types, extract_function_or_class_file, extract_imports, get_types_to_import_from_type_hints, \
+    extract_function_or_class_from_source
 
 
 def detect_available_editor() -> Optional[Editor]:
@@ -297,6 +298,10 @@ class TemplateFileCreator:
         with open(file_path, 'r') as f:
             source = f.read()
 
+        return TemplateFileCreator.load_from_source(source, func_name, print_func)
+
+    @staticmethod
+    def load_from_source(source: str, func_name: str, print_func: Callable = print):
         tree = ast.parse(source)
         updates = {}
         for node in tree.body:
@@ -307,12 +312,13 @@ class TemplateFileCreator:
                 exec(source, scope, exec_globals)
                 user_function = exec_globals[func_name]
                 updates[func_name] = user_function
-                print_func(f"\n{Fore.WHITE}Loaded the following function into user namespace:\n{Fore.GREEN}{func_name}{Style.RESET_ALL}")
+                print_func(
+                    f"\n{Fore.WHITE}Loaded the following function into user namespace:\n{Fore.GREEN}{func_name}{Style.RESET_ALL}")
                 break
         if updates:
-            all_code_lines = extract_function_source(file_path,
-                                                          [func_name],
-                                                          join_lines=False)[func_name]
+            all_code_lines = extract_function_or_class_from_source(source,
+                                                                   [func_name],
+                                                                   join_lines=False)[func_name]
             return all_code_lines, updates
         else:
             print_func(f"{Fore.RED}ERROR:: Function `{func_name}` not found.{Style.RESET_ALL}")

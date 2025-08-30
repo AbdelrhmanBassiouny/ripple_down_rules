@@ -265,12 +265,12 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
     return scope
 
 
-def extract_function_source(file_path: str,
-                            function_names: List[str], join_lines: bool = True,
-                            return_line_numbers: bool = False,
-                            include_signature: bool = True,
-                            as_list: bool = False,
-                            is_class: bool = False) \
+def extract_function_or_class_file(file_path: str,
+                                   function_names: List[str], join_lines: bool = True,
+                                   return_line_numbers: bool = False,
+                                   include_signature: bool = True,
+                                   as_list: bool = False,
+                                   is_class: bool = False) \
         -> Union[Dict[str, Union[str, List[str]]],
         Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]]]:
     """
@@ -290,6 +290,33 @@ def extract_function_source(file_path: str,
     with open(file_path, "r") as f:
         source = f.read()
 
+    return extract_function_or_class_from_source(source, function_names, join_lines=join_lines,
+                                                 return_line_numbers=return_line_numbers,
+                                                 include_signature=include_signature, as_list=as_list, is_class=is_class)
+
+
+def extract_function_or_class_from_source(source: str,
+                                          function_names: List[str], join_lines: bool = True,
+                                          return_line_numbers: bool = False,
+                                          include_signature: bool = True,
+                                          as_list: bool = False,
+                                          is_class: bool = False) \
+        -> Union[Dict[str, Union[str, List[str]]],
+        Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]]]:
+    """
+    Extract the source code of a function from a file.
+
+    :param source: The string containing the source code.
+    :param function_names: The names of the functions to extract.
+    :param join_lines: Whether to join the lines of the function.
+    :param return_line_numbers: Whether to return the line numbers of the function.
+    :param include_signature: Whether to include the function signature in the source code.
+    :param as_list: Whether to return a list of function sources instead of dict (useful when there is multiple
+     functions with same name).
+    :param is_class: Whether to also look for class definitions
+    :return: A dictionary mapping function names to their source code as a string if join_lines is True,
+     otherwise as a list of strings.
+    """
     # Parse the source code into an AST
     tree = ast.parse(source)
     function_names = make_list(function_names)

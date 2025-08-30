@@ -17,7 +17,7 @@ from .datastructures.case import show_current_and_corner_cases
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import PromptFor
 from .user_interface.template_file_creator import TemplateFileCreator
-from .utils import extract_imports, extract_function_source, get_imports_from_scope, get_class_file_path
+from .utils import extract_imports, extract_function_or_class_file, get_imports_from_scope, get_class_file_path
 
 try:
     from .user_interface.gui import RDRCaseViewer
@@ -192,7 +192,7 @@ class Expert(ABC):
         file_path = path + '.py'
         with open(file_path, "r") as f:
             all_answers = f.read().split('\n\n\n\'===New Answer===\'\n\n\n')[:-1]
-        all_function_sources = extract_function_source(file_path, [], as_list=True)
+        all_function_sources = extract_function_or_class_file(file_path, [], as_list=True)
         for i, answer in enumerate(all_answers):
             answer = answer.strip('\n').strip()
             if 'def ' not in answer and 'pass' in answer:
@@ -242,9 +242,9 @@ class AI(Expert):
 
         def get_class_source(cls):
             cls_source_file = get_class_file_path(cls)
-            found_class_source = extract_function_source(cls_source_file, function_names=[cls.__name__],
-                                        is_class=True,
-                                        as_list=True)[0]
+            found_class_source = extract_function_or_class_file(cls_source_file, function_names=[cls.__name__],
+                                                                is_class=True,
+                                                                as_list=True)[0]
             class_signature = found_class_source.split('\n')[0]
             if '(' in class_signature:
                 parent_class_names = list(map(lambda x: x.strip(),
