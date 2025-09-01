@@ -126,7 +126,8 @@ class RDRDecorator:
 
             if len(self.parsed_output_type) == 0:
                 self.parsed_output_type = self.parse_output_type(func, self.output_type, *args)
-                self.parsed_output_type.append(self.origin_type)
+                if self.origin_type:
+                    self.parsed_output_type.append(self.origin_type)
 
             if self.model_name is None:
                 self.initialize_rdr_model_name_and_load(func)

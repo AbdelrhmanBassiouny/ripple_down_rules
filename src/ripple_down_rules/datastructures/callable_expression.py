@@ -4,14 +4,17 @@ import ast
 import logging
 import os
 from _ast import AST
+from copy import copy
 from enum import Enum
+from types import GeneratorType
 
-from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set
+from typing_extensions import Type, Optional, Any, List, Union, Tuple, Dict, Set, get_origin
 
 from .case import create_case, Case
 from ..utils import SubclassJSONSerializer, get_full_class_name, get_type_from_string, conclusion_to_json, is_iterable, \
-    build_user_input_from_conclusion, encapsulate_user_input, extract_function_or_class_file, are_results_subclass_of_types, \
-    make_list, get_imports_from_scope
+    build_user_input_from_conclusion, encapsulate_user_input, extract_function_or_class_file, \
+    are_results_subclass_of_types, \
+    make_list, get_imports_from_scope, get_type_from_type_hint
 
 
 class VariableVisitor(ast.NodeVisitor):

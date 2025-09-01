@@ -1,24 +1,21 @@
 import os
 from os.path import dirname
 
-from IPython import embed
-
 from ripple_down_rules import *
 from ripple_down_rules.datastructures.tracked_object import X
 from .datasets import Drawer, Handle, Cabinet, View, WorldEntity, Body, Connection, Container
 
 
 def test_construct_class_hierarchy():
-    TrackedObjectMixin._reset_dependency_graph()
-    TrackedObjectMixin.make_class_dependency_graph(composition=False)
+    isA.infer()
     Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
     assert len(Drawer._dependency_graph.nodes()) == 20
     assert len(Drawer._dependency_graph.edges()) == 17
 
 
 def test_construct_class_composition():
-    TrackedObjectMixin._reset_dependency_graph()
-    TrackedObjectMixin.make_class_dependency_graph(composition=True)
+    isA.infer()
+    has.infer()
     Drawer.to_dot(os.path.join(dirname(__file__), "dependency_graph"))
     assert len(Drawer._dependency_graph.nodes()) == 20
     assert len(Drawer._dependency_graph.edges()) == 22
@@ -27,8 +24,6 @@ def test_construct_class_composition():
 
 # @pytest.mark.skip("Not Implemented yet")
 def test_construct_class_composition_and_dependency():
-    TrackedObjectMixin._reset_dependency_graph()
-    TrackedObjectMixin.make_class_dependency_graph(composition=True)
     assert next(has(Drawer, Handle))
     assert next(has(Cabinet, Drawer))
     assert list(has(Cabinet, X)) == [(Cabinet, Drawer), (Cabinet, Container)]
@@ -42,3 +37,7 @@ def test_construct_class_composition_and_dependency():
     assert next(has(Cabinet, Body))
     assert next(has(Cabinet, WorldEntity))
     assert not list(has(Cabinet, Connection, recursive=True))
+    assert list(has((Cabinet, Drawer), Handle)) == [(Drawer, Handle)]
+    assert list(has((Cabinet, Drawer), Handle, recursive=True)) == [(Cabinet, Handle), (Drawer, Handle)]
+    assert list(has((Cabinet, Drawer), X)) == [(Cabinet, Drawer), (Cabinet, Container), (Drawer, Container), (Drawer, Handle)]
+    assert list(has((Cabinet, Drawer), (Handle, Container))) == [(Cabinet, Container), (Drawer, Handle), (Drawer, Container)]

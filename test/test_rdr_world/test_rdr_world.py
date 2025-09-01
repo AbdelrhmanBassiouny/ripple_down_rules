@@ -72,7 +72,6 @@ def test_write_drawer_rdr_to_python_file(correct_drawer_rdr, drawer_case_queries
 
 # @pytest.mark.skip("Not Implemented yet")
 def test_rule_dependency_graph(drawer_cabinet_rdr: GeneralRDR):
-    TrackedObjectMixin.make_class_dependency_graph()
     drawer_rule = [r for r in [drawer_cabinet_rdr.start_rule] + list(drawer_cabinet_rdr.start_rule.descendants)
                    if Drawer in r.conclusion.conclusion_type][0]
     cabinet_rule = [r for r in [drawer_cabinet_rdr.start_rule] + list(drawer_cabinet_rdr.start_rule.descendants)

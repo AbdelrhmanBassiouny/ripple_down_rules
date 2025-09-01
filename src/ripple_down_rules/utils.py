@@ -4,6 +4,7 @@ import builtins
 import codecs
 import copyreg
 import importlib
+import itertools
 import json
 import os
 import re
@@ -12,9 +13,11 @@ import sys
 import threading
 import uuid
 from collections import UserDict, defaultdict
+from collections.abc import Iterator
 from copy import deepcopy, copy
 from dataclasses import is_dataclass, fields
 from enum import Enum
+from functools import lru_cache
 from os.path import dirname
 from pathlib import Path
 from subprocess import check_call
@@ -58,6 +61,45 @@ if TYPE_CHECKING:
     from .datastructures.dataclasses import CaseQuery
 
 import ast
+
+
+class IDGenerator:
+    """
+    A class that generates incrementing, unique IDs and caches them for every object this is called on.
+    """
+
+    _counter = 0
+    """
+    The counter of the unique IDs.
+    """
+
+    # @lru_cache(maxsize=None)
+    def __call__(self, obj: Any) -> int:
+        """
+        Creates a unique ID and caches it for every object this is called on.
+
+        :param obj: The object to generate a unique ID for, must be hashable.
+        :return: The unique ID.
+        """
+        self._counter += 1
+        return self._counter
+
+
+def filter_data(data, selected_indices):
+    data = iter(data)
+    prev = -1
+    encountered_indices = set()
+    for idx in selected_indices:
+        if idx in encountered_indices:
+            continue
+        encountered_indices.add(idx)
+        skip = idx - prev - 1
+        data = itertools.islice(data, skip, None)
+        try:
+            yield next(data)
+        except StopIteration:
+            break
+        prev = idx
 
 
 def fill_in_missing_kwargs(func: Callable, **kwargs) -> Dict[str, Any]:
@@ -370,7 +412,7 @@ def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optio
         new_user_input = func_signature + "\n    "
         if func_doc is not None:
             new_user_input += f"\"\"\"{func_doc}\"\"\"" + "\n    "
-        if "return " not in user_input:
+        if not any(v in user_input for v in ["return ", "yield"]):
             if '\n' not in user_input:
                 new_user_input += f"return {user_input}"
             else:
@@ -898,7 +940,7 @@ def get_function_return_type(func: Callable) -> Union[Type, None, Tuple[Type, ..
 def get_type_from_type_hint(type_hint: Type) -> Union[Type, Tuple[Type, ...]]:
     origin = get_origin(type_hint)
     args = get_args(type_hint)
-    if origin not in [list, set, None, Union]:
+    if origin not in [list, set, None, Union, Iterator]:
         raise TypeError(f"{origin} is not a handled return type for type hint {type_hint}")
     if origin is None:
         return typing_to_python_type(type_hint)
@@ -1878,7 +1920,7 @@ class FilteredDotExporter(object):
 
     def __init__(self, node, include_nodes=None, graph="digraph", name="tree", options=None,
                  indent=4, nodenamefunc=None, nodeattrfunc=None,
-                 edgeattrfunc=None, edgetypefunc=None, maxlevel=None):
+                 edgeattrfunc=None, edgetypefunc=None, maxlevel=None, use_legend: bool = True):
         """
         Dot Language Exporter.
 
@@ -2029,6 +2071,7 @@ class FilteredDotExporter(object):
         self.include_nodes = include_nodes
         node_name_func = get_unique_node_names_func(node)
         self.include_node_names = [node_name_func(n) for n in self.include_nodes] if include_nodes else None
+        self.use_legend: bool = use_legend
 
     def __iter__(self):
         # prepare
@@ -2064,7 +2107,8 @@ class FilteredDotExporter(object):
             yield node
         for edge in self.__iter_edges(indent, nodenamefunc, edgeattrfunc, edgetypefunc):
             yield edge
-        legend_dot_graph = """
+        if self.use_legend:
+            legend_dot_graph = """
 // Color legend as a subgraph
 subgraph cluster_legend {
     label = "Legend";
@@ -2080,8 +2124,8 @@ subgraph cluster_legend {
     // Invisible edges to arrange legend vertically
     legend_white -> legend_red -> legend_orange -> legend_yellow -> legend_green [style=invis];
 }"""
-        for line in legend_dot_graph.splitlines():
-            yield "%s" % (line.strip())
+            for line in legend_dot_graph.splitlines():
+                yield "%s" % (line.strip())
         yield "}"
 
     def __iter_options(self, indent):
@@ -2179,7 +2223,7 @@ subgraph cluster_legend {
 def render_tree(root: Node, use_dot_exporter: bool = False,
                 filename: str = "scrdr", only_nodes: List[Node] = None, show_in_console: bool = False,
                 color_map: Optional[Callable[[Node], str]] = None,
-                view: bool = False) -> None:
+                view: bool = False, use_legend: bool = True) -> None:
     """
     Render the tree using the console and optionally export it to a dot file.
 
@@ -2190,6 +2234,7 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
     :param show_in_console: Whether to print the tree to the console.
     :param color_map: A function that returns a color for certain nodes.
     :param view: Whether to view the dot file in a viewer.
+    :param use_legend: Whether to show the legend or not.
     """
     if not root:
         logger.warning("No rules to render")
@@ -2206,8 +2251,10 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
                                  include_nodes=only_nodes,
                                  nodenamefunc=unique_node_names,
                                  edgeattrfunc=edge_attr_setter,
-                                 nodeattrfunc=lambda node: f'style=filled,'
-                                                           f' fillcolor={color_map(node) if color_map else node.color}',
+                                 nodeattrfunc=lambda node: \
+                                     f'style=filled,'
+                                     f' fillcolor={color_map(node) if color_map else getattr(node, "color", "white")}',
+                                 use_legend=use_legend
                                  )
         if view:
             de.to_source().view()
