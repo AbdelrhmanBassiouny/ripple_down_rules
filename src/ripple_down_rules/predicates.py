@@ -55,12 +55,15 @@ class Predicate(TrackedObjectMixin, ABC):
 
         :param mode: The infer mode of the predicate (could be Auto, Always, Never)
         """
-        if mode == InferMode.Always:
-            return True
-        elif mode == InferMode.Never:
-            return False
-        else:
-            return cls._should_infer()
+        match mode:
+            case InferMode.Always:
+                return True
+            case InferMode.Never:
+                return False
+            case InferMode.Auto:
+                return cls._should_infer()
+            case _:
+                raise ValueError(f"Invalid infer mode: {mode}")
 
     @classmethod
     @abstractmethod

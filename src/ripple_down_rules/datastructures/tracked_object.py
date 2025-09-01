@@ -187,26 +187,6 @@ class TrackedObjectMixin:
             if class_to_add._overridden_by:
                 cls._class_graph_indices[class_to_add._overridden_by] = cls_idx
 
-    def __getattribute__(self, name: str) -> Any:
-        # if name not in [f.name for f in fields(TrackedObjectMixin)] + ['has', 'is_a', 'depends_on']\
-        #         and not name.startswith("_"):
-        #     self._record_dependency(name)
-        return object.__getattribute__(self, name)
-
-    def _record_dependency(self, attr_name):
-        # Inspect stack to find instance of CallableExpression
-        for frame_info in inspect.stack():
-            func_name = frame_info.function
-            local_self = frame_info.frame.f_locals.get("self", None)
-            if (
-                    func_name == "__call__" and
-                    local_self is not None and
-                    type(local_self).__module__ == "callable_expression" and
-                    type(local_self).__name__ == "CallableExpression"
-            ):
-                logger.debug("TrackedObject used inside CallableExpression")
-                break
-
 
 annotations = TrackedObjectMixin.__annotations__
 for val in [f.name for f in fields(TrackedObjectMixin)]:
