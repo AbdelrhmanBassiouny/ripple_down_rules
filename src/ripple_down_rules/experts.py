@@ -8,7 +8,7 @@ import sys
 from abc import ABC, abstractmethod
 from dataclasses import is_dataclass
 from textwrap import dedent, indent
-from typing import Tuple, Dict
+from typing_extensions import Tuple, Dict
 
 from typing_extensions import Optional, TYPE_CHECKING, List
 

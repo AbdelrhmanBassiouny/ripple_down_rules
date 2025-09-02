@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Generator, ClassVar
+from typing_extensions import Generator, ClassVar
 
 from typing_extensions import Type, TYPE_CHECKING, Tuple, Dict, List, TypeVar, Iterator, Union
 

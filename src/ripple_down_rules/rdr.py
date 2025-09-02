@@ -352,11 +352,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             self.start_rule.parent = self.input_node
             self.start_rule.weight = RDREdge.Empty
         if self.input_node is not None:
-            data = case.__dict__ if is_dataclass(case) else case
-            if hasattr(case, "items"):
-                self.input_node.name = json.dumps({k: str(v) for k, v in data.items()}, indent=4)
-            else:
-                self.input_node.name = str(data)
+            self.input_node.name = type(case).__name__
         return self._classify(case, modify_case=modify_case, case_query=case_query)
 
     @abstractmethod

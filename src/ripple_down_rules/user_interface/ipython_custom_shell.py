@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional, List
+from typing_extensions import Optional, List
 
 from IPython.core.magic import magics_class, Magics, line_magic
 from IPython.terminal.embed import InteractiveShellEmbed

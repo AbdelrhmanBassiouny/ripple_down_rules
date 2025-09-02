@@ -6,7 +6,8 @@ import os
 import sys
 from functools import wraps
 from types import ModuleType
-from typing import Tuple, Callable, Dict, Any, Optional, Sequence, get_type_hints
+
+from typing_extensions import Tuple, Callable, Dict, Any, Optional, Sequence, get_type_hints
 
 from typing_extensions import Type, Optional, Callable, Any, Dict, TYPE_CHECKING, Union
 
