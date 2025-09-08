@@ -1,4 +1,5 @@
 import ast
+import importlib
 import os
 import shutil
 import socket
@@ -7,15 +8,20 @@ import tempfile
 from functools import cached_property
 from textwrap import indent, dedent
 
+import sqlalchemy
 from colorama import Fore, Style
+from ormatic.dao import to_dao
 from typing_extensions import Optional, Type, List, Callable, Tuple, Dict, Any, Union
+import re
 
+from .JupyterNotebookManager import JupyterNotebookManager
 from ..datastructures.case import Case
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import Editor, PromptFor
 from ..utils import str_to_snake_case, get_imports_from_scope, make_list, stringify_hint, \
     get_imports_from_types, extract_function_or_class_file, extract_imports, get_types_to_import_from_type_hints, \
-    extract_function_or_class_from_source
+    extract_function_or_class_from_source, get_full_class_name
+
 
 
 def detect_available_editor() -> Optional[Editor]:
@@ -107,8 +113,136 @@ class TemplateFileCreator:
 
         boilerplate_code = self.build_boilerplate_code()
         self.write_to_file(boilerplate_code)
+        self.create_case_in_database()
+        case_name = get_full_class_name(self.case_query.case_type)
+        print("Creating notebook for case: ", case_name)
 
-        self.open_file_in_editor()
+        template_notebook_path = os.path.join(os.path.dirname(__file__), "notebook_template.ipynb")
+        print("Template notebook path: ", template_notebook_path)
+        user_interface_dir = os.path.dirname(__file__)  # Gets directory of the current file
+
+        notebook_manager = JupyterNotebookManager(
+            template_path=template_notebook_path,
+            output_dir=user_interface_dir
+        )
+
+        print("Notebook manager: ", notebook_manager)
+        # Create notebook with case_name and boilerplate_code (returns data, doesn't save)
+        received_function_source = notebook_manager.create_and_run_notebook(
+            case_name=case_name,
+            boilerplate_code=boilerplate_code,
+            func_name=self.func_name
+        )
+        print("Received function source: ", received_function_source)
+        # Strip function to just body before returning
+        if received_function_source:
+            return TemplateFileCreator.load_from_source(
+                received_function_source, self.func_name, self.print_func
+            )
+
+        return None, None
+
+    def create_case_in_database(self):
+        connection_string = "rdr@localhost:3306/RDR"  # os.getenv("RDR_DATABASE_URL")
+        engine = sqlalchemy.create_engine("mysql+pymysql://" + connection_string)
+        session = sqlalchemy.orm.Session(engine)
+
+        # WRITE TO NOTEBOOK THE FOLLOWING:
+
+        print("Creating case in database...")
+        # from ormatic import *
+        module = importlib.import_module("ripple_down_rules.orm_interface")
+        print(f"Module: {module}")
+        module.Base.metadata.create_all(engine)
+        print(f"Base: {module.Base}")
+        # this is the case structure
+        # dao = to_dao(self.case_query.case)
+        if isinstance(self.case_query.case, type) and hasattr(self.case_query.case, '__abstractmethods__'):
+            print(f"Skipping abstract class {self.case_query.case.__name__}")
+            self.no_case_created = True
+            session.close()
+            return
+
+        try:
+            # Continue using self.case_query.case but with error handling
+            dao = to_dao(self.case_query.case)
+            session.add(dao)
+            session.commit()
+
+            # Store for deletion
+            self.created_dao = dao
+            self.created_dao_id = dao.id
+            print(f"Case {getattr(self.case_query.case, 'name', self.case_query.case.__name__)} created in database.")
+        except Exception as e:
+            print(f"Skipping database creation: {e}")
+            self.no_case_created = True
+        finally:
+            session.close()
+
+        print(f"Case {self.case_query.case.name} created in database.")
+        session.close()
+
+    def delete_database_case(self):
+        #module.Base.metadata.drop_all(engine)
+        try:
+            if hasattr(self, 'no_case_created') and self.no_case_created:
+                self.print_func(f"{Fore.YELLOW}No case was created in database, skipping deletion{Style.RESET_ALL}")
+                return
+            connection_string = "rdr@localhost:3306/RDR"
+            engine = sqlalchemy.create_engine("mysql+pymysql://" + connection_string)
+            session = sqlalchemy.orm.Session(engine)
+
+            # Check if we have a case to delete
+            if not hasattr(self, 'created_case_instance') or self.created_case_instance is None:
+                self.print_func(f"{Fore.YELLOW}No case instance to delete{Style.RESET_ALL}")
+                session.close()
+                return
+
+            # Convert the instance to DAO to get the correct table type
+            dao = to_dao(self.created_case_instance)
+            dao_type = type(dao)
+
+            # Delete the specific case instance by ID
+            deleted_count = session.query(dao_type).filter_by(id=self.created_dao_id).delete()
+            session.commit()
+            session.close()
+
+            if deleted_count > 0:
+                self.print_func(f"{Fore.GREEN}Database case deleted successfully{Style.RESET_ALL}")
+            else:
+                self.print_func(f"{Fore.YELLOW}No case found to delete{Style.RESET_ALL}")
+
+        except Exception as e:
+            self.print_func(f"{Fore.RED}ERROR deleting database case: {e}{Style.RESET_ALL}")
+
+    def strip_function_to_body(self, function_code: str, func_name: str) -> str:
+        """Strip function definition and indentation to return just the body."""
+        if not function_code:
+            return function_code
+
+        lines = function_code.split('\n')
+        body_lines = []
+        in_function = False
+
+        for line in lines:
+            if line.strip().startswith(f'def {func_name}('):
+                in_function = True
+                continue  # Skip def line
+            elif in_function:
+                # Check if we've reached end of function (next function/class/unindented line)
+                if line.strip() and not line.startswith('    ') and not line.startswith('\t'):
+                    break
+                # Remove indentation (4 spaces or 1 tab)
+                if line.startswith('    '):
+                    body_lines.append(line[4:])
+                elif line.startswith('\t'):
+                    body_lines.append(line[1:])
+                elif line.strip() == '':
+                    body_lines.append('')  # Keep empty lines
+                else:
+                    body_lines.append(line)  # Keep lines with different indentation
+
+        return '\n'.join(body_lines).strip()
 
     def open_file_in_editor(self, file_path: Optional[str] = None):
         """
@@ -140,18 +274,167 @@ class TemplateFileCreator:
             self.print_func(f"Edit the file: {Fore.MAGENTA}{file_path}")
 
     def build_boilerplate_code(self):
-        imports = self.get_imports()
+        """
+        Build a single-cell boilerplate that contains:
+        - All required imports (kept as-is, only normalized)
+        - The function signature and a leading comment (no docstring/return/pass)
+        """
         if self.function_signature is None:
             self.function_signature = self.get_function_signature()
         if self.func_doc is None:
             self.func_doc = self.get_func_doc()
-        if self.code_to_modify is not None:
-            body = indent(dedent(self.code_to_modify), '    ')
+
+        # 1) Gather and normalize imports (no filtering, keep all)
+        imports_block = self.get_imports() or ""
+        imports_block = self._normalize_imports(imports_block)
+
+        # Prepare a comment version of the function description
+        if self.func_doc:
+            doc_comment_block = "\n".join(f"    # {line}" for line in str(self.func_doc).splitlines())
         else:
-            body = "    # Write your code here\n    pass"
-        boilerplate = f"""{imports}\n\n{self.function_signature}\n    \"\"\"{self.func_doc}\"\"\"\n{body}"""
-        self.user_edit_line = imports.count('\n') + 6
+            doc_comment_block = ""
+
+        # 2) Compose the function block with correct indentation
+        if self.code_to_modify is not None:
+            body = indent(dedent(self.code_to_modify).rstrip("\n"), "    ")
+            func_block = (
+                f"{self.function_signature}\n"
+                f"{doc_comment_block}\n"
+                f"{body}"
+            )
+        else:
+            # No docstring, no return, no pass. Keep a comment and an ellipsis as a no-op.
+            body = "    # Write your code here\n    ..."
+            func_block = (
+                f"{self.function_signature}\n"
+                f"{doc_comment_block}\n"
+                f"{body}"
+            )
+
+        # 3) Build single cell: imports (optional) + a blank line + function
+        if imports_block.strip():
+            boilerplate = f"{imports_block.strip()}\n\n{func_block}"
+        else:
+            boilerplate = func_block
+
+        # Cursor after signature and comment block
+        base = imports_block.count('\n') + 1 if imports_block.strip() else 1
+        comment_lines = doc_comment_block.count('\n') + (1 if doc_comment_block else 0)
+        self.user_edit_line = base + 1 + comment_lines  # def line + comment lines
+
         return boilerplate
+
+        #BASE CODE
+        # if self.func_name is None:
+        #     self.func_name = self.get_func_name(self.prompt_for, self.case_query)
+        # if self.func_doc is None:
+        #     self.func_doc = self.get_func_doc()
+        # signature = f"def {self.func_name}(case):"
+        # if self.code_to_modify is not None:
+        #     body = indent(dedent(self.code_to_modify), '    ')
+        # else:
+        #     body = "    # Write your code here\n    return None"
+        # boilerplate = f"""{signature}\n    \"\"\"{self.func_doc}\"\"\"\n{body}"""
+        # self.user_edit_line = 3
+        # return boilerplate
+        #CUTS IMPORTS
+        # imports = self.get_imports()
+        # if self.function_signature is None:
+        #     self.function_signature = self.get_function_signature()
+        # if self.func_doc is None:
+        #     self.func_doc = self.get_func_doc()
+        # if self.code_to_modify is not None:
+        #     body = indent(dedent(self.code_to_modify), '    ')
+        # else:
+        #     body = "    # Write your code here\n    pass"
+        # boilerplate = f"""{imports}\n\n{self.function_signature}\n    \"\"\"{self.func_doc}\"\"\"\n{body}"""
+        # self.user_edit_line = imports.count('\n') + 6
+        # return boilerplate
+
+    def _normalize_imports(self, imports_block: str) -> str:
+        """
+        Keep imports but normalize module paths by trimming any leading segments
+        before a known root. Exclude any imports whose top-level module is `test`
+        or `tests` (after trimming).
+        Examples (root='ripple_down_rules'):
+          - 'from src.ripple_down_rules.utils import x' -> 'from ripple_down_rules.utils import x'
+          - 'from foo.bar.tests.test_x import Y' -> excluded
+          - 'from test.test_relational_rdr import Z' -> excluded
+        """
+        if not imports_block:
+            return ""
+
+        import re
+        root_pkg = __name__.split('.', 1)[0] or "ripple_down_rules"
+        known_roots = {root_pkg, "test", "tests"}
+
+        def trim_to_known_root(module: str) -> str:
+            if module.startswith('.'):
+                return module
+            parts = [p for p in module.split('.') if p]
+            idx = None
+            for i, p in enumerate(parts):
+                if p in known_roots:
+                    idx = i
+                    break
+            if idx is not None:
+                trimmed = '.'.join(parts[idx:])
+            else:
+                while parts and parts[0] in ("src", "source", "app", "lib", "project"):
+                    parts.pop(0)
+                trimmed = '.'.join(parts) if parts else module
+            return trimmed
+
+        def is_test_module(module: str) -> bool:
+            # Check top-level segment only
+            top = module.split('.', 1)[0]
+            return top in ("test", "tests")
+
+        from_re = re.compile(r'^(\s*from\s+)([A-Za-z0-9_\.\s]+?)(\s+import\s+.*)$')
+        import_re = re.compile(r'^(\s*import\s+)(.+)$')
+
+        fixed_lines = []
+        for line in imports_block.splitlines():
+            s = line.lstrip()
+            if not s or s.startswith('#'):
+                fixed_lines.append(line)
+                continue
+
+            m_from = from_re.match(line)
+            if m_from:
+                pfx, module, sfx = m_from.groups()
+                fixed_module = trim_to_known_root(module.strip())
+                if is_test_module(fixed_module):
+                    # Exclude 'from test...' / 'from tests...'
+                    continue
+                fixed_lines.append(f"{pfx}{fixed_module}{sfx}")
+                continue
+
+            m_imp = import_re.match(line)
+            if m_imp:
+                pfx, rest = m_imp.groups()
+                parts = [p.strip() for p in rest.split(',')]
+                fixed_parts = []
+                for p in parts:
+                    toks = p.split()
+                    if not toks:
+                        continue
+                    name = toks[0]
+                    alias = ' '.join(toks[1:])  # keep 'as alias' if present
+                    fixed_name = trim_to_known_root(name)
+                    if is_test_module(fixed_name):
+                        # Drop test/tests entries from multi-imports
+                        continue
+                    fixed_parts.append(fixed_name + (f" {alias}" if alias else ""))
+                if not fixed_parts:
+                    # Entire line was test/tests only; drop
+                    continue
+                fixed_lines.append(pfx + ', '.join(fixed_parts))
+                continue
+
+            fixed_lines.append(line)
+
+        return '\n'.join(fixed_lines)
 
     def get_function_signature(self) -> str:
         if self.func_name is None:
