@@ -190,11 +190,11 @@ class Part(PhysicalObject):
 class Robot(PhysicalObject):
     parts: List[Part] = field(default_factory=list)
 
-
+@dataclass
 class Base(sqlalchemy.orm.DeclarativeBase):
     pass
 
-
+@dataclass
 class HabitatTable(MappedAsDataclass, Base):
     __tablename__ = "Habitat"
 
@@ -252,7 +252,7 @@ class Body(WorldEntity):
 class Handle(Body):
     ...
 
-
+@dataclass
 @dataclass(unsafe_hash=True)
 class Container(Body):
     ...
