@@ -1,5 +1,5 @@
 import unittest
-from .datasets import PhysicalObject, Part, Robot
+from ripple_down_rules.datasets import PhysicalObject, Part, Robot
 
 
 class RDRDecoratorsTestCase(unittest.TestCase):

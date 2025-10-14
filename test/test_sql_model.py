@@ -2,7 +2,7 @@ import unittest
 
 from sqlalchemy import select
 
-from .datasets import *
+from ripple_down_rules.datasets import *
 
 
 class TestDDL(unittest.TestCase):

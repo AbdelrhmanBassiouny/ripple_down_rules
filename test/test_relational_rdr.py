@@ -5,7 +5,7 @@ from unittest import TestCase
 
 from typing_extensions import List, Any
 
-from .datasets import Robot, Part, PhysicalObject
+from ripple_down_rules.datasets import Robot, Part, PhysicalObject
 from ripple_down_rules.datastructures.case import CaseAttribute
 from ripple_down_rules.datastructures.dataclasses import CaseQuery, CallableExpression
 from ripple_down_rules.experts import Human
@@ -47,7 +47,7 @@ class RelationalRDRTestCase(TestCase):
         cls.target = [cls.part_b, cls.part_c, cls.part_d, cls.part_e]
 
     def test_classify_scrdr(self):
-        use_loaded_answers = True
+        use_loaded_answers = False
         save_answers = False
         filename = self.expert_answers_dir + "/relational_scrdr_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)

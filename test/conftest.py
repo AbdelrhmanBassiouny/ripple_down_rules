@@ -11,7 +11,7 @@ except ImportError as e:
     RDRCaseViewer = None
 
 from .conf.world.handles_and_containers import HandlesAndContainersWorld
-from .datasets import *
+from ripple_down_rules.datasets import *
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.helpers import is_matching

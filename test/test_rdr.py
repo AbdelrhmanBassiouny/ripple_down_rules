@@ -5,8 +5,8 @@ from unittest import TestCase
 from typing_extensions import List, Optional
 
 from ripple_down_rules.rules import MultiClassStopRule
-from .datasets import Habitat, Species, load_zoo_cases
-from .datasets import load_zoo_dataset
+from ripple_down_rules.datasets import Habitat, Species, load_zoo_cases
+from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures.case import Case
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.datastructures.enums import MCRDRMode
@@ -50,7 +50,7 @@ class TestRDR(TestCase):
             cls.viewer = RDRCaseViewer()
 
     def test_classify_scrdr(self):
-        use_loaded_answers = True
+        use_loaded_answers = False
         save_answers = False
         filename = self.expert_answers_dir + "/scrdr_expert_answers_classify"
         expert = Human(use_loaded_answers=use_loaded_answers)

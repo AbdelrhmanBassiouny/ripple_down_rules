@@ -7,7 +7,7 @@ from sqlalchemy.orm import MappedColumn as Column
 from typing_extensions import List, Sequence
 import pandas as pd
 
-from .datasets import Base, MappedAnimal, Species, get_dataset, Habitat, HabitatTable
+from ripple_down_rules.datasets import Base, MappedAnimal, Species, get_dataset, Habitat, HabitatTable
 from ripple_down_rules.datastructures.dataclasses import CaseQuery
 from ripple_down_rules.experts import Human
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR

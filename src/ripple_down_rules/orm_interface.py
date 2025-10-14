@@ -74,22 +74,6 @@ class BaseDAO(Base, DataAccessObject[ripple_down_rules.datasets.Base]):
 
 
 
-class BodyDAO(WorldEntityDAO, DataAccessObject[ripple_down_rules.datasets.Body]):
-    __tablename__ = 'BodyDAO'
-
-    id: Mapped[int] = mapped_column(ForeignKey(WorldEntityDAO.id), primary_key=True)
-
-
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-
-    worlddao_bodies_id: Mapped[Optional[int]] = mapped_column(ForeignKey('WorldDAO.id', use_alter=True), nullable=True)
-
-
-    __mapper_args__ = {
-        'polymorphic_identity': 'BodyDAO',
-        'inherit_condition': id == WorldEntityDAO.id,
-    }
-
 class ConnectionDAO(WorldEntityDAO, DataAccessObject[ripple_down_rules.datasets.Connection]):
     __tablename__ = 'ConnectionDAO'
 
@@ -124,6 +108,22 @@ class ViewDAO(WorldEntityDAO, DataAccessObject[ripple_down_rules.datasets.View])
         'inherit_condition': id == WorldEntityDAO.id,
     }
 
+class BodyDAO(WorldEntityDAO, DataAccessObject[ripple_down_rules.datasets.Body]):
+    __tablename__ = 'BodyDAO'
+
+    id: Mapped[int] = mapped_column(ForeignKey(WorldEntityDAO.id), primary_key=True)
+
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    worlddao_bodies_id: Mapped[Optional[int]] = mapped_column(ForeignKey('WorldDAO.id', use_alter=True), nullable=True)
+
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'BodyDAO',
+        'inherit_condition': id == WorldEntityDAO.id,
+    }
+
 class PartDAO(PhysicalObjectDAO, DataAccessObject[ripple_down_rules.datasets.Part]):
     __tablename__ = 'PartDAO'
 
@@ -154,34 +154,6 @@ class RobotDAO(PhysicalObjectDAO, DataAccessObject[ripple_down_rules.datasets.Ro
         'inherit_condition': id == PhysicalObjectDAO.id,
     }
 
-class HandleDAO(BodyDAO, DataAccessObject[ripple_down_rules.datasets.Handle]):
-    __tablename__ = 'HandleDAO'
-
-    id: Mapped[int] = mapped_column(ForeignKey(BodyDAO.id), primary_key=True)
-
-
-
-
-
-    __mapper_args__ = {
-        'polymorphic_identity': 'HandleDAO',
-        'inherit_condition': id == BodyDAO.id,
-    }
-
-class ContainerDAO(BodyDAO, DataAccessObject[ripple_down_rules.datasets.Container]):
-    __tablename__ = 'ContainerDAO'
-
-    id: Mapped[int] = mapped_column(ForeignKey(BodyDAO.id), primary_key=True)
-
-
-
-
-
-    __mapper_args__ = {
-        'polymorphic_identity': 'ContainerDAO',
-        'inherit_condition': id == BodyDAO.id,
-    }
-
 class FixedConnectionDAO(ConnectionDAO, DataAccessObject[ripple_down_rules.datasets.FixedConnection]):
     __tablename__ = 'FixedConnectionDAO'
 
@@ -210,6 +182,26 @@ class PrismaticConnectionDAO(ConnectionDAO, DataAccessObject[ripple_down_rules.d
         'inherit_condition': id == ConnectionDAO.id,
     }
 
+class DrawerDAO(ViewDAO, DataAccessObject[ripple_down_rules.datasets.Drawer]):
+    __tablename__ = 'DrawerDAO'
+
+    id: Mapped[int] = mapped_column(ForeignKey(ViewDAO.id), primary_key=True)
+
+    correct: Mapped[Optional[bool]]
+
+
+    handle_id: Mapped[int] = mapped_column(ForeignKey('HandleDAO.id', use_alter=True), nullable=True)
+    container_id: Mapped[int] = mapped_column(ForeignKey('ContainerDAO.id', use_alter=True), nullable=True)
+    cabinetdao_drawers_id: Mapped[Optional[int]] = mapped_column(ForeignKey('CabinetDAO.id', use_alter=True), nullable=True)
+
+    handle: Mapped[HandleDAO] = relationship('HandleDAO', uselist=False, foreign_keys=[handle_id], post_update=True)
+    container: Mapped[ContainerDAO] = relationship('ContainerDAO', uselist=False, foreign_keys=[container_id], post_update=True)
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'DrawerDAO',
+        'inherit_condition': id == ViewDAO.id,
+    }
+
 class CabinetDAO(ViewDAO, DataAccessObject[ripple_down_rules.datasets.Cabinet]):
     __tablename__ = 'CabinetDAO'
 
@@ -227,23 +219,31 @@ class CabinetDAO(ViewDAO, DataAccessObject[ripple_down_rules.datasets.Cabinet]):
         'inherit_condition': id == ViewDAO.id,
     }
 
-class DrawerDAO(ViewDAO, DataAccessObject[ripple_down_rules.datasets.Drawer]):
-    __tablename__ = 'DrawerDAO'
+class HandleDAO(BodyDAO, DataAccessObject[ripple_down_rules.datasets.Handle]):
+    __tablename__ = 'HandleDAO'
 
-    id: Mapped[int] = mapped_column(ForeignKey(ViewDAO.id), primary_key=True)
-
-    correct: Mapped[Optional[bool]]
+    id: Mapped[int] = mapped_column(ForeignKey(BodyDAO.id), primary_key=True)
 
 
-    cabinetdao_drawers_id: Mapped[Optional[int]] = mapped_column(ForeignKey('CabinetDAO.id', use_alter=True), nullable=True)
-    handle_id: Mapped[int] = mapped_column(ForeignKey('HandleDAO.id', use_alter=True), nullable=True)
-    container_id: Mapped[int] = mapped_column(ForeignKey('ContainerDAO.id', use_alter=True), nullable=True)
 
-    handle: Mapped[HandleDAO] = relationship('HandleDAO', uselist=False, foreign_keys=[handle_id], post_update=True)
-    container: Mapped[ContainerDAO] = relationship('ContainerDAO', uselist=False, foreign_keys=[container_id], post_update=True)
+
 
     __mapper_args__ = {
-        'polymorphic_identity': 'DrawerDAO',
-        'inherit_condition': id == ViewDAO.id,
+        'polymorphic_identity': 'HandleDAO',
+        'inherit_condition': id == BodyDAO.id,
+    }
+
+class ContainerDAO(BodyDAO, DataAccessObject[ripple_down_rules.datasets.Container]):
+    __tablename__ = 'ContainerDAO'
+
+    id: Mapped[int] = mapped_column(ForeignKey(BodyDAO.id), primary_key=True)
+
+
+
+
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'ContainerDAO',
+        'inherit_condition': id == BodyDAO.id,
     }
 

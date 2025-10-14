@@ -3,7 +3,7 @@ from os.path import dirname
 
 from ripple_down_rules import *
 from ripple_down_rules.datastructures.tracked_object import X
-from .datasets import Drawer, Handle, Cabinet, View, WorldEntity, Body, Connection, Container
+from ripple_down_rules.datasets import Drawer, Handle, Cabinet, View, WorldEntity, Body, Connection, Container
 
 
 def test_construct_class_hierarchy():

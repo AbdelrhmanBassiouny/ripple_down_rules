@@ -9,8 +9,8 @@ from ripple_down_rules.helpers import create_case_query_from_method
 from ripple_down_rules.rdr_decorators import RDRDecorator
 from ripple_down_rules.user_interface.template_file_creator import TemplateFileCreator
 from ripple_down_rules.utils import make_set
-from .datasets import World, Handle, Container
-from .datasets import Part, PhysicalObject, Robot
+from ripple_down_rules.datasets import World, Handle, Container
+from ripple_down_rules.datasets import Part, PhysicalObject, Robot
 
 
 

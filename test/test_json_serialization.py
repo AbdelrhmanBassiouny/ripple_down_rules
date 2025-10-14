@@ -3,7 +3,7 @@ from unittest import TestCase
 
 from typing_extensions import List
 
-from .datasets import load_zoo_dataset
+from ripple_down_rules.datasets import load_zoo_dataset
 from ripple_down_rules.datastructures.dataclasses import Case
 from ripple_down_rules.rdr import SingleClassRDR, MultiClassRDR, GeneralRDR
 from ripple_down_rules.utils import make_set, flatten_list, serialize_dataclass, deserialize_dataclass, render_tree

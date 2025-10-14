@@ -120,6 +120,8 @@ class TemplateFileCreator:
         template_notebook_path = os.path.join(os.path.dirname(__file__), "notebook_template.ipynb")
         print("Template notebook path: ", template_notebook_path)
         user_interface_dir = os.path.dirname(__file__)  # Gets directory of the current file
+        #with checking
+        self.case_query.render_rule_tree(os.path.join(os.path.dirname(__file__), "rule_tree"), view=False)
 
         notebook_manager = JupyterNotebookManager(
             template_path=template_notebook_path,
@@ -172,14 +174,14 @@ class TemplateFileCreator:
             # Store for deletion
             self.created_dao = dao
             self.created_dao_id = dao.id
-            print(f"Case {getattr(self.case_query.case, 'name', self.case_query.case.__name__)} created in database.")
+            #print(f"Case {getattr(self.case_query.case, 'name', self.case_query.case.__name__)} created in database.")
         except Exception as e:
             print(f"Skipping database creation: {e}")
             self.no_case_created = True
         finally:
             session.close()
 
-        print(f"Case {self.case_query.case.name} created in database.")
+        #print(f"Case {self.case_query.case.name} created in database.")
         session.close()
 
     def delete_database_case(self):
