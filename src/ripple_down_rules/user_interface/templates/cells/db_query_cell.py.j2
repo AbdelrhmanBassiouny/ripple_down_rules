@@ -1,0 +1,12 @@
+# Query case from database
+module_name = ".".join(case_name.split(".")[:-1])
+case_type_name = case_name.split(".")[-1]
+module = importlib.import_module(module_name)
+
+# Fetch and reconstruct case
+queried = session.scalar(select(get_dao_class(getattr(module, case_type_name))))
+case = queried.from_dao() if queried else None
+
+if case is None:
+    print(f"Warning: Could not load case of type {case_name} from database")
+

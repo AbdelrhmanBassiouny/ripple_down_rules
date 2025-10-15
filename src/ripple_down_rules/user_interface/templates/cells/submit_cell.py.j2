@@ -1,0 +1,69 @@
+import os
+import time
+import json
+import re
+from IPython import get_ipython
+import ipywidgets as widgets
+from IPython.display import display
+
+# Create toolbar buttons
+apply_rule_btn = widgets.Button(description="Apply Rule", button_style="success")
+accept_rule_btn = widgets.Button(description="Accept Rule", button_style="primary")
+toolbar = widgets.HBox([apply_rule_btn, accept_rule_btn])
+toolbar.add_class('rdr-toolbar')
+
+def on_apply_rule(btn):
+    """Apply the function to the case and refresh visualization."""
+    try:
+        fn = globals().get(TARGET_FUNC_NAME)
+        if callable(fn) and case is not None:
+            result = fn(case)
+            print(f"Function returned: {result}")
+            render_svg(case, name=case_name)
+        elif not callable(fn):
+            print(f"Function '{TARGET_FUNC_NAME}' not found in namespace")
+        else:
+            print("No case loaded to apply function to")
+    except Exception as e:
+        print(f"Error applying function: {e}")
+        import traceback
+        traceback.print_exc()
+
+def send_cells_to_main_process(btn):
+    """Extract function source and write to communication file."""
+    print("Sending function back to main process...")
+    try:
+        ns = get_ipython().user_ns
+        cells = ns.get('_ih') or ns.get('In') or []
+        target = None
+        pattern = re.compile(r'^\s*(async\s+)?def\s+' + re.escape(TARGET_FUNC_NAME) + r'\s*\(', flags=re.M)
+
+        for content in reversed(cells):
+            if isinstance(content, str) and pattern.search(content):
+                target = content
+                break
+
+        if target:
+            with open(COMM_FILE, 'w') as f:
+                json.dump({'timestamp': time.time(), 'function_source': target}, f)
+                f.flush()
+                os.fsync(f.fileno())
+            print(f"Function source written to: {COMM_FILE}")
+        else:
+            print(f"Function '{TARGET_FUNC_NAME}' not found in notebook history")
+    except Exception as e:
+        print(f"Error writing function: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # Best-effort visualization update
+    try:
+        on_apply_rule(btn)
+    except Exception:
+        pass
+
+apply_rule_btn.on_click(on_apply_rule)
+accept_rule_btn.on_click(send_cells_to_main_process)
+
+display(toolbar)
+

@@ -1,32 +1,79 @@
 import os
-import re
 import subprocess
 import time
 import json
 import nbformat
-from typing import Optional
+from typing import Optional, List
+from jinja2 import Environment, FileSystemLoader
 
+from .notebook_cells import (
+    NotebookCell,
+    create_standard_notebook_cells
+)
 
 
 class JupyterNotebookManager:
     """Manages the creation, execution, and cleanup of a Jupyter Notebook for user interaction."""
 
-    def __init__(self, template_path: str, output_dir: str):
-        self.template_path = template_path
+    def __init__(self, template_dir: str, output_dir: str):
+        """
+        Initialize the notebook manager.
+
+        Args:
+            template_dir: Directory containing Jinja2 templates
+            output_dir: Directory where notebooks and communication files are stored
+        """
+        self.template_dir = template_dir
         self.output_dir = output_dir
         self.notebook_path: Optional[str] = None
         self.communication_file: Optional[str] = None
         self.process: Optional[subprocess.Popen] = None
+        self.env = Environment(loader=FileSystemLoader(template_dir))
 
-    def create_and_run_notebook(self, case_name: str, boilerplate_code: str, func_name: str) -> Optional[str]:
-        """Creates, runs a notebook, and waits for the function source code."""
+    def create_and_run_notebook(
+        self,
+        case_name: str,
+        boilerplate_code: str,
+        func_name: str,
+        svg_data: Optional[str] = None,
+        connection_string: str = "rdr@localhost:3306/RDR"
+    ) -> Optional[str]:
+        """
+        Creates, runs a notebook, and waits for the function source code.
+
+        Args:
+            case_name: Full qualified class name (e.g., "ripple_down_rules.datasets.Robot")
+            boilerplate_code: Initial Python function code for the user to edit
+            func_name: Name of the function to be edited
+            svg_data: Optional SVG data for rule tree visualization
+            connection_string: Database connection string
+
+        Returns:
+            Function source code as string, or None if interaction failed
+        """
         self.notebook_path = os.path.join(self.output_dir, "rdr_active_notebook.ipynb")
         self.communication_file = os.path.join(self.output_dir, ".rdr_notebook_comm.json")
 
         if os.path.exists(self.communication_file):
             os.remove(self.communication_file)
 
-        notebook_content = self._create_notebook_content(case_name, boilerplate_code, func_name)
+        # Create cells using the component architecture
+        cells = create_standard_notebook_cells(
+            case_name=case_name,
+            func_name=func_name,
+            boilerplate_code=boilerplate_code,
+            comm_file=self.communication_file,
+            connection_string=connection_string,
+            svg_data=svg_data
+        )
+
+        # Build notebook from cells
+        notebook_content = self.create_notebook_from_cells(
+            cells=cells,
+            case_name=case_name,
+            func_name=func_name
+        )
+
         with open(self.notebook_path, 'w') as f:
             nbformat.write(notebook_content, f)
 
@@ -41,57 +88,69 @@ class JupyterNotebookManager:
         finally:
             self._cleanup()
 
-    def _create_notebook_content(self, case_name: str, boilerplate_code: str, func_name: str) -> nbformat.NotebookNode:
-        """Creates the content of the notebook by modifying the template."""
-        with open(self.template_path, 'r') as f:
-            nb = nbformat.read(f, as_version=4)
+    def create_notebook_from_cells(
+        self,
+        cells: List[NotebookCell],
+        case_name: str,
+        func_name: str
+    ) -> nbformat.NotebookNode:
+        """
+        Build a notebook from cell components.
 
-        # Add notebook-level metadata for init cell extension
-        nb.metadata.setdefault('rdr_context', {
-            'case_name': case_name,
-            'function_name': func_name,
-            'timestamp': time.time()
+        Args:
+            cells: List of NotebookCell instances
+            case_name: Full qualified class name
+            func_name: Name of the function being edited
+
+        Returns:
+            nbformat.NotebookNode ready to be written to disk
+        """
+        # Create notebook structure
+        nb = nbformat.v4.new_notebook()
+
+        # Add cells
+        for cell_component in cells:
+            cell_dict = cell_component.to_nbformat_dict()
+            if cell_component.cell_type.value == 'code':
+                cell = nbformat.v4.new_code_cell(
+                    source=cell_dict['source'],
+                    metadata=cell_dict['metadata']
+                )
+            else:
+                cell = nbformat.v4.new_markdown_cell(
+                    source=cell_dict['source'],
+                    metadata=cell_dict['metadata']
+                )
+            nb.cells.append(cell)
+
+        # Set notebook metadata
+        nb.metadata.update({
+            'kernelspec': {
+                'display_name': 'Python 3',
+                'language': 'python',
+                'name': 'python3'
+            },
+            'language_info': {
+                'codemirror_mode': {
+                    'name': 'ipython',
+                    'version': 3
+                },
+                'file_extension': '.py',
+                'mimetype': 'text/x-python',
+                'name': 'python',
+                'nbconvert_exporter': 'python',
+                'pygments_lexer': 'ipython3',
+                'version': '3.8.0'
+            },
+            'rdr_context': {
+                'case_name': case_name,
+                'function_name': func_name,
+                'timestamp': time.time()
+            },
+            'init_cell': {
+                'run_on_load': True
+            }
         })
-        nb.metadata.setdefault('init_cell', {'run_on_load': True})
-
-        for i, cell in enumerate(nb.cells):
-            if isinstance(getattr(cell, 'source', None), str):
-                # Function cell is the only one that should remain editable and not auto-run
-                if getattr(cell, 'cell_type', '') == 'code' and 'def my_rule_function(' in cell.source:
-                    cell.source = boilerplate_code
-                    # Keep this cell visible and editable for user
-                    cell.metadata = getattr(cell, 'metadata', {})
-                    cell.metadata.update({
-                        'editable': True,
-                        'init_cell': False  # Don't auto-run
-                    })
-                # All other cells should be hidden but auto-run
-                else:
-                    # Update specific cells with their content
-                    if 'case_name = ""' in cell.source:
-                        cell.source = cell.source.replace('case_name = ""', f'case_name = "{case_name}"')
-                    elif (
-                            'accept_rule_btn' in cell.source or 'toolbar' in cell.source or 'TARGET_FUNC_NAME' in cell.source):
-                        cell.source = re.sub(r'COMM_FILE\s*=\s*[ru]?["\'].*?["\']',
-                                             f'COMM_FILE = r"{self.communication_file}"', cell.source)
-                        cell.source = re.sub(r'TARGET_FUNC_NAME\s*=\s*[ru]?["\'].*?["\']',
-                                             f'TARGET_FUNC_NAME = "{func_name}"', cell.source)
-
-                    # Set up all non-function cells to be hidden but auto-run
-                    cell.metadata = getattr(cell, 'metadata', {})
-                    cell.metadata.update({
-                        'tags': ['hide-input', 'init_cell'],
-                        'jupyter': {'source_hidden': True},
-                        'init_cell': True,  # Key for auto-execution
-                        'trusted': True,
-                        'editable': False,
-                        'deletable': False
-                    })
-
-                    # Only hide outputs for non-visualization cells
-                    if not ('render_svg' in cell.source and 'display(svg_output)' in cell.source):
-                        cell.metadata['jupyter']['outputs_hidden'] = True
-                        cell.metadata['tags'].append('hide-output')
 
         return nb
 

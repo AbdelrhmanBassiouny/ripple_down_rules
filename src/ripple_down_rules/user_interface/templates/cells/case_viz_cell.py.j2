@@ -1,0 +1,263 @@
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Dict, List, Optional, Any
+from abc import ABC, abstractmethod
+
+
+class CellType(Enum):
+    """Enum for notebook cell types."""
+    CODE = "code"
+    MARKDOWN = "markdown"
+
+
+@dataclass
+class CellMetadata:
+    """Base metadata for notebook cells."""
+    editable: bool = True
+    deletable: bool = True
+    init_cell: bool = False
+    tags: List[str] = field(default_factory=list)
+    jupyter: Dict[str, Any] = field(default_factory=dict)
+    trusted: bool = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert metadata to dictionary for nbformat."""
+        result = {
+            'editable': self.editable,
+            'deletable': self.deletable,
+            'init_cell': self.init_cell,
+            'trusted': self.trusted,
+        }
+        if self.tags:
+            result['tags'] = self.tags
+        if self.jupyter:
+            result['jupyter'] = self.jupyter
+        return result
+
+
+@dataclass
+class NotebookCell(ABC):
+    """Base class for all notebook cells."""
+    cell_type: CellType
+    source: str
+    metadata: CellMetadata
+    execution_count: Optional[int] = None
+    outputs: List[Dict] = field(default_factory=list)
+
+    @abstractmethod
+    def get_template_context(self) -> Dict[str, Any]:
+        """Return context variables for rendering this cell's template."""
+        pass
+
+    def to_nbformat_cell(self) -> Dict[str, Any]:
+        """Convert to nbformat cell dictionary."""
+        cell = {
+            'cell_type': self.cell_type.value,
+            'source': self.source,
+            'metadata': self.metadata.to_dict(),
+        }
+        if self.cell_type == CellType.CODE:
+            cell['execution_count'] = self.execution_count
+            cell['outputs'] = self.outputs
+        return cell
+
+
+@dataclass
+class InitializationCell(NotebookCell):
+    """Cell for importing modules and setting up database connection."""
+    case_name: str = ""
+    connection_string: str = "rdr@localhost:3306/RDR"
+
+    def __init__(self, case_name: str, connection_string: str = "rdr@localhost:3306/RDR"):
+        self.case_name = case_name
+        self.connection_string = connection_string
+
+        metadata = CellMetadata(
+            editable=False,
+            deletable=False,
+            init_cell=True,
+            tags=['hide-input', 'init_cell'],
+            jupyter={'source_hidden': True, 'outputs_hidden': True}
+        )
+
+        super().__init__(
+            cell_type=CellType.CODE,
+            source="",  # Will be set by template
+            metadata=metadata
+        )
+
+    def get_template_context(self) -> Dict[str, Any]:
+        return {
+            'case_name': self.case_name,
+            'connection_string': self.connection_string
+        }
+
+
+@dataclass
+class DatabaseQueryCell(NotebookCell):
+    """Cell for querying and reconstructing the case from the database."""
+    case_name: str = ""
+
+    def __init__(self, case_name: str):
+        self.case_name = case_name
+
+        metadata = CellMetadata(
+            editable=False,
+            deletable=False,
+            init_cell=True,
+            tags=['hide-input', 'init_cell'],
+            jupyter={'source_hidden': True, 'outputs_hidden': True}
+        )
+
+        super().__init__(
+            cell_type=CellType.CODE,
+            source="",  # Will be set by template
+            metadata=metadata
+        )
+
+    def get_template_context(self) -> Dict[str, Any]:
+        return {
+            'case_name': self.case_name
+        }
+
+
+@dataclass
+class VisualizationSetupCell(NotebookCell):
+    """Cell for setting up SVG visualization utilities."""
+
+    def __init__(self):
+        metadata = CellMetadata(
+            editable=False,
+            deletable=False,
+            init_cell=True,
+            tags=['hide-input', 'init_cell'],
+            jupyter={'source_hidden': True, 'outputs_hidden': True}
+        )
+
+        super().__init__(
+            cell_type=CellType.CODE,
+            source="",  # Will be set by template
+            metadata=metadata
+        )
+
+    def get_template_context(self) -> Dict[str, Any]:
+        return {}
+
+
+@dataclass
+class FunctionCell(NotebookCell):
+    """Cell containing the editable user function."""
+    boilerplate_code: str = ""
+
+    def __init__(self, boilerplate_code: str):
+        self.boilerplate_code = boilerplate_code
+
+        metadata = CellMetadata(
+            editable=True,
+            deletable=False,
+            init_cell=False,
+            tags=[],
+            jupyter={}
+        )
+
+        super().__init__(
+            cell_type=CellType.CODE,
+            source=boilerplate_code,
+            metadata=metadata
+        )
+
+    def get_template_context(self) -> Dict[str, Any]:
+        return {
+            'boilerplate_code': self.boilerplate_code
+        }
+
+
+@dataclass
+class SubmitButtonCell(NotebookCell):
+    """Cell for creating submit/apply buttons and communication logic."""
+    func_name: str = ""
+    comm_file: str = ""
+
+    def __init__(self, func_name: str, comm_file: str):
+        self.func_name = func_name
+        self.comm_file = comm_file
+
+        metadata = CellMetadata(
+            editable=False,
+            deletable=False,
+            init_cell=True,
+            tags=['hide-input', 'init_cell'],
+            jupyter={'source_hidden': True, 'outputs_hidden': False}
+        )
+
+        super().__init__(
+            cell_type=CellType.CODE,
+            source="",  # Will be set by template
+            metadata=metadata
+        )
+
+    def get_template_context(self) -> Dict[str, Any]:
+        return {
+            'func_name': self.func_name,
+            'comm_file': self.comm_file
+        }
+
+
+@dataclass
+class RuleTreeVisualizationCell(NotebookCell):
+    """Cell for displaying the rule tree SVG."""
+    case_name: str = ""
+    svg_file_path: str = "./rule_tree.svg"
+
+    def __init__(self, case_name: str, svg_file_path: str = "./rule_tree.svg"):
+        self.case_name = case_name
+        self.svg_file_path = svg_file_path
+
+        metadata = CellMetadata(
+            editable=False,
+            deletable=False,
+            init_cell=True,
+            tags=['hide-input', 'init_cell'],
+            jupyter={'source_hidden': True, 'outputs_hidden': False}
+        )
+
+        super().__init__(
+            cell_type=CellType.CODE,
+            source="",  # Will be set by template
+            metadata=metadata
+        )
+
+    def get_template_context(self) -> Dict[str, Any]:
+        return {
+            'case_name': self.case_name,
+            'svg_file_path': self.svg_file_path
+        }
+
+
+@dataclass
+class CaseVisualizationCell(NotebookCell):
+    """Cell for rendering the case object as SVG."""
+    case_name: str = ""
+
+    def __init__(self, case_name: str):
+        self.case_name = case_name
+
+        metadata = CellMetadata(
+            editable=False,
+            deletable=False,
+            init_cell=True,
+            tags=['hide-input', 'init_cell'],
+            jupyter={'source_hidden': True, 'outputs_hidden': False}
+        )
+
+        super().__init__(
+            cell_type=CellType.CODE,
+            source="",  # Will be set by template
+            metadata=metadata
+        )
+
+    def get_template_context(self) -> Dict[str, Any]:
+        return {
+            'case_name': self.case_name
+        }
+

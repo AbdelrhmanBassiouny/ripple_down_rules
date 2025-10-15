@@ -1,0 +1,34 @@
+import ipywidgets as widgets
+from IPython.display import display, Image, HTML
+from ripple_down_rules.user_interface.object_diagram import generate_object_graph
+import os
+
+svg_output = widgets.HTML()
+
+def render_svg(obj, name="Example"):
+    """Generate and display object diagram for the given object."""
+    try:
+        graph = generate_object_graph(obj, name=name)
+        svg_data = graph.pipe(format="svg").decode("utf-8")
+        svg_output.value = svg_data
+    except Exception as e:
+        svg_output.value = f"<p style='color:red;'>Error generating diagram: {e}</p>"
+
+# Display case object diagram (dynamic - updates when Apply Rule is clicked)
+if case is not None:
+    render_svg(case, name=case_name)
+    display(widgets.HTML("<h3>Case Object Diagram</h3>"))
+    display(svg_output)
+else:
+    display(widgets.HTML("<p style='color:orange;'>No case loaded</p>"))
+
+# Display rule tree visualization (static - shows RDR knowledge base structure)
+rule_tree_path = './rule_tree.svg'
+if os.path.exists(rule_tree_path):
+    display(widgets.HTML("<h3>Rule Tree</h3>"))
+    try:
+        display(Image(filename=rule_tree_path))
+    except Exception as e:
+        print(f"Could not display rule tree: {e}")
+else:
+    print("Rule tree visualization not available (no rules yet)")

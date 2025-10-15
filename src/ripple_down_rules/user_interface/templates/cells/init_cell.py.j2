@@ -1,0 +1,16 @@
+import importlib
+import sqlalchemy
+from sqlalchemy import select
+from ormatic.dao import *
+from ripple_down_rules.orm_interface import *
+
+# Configuration
+COMM_FILE = r"{{ comm_file }}"
+TARGET_FUNC_NAME = "{{ func_name }}"
+case_name = "{{ case_name }}"
+connection_string = "{{ connection_string }}"
+
+# Database setup
+engine = sqlalchemy.create_engine("mysql+pymysql://" + connection_string)
+session = sqlalchemy.orm.Session(engine)
+

@@ -18,8 +18,8 @@ from .JupyterNotebookManager import JupyterNotebookManager
 from ..datastructures.case import Case
 from ..datastructures.dataclasses import CaseQuery
 from ..datastructures.enums import Editor, PromptFor
-from ..utils import str_to_snake_case, get_imports_from_scope, make_list, stringify_hint, \
-    get_imports_from_types, extract_function_or_class_file, extract_imports, get_types_to_import_from_type_hints, \
+from ..utils import str_to_snake_case, make_list, stringify_hint, \
+    get_imports_from_types, extract_imports, get_types_to_import_from_type_hints, \
     extract_function_or_class_from_source, get_full_class_name
 
 
@@ -117,27 +117,33 @@ class TemplateFileCreator:
         case_name = get_full_class_name(self.case_query.case_type)
         print("Creating notebook for case: ", case_name)
 
-        template_notebook_path = os.path.join(os.path.dirname(__file__), "notebook_template.ipynb")
-        print("Template notebook path: ", template_notebook_path)
         user_interface_dir = os.path.dirname(__file__)  # Gets directory of the current file
-        #with checking
-        self.case_query.render_rule_tree(os.path.join(os.path.dirname(__file__), "rule_tree"), view=False)
+        self.case_query.render_rule_tree(os.path.join(user_interface_dir, "rule_tree"), view=False)
 
+        # Use new cell-based architecture
+        template_dir = os.path.join(user_interface_dir, "templates")
         notebook_manager = JupyterNotebookManager(
-            template_path=template_notebook_path,
+            template_dir=template_dir,
             output_dir=user_interface_dir
         )
+
+        # Load SVG data if available
+        svg_path = os.path.join(user_interface_dir, "rule_tree.svg")
+        svg_data = None
+        if os.path.exists(svg_path):
+            with open(svg_path, 'r') as f:
+                svg_data = f.read()
 
         print("Notebook manager: ", notebook_manager)
         # Create notebook with case_name and boilerplate_code (returns data, doesn't save)
         received_function_source = notebook_manager.create_and_run_notebook(
             case_name=case_name,
             boilerplate_code=boilerplate_code,
-            func_name=self.func_name
+            func_name=self.func_name,
+            svg_data=svg_data
         )
-        print("Received function source: ", received_function_source)
-        # Strip function to just body before returning
-        if received_function_source:
+        if received_function_source is not None:
+            print("Received function source: ", received_function_source)
             return TemplateFileCreator.load_from_source(
                 received_function_source, self.func_name, self.print_func
             )
@@ -217,34 +223,7 @@ class TemplateFileCreator:
         except Exception as e:
             self.print_func(f"{Fore.RED}ERROR deleting database case: {e}{Style.RESET_ALL}")
 
-    def strip_function_to_body(self, function_code: str, func_name: str) -> str:
-        """Strip function definition and indentation to return just the body."""
-        if not function_code:
-            return function_code
 
-        lines = function_code.split('\n')
-        body_lines = []
-        in_function = False
-
-        for line in lines:
-            if line.strip().startswith(f'def {func_name}('):
-                in_function = True
-                continue  # Skip def line
-            elif in_function:
-                # Check if we've reached end of function (next function/class/unindented line)
-                if line.strip() and not line.startswith('    ') and not line.startswith('\t'):
-                    break
-                # Remove indentation (4 spaces or 1 tab)
-                if line.startswith('    '):
-                    body_lines.append(line[4:])
-                elif line.startswith('\t'):
-                    body_lines.append(line[1:])
-                elif line.strip() == '':
-                    body_lines.append('')  # Keep empty lines
-                else:
-                    body_lines.append(line)  # Keep lines with different indentation
-
-        return '\n'.join(body_lines).strip()
 
     def open_file_in_editor(self, file_path: Optional[str] = None):
         """
