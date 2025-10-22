@@ -213,10 +213,8 @@ class VisualizationCell(NotebookCell):
     when the Apply Rule button is clicked. The rule tree is static and shows
     the current state of the RDR knowledge base.
     """
-    svg_data: Optional[str] = None
 
-    def __init__(self, svg_data: Optional[str] = None):
-        self.svg_data = svg_data
+    def __init__(self):
 
         metadata = CellMetadata(
             editable=False,
@@ -267,17 +265,6 @@ if case is not None:
     display(svg_output)
 else:
     display(widgets.HTML("<p style='color:orange;'>No case loaded</p>"))
-
-# Display rule tree visualization (static - shows RDR knowledge base structure)
-rule_tree_path = './rule_tree.svg'
-if os.path.exists(rule_tree_path):
-    display(widgets.HTML("<h3>Rule Tree</h3>"))
-    try:
-        display(Image(filename=rule_tree_path))
-    except Exception as e:
-        print(f"Could not display rule tree: {e}")
-else:
-    print("Rule tree visualization not available (no rules yet)")
 """
         return base_code
 
@@ -432,13 +419,74 @@ display(toolbar)
 """
 
 
+@dataclass
+class RuleTreeCell(NotebookCell):
+    """
+    Cell that displays the static rule tree visualization.
+
+    Shows the pre-generated SVG of the RDR knowledge base structure.
+    This visualization does not change during the session.
+    """
+    svg_file_path: Optional[str] = None
+
+    def __init__(self, svg_file_path: Optional[str] = None):
+        self.svg_file_path = svg_file_path
+
+        metadata = CellMetadata(
+            editable=False,
+            deletable=False,
+            init_cell=True,
+            tags=['init_cell', 'hide-input'],
+            jupyter={'source_hidden': True}
+        )
+
+        super().__init__(
+            cell_type=CellType.CODE,
+            metadata=metadata
+        )
+
+    def __post_init__(self):
+        if not hasattr(self, 'cell_type'):
+            self.cell_type = CellType.CODE
+        if not hasattr(self, 'metadata'):
+            self.metadata = CellMetadata(
+                editable=False,
+                deletable=False,
+                init_cell=True,
+                tags=['init_cell', 'hide-input'],
+                jupyter={'source_hidden': True}
+            )
+
+    def get_source(self) -> str:
+        if self.svg_file_path:
+            return f"""from IPython.display import display, HTML
+import os
+
+# Display static rule tree visualization
+display(HTML("<h3>Rule Tree (Current Knowledge Base)</h3>"))
+
+svg_path = r"{self.svg_file_path}"
+if os.path.exists(svg_path):
+    with open(svg_path, 'r', encoding='utf-8') as f:
+        svg_content = f.read()
+    display(HTML(svg_content))
+else:
+    display(HTML("<p style='color: orange;'>Rule tree file not found</p>"))
+"""
+        else:
+            return """from IPython.display import display, HTML
+
+display(HTML("<h3>Rule Tree</h3>"))
+display(HTML("<p style='color: #666;'>No rule tree available (knowledge base is empty)</p>"))
+"""
+
 def create_standard_notebook_cells(
     case_name: str,
     func_name: str,
     boilerplate_code: str,
     comm_file: str,
     connection_string: str = "rdr@localhost:3306/RDR",
-    svg_data: Optional[str] = None
+    svg_file_path: Optional[str] = None
 ) -> List[NotebookCell]:
     """
     Create the standard set of cells for an RDR notebook.
@@ -462,8 +510,9 @@ def create_standard_notebook_cells(
             connection_string=connection_string
         ),
         DatabaseQueryCell(case_name=case_name),
-        VisualizationCell(svg_data=svg_data),
+        VisualizationCell(),
         FunctionCell(boilerplate_code=boilerplate_code),
-        SubmitButtonCell(func_name=func_name)
+        SubmitButtonCell(func_name=func_name),
+        RuleTreeCell(svg_file_path=svg_file_path)
     ]
     return cells

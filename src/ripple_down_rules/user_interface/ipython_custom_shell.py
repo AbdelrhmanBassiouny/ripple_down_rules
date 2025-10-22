@@ -159,26 +159,11 @@ class IPythonShell:
         Run the embedded shell.
         """
         try:
-            code_lines, updates = self.shell.my_magics.rule_editor.edit()
-            if not code_lines:
-                raise RuntimeError("No function code returned from notebook")
-            self.shell.all_lines = code_lines
-            if updates:
-                self.case_query.scope.update(updates)
-
-            # build the encapsulated function string to execute later
-            self.user_input = encapsulate_code_lines_into_a_function(
-                code_lines,
-                self.shell.my_magics.rule_editor.func_name,
-                self.shell.my_magics.rule_editor.function_signature,
-                self.shell.my_magics.rule_editor.func_doc,
-                self.case_query
-            )
-
-        except Exception as e:
-            logging.error(e)
-            print(f"{Fore.RED}ERROR::{e}{Style.RESET_ALL}")
-            exit(1)
+            self.shell(local_ns=self.case_query.scope)
+        except EOFError:
+            pass
+        finally:
+            self.update_user_input_from_code_lines()
 
     def update_user_input_from_code_lines(self):
         """
@@ -188,13 +173,13 @@ class IPythonShell:
             self.user_input = None
         else:
             self.all_code_lines = self.shell.all_lines
-            print(self.all_code_lines)
-            #self.all_code_lines = extract_dependencies(self.shell.all_lines)
             if len(self.all_code_lines) == 1 and self.all_code_lines[0].strip() == '':
                 self.user_input = None
             else:
-                self.user_input = encapsulate_code_lines_into_a_function(self.all_code_lines,
-                                                       function_name=self.shell.my_magics.rule_editor.func_name,
-                                                       function_signature=self.shell.my_magics.rule_editor.function_signature,
-                                                       func_doc=self.shell.my_magics.rule_editor.func_doc,
-                                                       case_query=self.case_query)
+                self.user_input = encapsulate_code_lines_into_a_function(
+                    self.all_code_lines,
+                    function_name=self.shell.my_magics.rule_editor.func_name,
+                    function_signature=self.shell.my_magics.rule_editor.function_signature,
+                    func_doc=self.shell.my_magics.rule_editor.func_doc,
+                    case_query=self.case_query
+                )

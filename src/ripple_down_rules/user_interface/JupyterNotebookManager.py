@@ -3,7 +3,7 @@ import subprocess
 import time
 import json
 import nbformat
-from typing import Optional, List
+from typing import Optional, List, Callable
 from jinja2 import Environment, FileSystemLoader
 
 from .notebook_cells import (
@@ -30,12 +30,84 @@ class JupyterNotebookManager:
         self.process: Optional[subprocess.Popen] = None
         self.env = Environment(loader=FileSystemLoader(template_dir))
 
+    def run_workflow_from_case_query(
+        self,
+        case_query,  # CaseQuery type
+        prompt_for,  # PromptFor type
+        rdr_instance,
+        print_func: Callable[[str], None] = print
+    ) -> Optional[str]:
+        """
+        Execute complete notebook workflow from case query.
+
+        Args:
+            case_query: The case query to prompt for
+            prompt_for: Type of prompt (Conditions/Conclusion)
+            rdr_instance: RDR instance for visualization
+            print_func: Function for console output
+
+        Returns:
+            Formatted function source code, or None if cancelled
+        """
+        # Import here to avoid circular dependencies
+        from .template_file_creator import TemplateFileCreator
+
+        # Create template from case_query
+        template = TemplateFileCreator(case_query, prompt_for)
+
+        # Generate SVG if RDR instance has visualization
+        svg_file_path = None
+        if rdr_instance and hasattr(rdr_instance, 'rdr_dot') and rdr_instance.rdr_dot:
+            try:
+                user_interface_dir = os.path.dirname(__file__)
+                case_query.render_rule_tree(
+                    os.path.join(user_interface_dir, "rule_tree"),
+                    view=False
+                )
+                svg_file_path = os.path.join(user_interface_dir, "rule_tree.svg")
+                if not os.path.exists(svg_file_path):
+                    svg_file_path = None
+            except Exception as e:
+                print_func(f"Warning: Could not generate rule tree: {e}")
+
+        # Build boilerplate code
+        boilerplate_code = template.build_boilerplate_code()
+        func_name = template.func_name
+
+        # Get case name
+        from ..utils import get_full_class_name
+        case_name = get_full_class_name(case_query.case_type)
+
+        # Create and run notebook
+        raw_source = self.create_and_run_notebook(
+            case_name=case_name,
+            boilerplate_code=boilerplate_code,
+            func_name=func_name,
+            svg_file_path=svg_file_path
+        )
+
+        # Return None if cancelled
+        if raw_source is None:
+            return None
+
+        # Parse and format source code
+        try:
+            all_code_lines, updates = TemplateFileCreator.load_from_source(
+                raw_source, func_name, print_func
+            )
+            if all_code_lines is None:
+                return None
+            return '\n'.join(all_code_lines)
+        except Exception as e:
+            print_func(f"Error parsing function: {e}")
+            raise
+
     def create_and_run_notebook(
         self,
         case_name: str,
         boilerplate_code: str,
         func_name: str,
-        svg_data: Optional[str] = None,
+        svg_file_path: Optional[str] = None,
         connection_string: str = "rdr@localhost:3306/RDR"
     ) -> Optional[str]:
         """
@@ -51,6 +123,7 @@ class JupyterNotebookManager:
         Returns:
             Function source code as string, or None if interaction failed
         """
+        os.makedirs(self.output_dir, exist_ok=True)
         self.notebook_path = os.path.join(self.output_dir, "rdr_active_notebook.ipynb")
         self.communication_file = os.path.join(self.output_dir, ".rdr_notebook_comm.json")
 
@@ -64,7 +137,7 @@ class JupyterNotebookManager:
             boilerplate_code=boilerplate_code,
             comm_file=self.communication_file,
             connection_string=connection_string,
-            svg_data=svg_data
+            svg_file_path=svg_file_path
         )
 
         # Build notebook from cells

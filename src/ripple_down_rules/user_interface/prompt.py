@@ -1,7 +1,10 @@
 import ast
 import logging
 import sys
+import os
 from _ast import AST
+
+from pandas.core.config_init import use_numba_doc
 
 from .. import logger
 
@@ -38,6 +41,8 @@ class UserPrompt:
         """
         self.viewer = RDRCaseViewer.instances[0] if RDRCaseViewer and any(RDRCaseViewer.instances) else None
         self.print_func = self.viewer.print if self.viewer else print
+        self._current_case_query: Optional[CaseQuery] = None
+        self._current_prompt_for: Optional[PromptFor] = None
 
     def prompt_user_for_expression(self, case_query: CaseQuery, prompt_for: PromptFor, prompt_str: Optional[str] = None) \
             -> Tuple[Optional[str], Optional[CallableExpression]]:
@@ -118,7 +123,11 @@ class UserPrompt:
             prompt_str = case_query.current_value_str
             self.viewer.update_for_case_query(case_query, prompt_for=prompt_for, code_to_modify=code_to_modify,
                                               title=prompt_for_str, prompt_str=prompt_str)
-        user_input, expression_tree = self.prompt_user_input_and_parse_to_expression(shell=shell)
+        user_input, expression_tree = self.prompt_user_input_and_parse_to_expression(
+            shell=shell,
+            case_query=case_query,
+            prompt_for=prompt_for
+        )
         logger.debug("Exited shell")
         return user_input, expression_tree
 
@@ -153,47 +162,122 @@ class UserPrompt:
         prompt_str = f"{Fore.MAGENTA}{prompt_str}{Fore.YELLOW}\n(Write %help for guide){Fore.RESET}\n"
         return prompt_str
 
-    def prompt_user_input_and_parse_to_expression(self, shell: Optional[IPythonShell] = None,
-                                                  user_input: Optional[str] = None) \
-            -> Tuple[Optional[str], Optional[ast.AST]]:
+    def prompt_user_input_and_parse_to_expression(
+        self,
+        shell: Optional[IPythonShell] = None,
+        user_input: Optional[str] = None,
+        case_query: Optional[CaseQuery] = None,
+        prompt_for: Optional[PromptFor] = None
+    ) -> Tuple[Optional[str], Optional[ast.AST]]:
         """
         Prompt the user for input.
 
         :param shell: The Ipython shell to use for prompting the user.
         :param user_input: The user input to use. If given, the user input will be used instead of prompting the user.
+        :param case_query: Case being processed (for notebook mode)
+        :param prompt_for: Type of prompt (for notebook mode)
         :return: The user input and the AST tree.
         """
-        while True:
-            if user_input is None:
-                user_input = self.start_shell_and_get_user_input(shell=shell)
-                if user_input is None or user_input in ['exit', 'quit']:
-                    return user_input, None
-                if logger.level <= logging.DEBUG:
-                    self.print_func(f"\n{Fore.GREEN}Captured User input: {Style.RESET_ALL}")
-                    highlighted_code = highlight(user_input, PythonLexer(), TerminalFormatter())
-                    self.print_func(highlighted_code)
-            try:
-                return user_input, parse_string_to_expression(user_input)
-            except Exception as e:
-                msg = f"Error parsing expression: {e}"
-                logging.error(msg)
-                self.print_func(f"\n{Fore.RED}{msg}{Style.RESET_ALL}")
-                user_input = None
+        # Store for nested call to start_shell_and_get_user_input
+        self._current_case_query = case_query
+        self._current_prompt_for = prompt_for
 
-    def start_shell_and_get_user_input(self, shell: Optional[IPythonShell] = None) -> Optional[str]:
+        try:
+            while True:
+                if user_input is None:
+                    user_input = self.start_shell_and_get_user_input(
+                        shell=shell,
+                        case_query=self._current_case_query,
+                        prompt_for=self._current_prompt_for
+                    )
+                    if user_input is None or user_input in ['exit', 'quit']:
+                        return user_input, None
+                    if logger.level <= logging.DEBUG:
+                        self.print_func(f"\n{Fore.GREEN}Captured User input: {Style.RESET_ALL}")
+                        highlighted_code = highlight(user_input, PythonLexer(), TerminalFormatter())
+                        self.print_func(highlighted_code)
+                try:
+                    return user_input, parse_string_to_expression(user_input)
+                except Exception as e:
+                    msg = f"Error parsing expression: {e}"
+                    logging.error(msg)
+                    self.print_func(f"\n{Fore.RED}{msg}{Style.RESET_ALL}")
+                    user_input = None
+        finally:
+            # Cleanup temporary storage
+            self._current_case_query = None
+            self._current_prompt_for = None
+
+    def _run_notebook_workflow(
+        self,
+        case_query: CaseQuery,
+        prompt_for: PromptFor
+    ) -> Optional[str]:
+        """
+        Execute notebook workflow for user input.
+
+        Args:
+            case_query: Case being processed
+            prompt_for: Type of prompt (Conditions/Conclusion)
+
+        Returns:
+            User input string, or None if cancelled
+        """
+        # Import here to avoid loading unnecessary modules in non-notebook mode
+        from .JupyterNotebookManager import JupyterNotebookManager
+
+        # Get RDR instance from case_query context (if available)
+        rdr_instance = case_query.scope.get('rdr_instance', None)
+
+        # Create notebook manager
+        notebook_manager = JupyterNotebookManager(
+            template_dir=os.path.join(os.path.dirname(__file__), 'templates'),
+            output_dir=os.path.expanduser('~/.rdr_notebooks')
+        )
+
+        # Execute workflow with all context
+        user_input = notebook_manager.run_workflow_from_case_query(
+            case_query=case_query,
+            prompt_for=prompt_for,
+            rdr_instance=rdr_instance,
+            print_func=self.print_func
+        )
+
+        return user_input
+
+    def start_shell_and_get_user_input(
+        self,
+        shell: Optional[IPythonShell] = None,
+        case_query: Optional[CaseQuery] = None,
+        prompt_for: Optional[PromptFor] = None
+    ) -> Optional[str]:
         """
         Start the shell and get user input.
 
         :param shell: The Ipython shell to use for prompting the user.
+        :param case_query: Case being processed (for notebook mode)
+        :param prompt_for: Type of prompt (for notebook mode)
         :return: The user input.
         """
-        if self.viewer is None:
+        # Check environment variable for notebook mode
+        #use_notebook = os.getenv('RDR_USE_NOTEBOOK_GUI', 'false').lower() == 'true'
+        use_notebook = True # FORCE NOTEBOOK MODE FOR TESTING
+        # BRANCH 1: IPython Shell (default) - MODIFIED CONDITION
+        if self.viewer is None and not use_notebook:
             shell = IPythonShell() if shell is None else shell
             if not hasattr(shell.shell, "auto_match"):
-                shell.shell.auto_match = True  # or True, depending on your preference
+                shell.shell.auto_match = True
             shell.run()
             user_input = shell.user_input
-        else:
+
+        # BRANCH 2: Jupyter Notebook - NEW BRANCH
+        elif self.viewer is None and use_notebook:
+            if case_query is None or prompt_for is None:
+                raise ValueError('case_query and prompt_for are required for notebook mode')
+            user_input = self._run_notebook_workflow(case_query, prompt_for)
+
+        # BRANCH 3: Qt GUI - COMPLETELY UNCHANGED
+        elif self.viewer is not None:
             app = QApplication.instance()
             if app is None:
                 raise RuntimeError("QApplication instance is None. Please run the application first.")
@@ -202,4 +286,8 @@ class UserPrompt:
             if self.viewer.exit_status == ExitStatus.CLOSE:
                 sys.exit()
             user_input = self.viewer.user_input
+
+        else:
+            raise RuntimeError('Invalid UI configuration state')
+
         return user_input

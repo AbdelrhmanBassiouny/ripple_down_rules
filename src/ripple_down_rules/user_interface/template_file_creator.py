@@ -114,41 +114,18 @@ class TemplateFileCreator:
         boilerplate_code = self.build_boilerplate_code()
         self.write_to_file(boilerplate_code)
         self.create_case_in_database()
-        case_name = get_full_class_name(self.case_query.case_type)
-        print("Creating notebook for case: ", case_name)
 
-        user_interface_dir = os.path.dirname(__file__)  # Gets directory of the current file
-        self.case_query.render_rule_tree(os.path.join(user_interface_dir, "rule_tree"), view=False)
+        # Restore original flow
+        self.open_file_in_editor()
 
-        # Use new cell-based architecture
-        template_dir = os.path.join(user_interface_dir, "templates")
-        notebook_manager = JupyterNotebookManager(
-            template_dir=template_dir,
-            output_dir=user_interface_dir
-        )
+        # Wait for user to edit and then load
+        input(f"{Fore.YELLOW}Press Enter after editing the file...{Style.RESET_ALL}")
 
-        # Load SVG data if available
-        svg_path = os.path.join(user_interface_dir, "rule_tree.svg")
-        svg_data = None
-        if os.path.exists(svg_path):
-            with open(svg_path, 'r') as f:
-                svg_data = f.read()
+        all_code_lines, updates = self.load(self.temp_file_path, self.func_name, self.print_func)
 
-        print("Notebook manager: ", notebook_manager)
-        # Create notebook with case_name and boilerplate_code (returns data, doesn't save)
-        received_function_source = notebook_manager.create_and_run_notebook(
-            case_name=case_name,
-            boilerplate_code=boilerplate_code,
-            func_name=self.func_name,
-            svg_data=svg_data
-        )
-        if received_function_source is not None:
-            print("Received function source: ", received_function_source)
-            return TemplateFileCreator.load_from_source(
-                received_function_source, self.func_name, self.print_func
-            )
+        self.delete_database_case()
 
-        return None, None
+        return all_code_lines, updates
 
     def create_case_in_database(self):
         connection_string = "rdr@localhost:3306/RDR"  # os.getenv("RDR_DATABASE_URL")
