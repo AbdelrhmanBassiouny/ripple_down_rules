@@ -227,7 +227,7 @@ class UserPrompt:
         from .JupyterNotebookManager import JupyterNotebookManager
 
         # Get RDR instance from case_query context (if available)
-        rdr_instance = case_query.scope.get('rdr_instance', None)
+        rdr_instance = case_query.rdr
 
         # Create notebook manager
         notebook_manager = JupyterNotebookManager(

@@ -5,7 +5,7 @@ This module provides an OOP architecture for creating notebook cells with specif
 functionality in the RDR system. Each cell type encapsulates its own logic, metadata,
 and rendering behavior.
 """
-
+import os
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Any
@@ -502,6 +502,7 @@ def create_standard_notebook_cells(
     Returns:
         List of NotebookCell instances in the correct order.
     """
+    connection_string = os.getenv("RDR_DATABASE_URL") or connection_string
     cells = [
         InitializationCell(
             comm_file=comm_file,

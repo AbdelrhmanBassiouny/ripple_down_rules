@@ -11,6 +11,7 @@ from textwrap import indent, dedent
 import sqlalchemy
 from colorama import Fore, Style
 from ormatic.dao import to_dao
+from sqlalchemy import text
 from typing_extensions import Optional, Type, List, Callable, Tuple, Dict, Any, Union
 import re
 
@@ -128,7 +129,7 @@ class TemplateFileCreator:
         return all_code_lines, updates
 
     def create_case_in_database(self):
-        connection_string = "rdr@localhost:3306/RDR"  # os.getenv("RDR_DATABASE_URL")
+        connection_string = os.getenv("RDR_DATABASE_URL") or "rdr@localhost:3306/RDR"
         engine = sqlalchemy.create_engine("mysql+pymysql://" + connection_string)
         session = sqlalchemy.orm.Session(engine)
 
@@ -138,6 +139,12 @@ class TemplateFileCreator:
         # from ormatic import *
         module = importlib.import_module("ripple_down_rules.orm_interface")
         print(f"Module: {module}")
+        database_name = connection_string.split("/")[-1]
+        with engine.connect() as conn:
+            conn.execute(text(f"DROP DATABASE {database_name}"))
+            conn.execute(text(f"CREATE DATABASE {database_name}"))
+        engine = sqlalchemy.create_engine("mysql+pymysql://" + connection_string)
+        session = sqlalchemy.orm.Session(engine)
         module.Base.metadata.create_all(engine)
         print(f"Base: {module.Base}")
         # this is the case structure

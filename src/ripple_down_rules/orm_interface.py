@@ -34,22 +34,6 @@ class WorldEntityDAO(Base, DataAccessObject[ripple_down_rules.datasets.WorldEnti
         'polymorphic_identity': 'WorldEntityDAO',
     }
 
-class PhysicalObjectDAO(Base, DataAccessObject[ripple_down_rules.datasets.PhysicalObject]):
-    __tablename__ = 'PhysicalObjectDAO'
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-
-
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    polymorphic_type: Mapped[str] = mapped_column(String(255), nullable=False)
-
-
-
-    __mapper_args__ = {
-        'polymorphic_on': 'polymorphic_type',
-        'polymorphic_identity': 'PhysicalObjectDAO',
-    }
-
 class WorldDAO(Base, DataAccessObject[ripple_down_rules.datasets.World]):
     __tablename__ = 'WorldDAO'
 
@@ -63,6 +47,24 @@ class WorldDAO(Base, DataAccessObject[ripple_down_rules.datasets.World]):
     connections: Mapped[List[ConnectionDAO]] = relationship('ConnectionDAO', foreign_keys='[ConnectionDAO.worlddao_connections_id]', post_update=True)
     views: Mapped[List[ViewDAO]] = relationship('ViewDAO', foreign_keys='[ViewDAO.worlddao_views_id]', post_update=True)
 
+
+class PhysicalObjectDAO(Base, DataAccessObject[ripple_down_rules.datasets.PhysicalObject]):
+    __tablename__ = 'PhysicalObjectDAO'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    polymorphic_type: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    physicalobjectdao_contained_objects_id: Mapped[Optional[int]] = mapped_column(ForeignKey('PhysicalObjectDAO.id', use_alter=True), nullable=True)
+
+    contained_objects: Mapped[List[PhysicalObjectDAO]] = relationship('PhysicalObjectDAO', foreign_keys='[PhysicalObjectDAO.physicalobjectdao_contained_objects_id]', post_update=True)
+
+    __mapper_args__ = {
+        'polymorphic_on': 'polymorphic_type',
+        'polymorphic_identity': 'PhysicalObjectDAO',
+    }
 
 class BaseDAO(Base, DataAccessObject[ripple_down_rules.datasets.Base]):
     __tablename__ = 'BaseDAO'

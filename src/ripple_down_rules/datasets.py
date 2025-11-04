@@ -133,7 +133,7 @@ class PhysicalObject:
     """
     The name of the object.
     """
-    _contained_objects: List[PhysicalObject] = field(default_factory=list)
+    contained_objects: List[PhysicalObject] = field(default_factory=list)
     """
     The list of objects contained in this object.
     """
@@ -151,14 +151,6 @@ class PhysicalObject:
     """
     The RDR decorator that is used to determine if the object is a robot or not.
     """
-
-    @property
-    def contained_objects(self) -> List[PhysicalObject]:
-        return self._contained_objects
-
-    @contained_objects.setter
-    def contained_objects(self, value: List[PhysicalObject]):
-        self._contained_objects = value
 
     @_is_a_robot_rdr.decorator
     def is_a_robot(self) -> bool:

@@ -78,6 +78,8 @@ class JupyterNotebookManager:
         from ..utils import get_full_class_name
         case_name = get_full_class_name(case_query.case_type)
 
+        template.create_case_in_database()
+
         # Create and run notebook
         raw_source = self.create_and_run_notebook(
             case_name=case_name,
