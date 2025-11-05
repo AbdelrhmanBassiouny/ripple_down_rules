@@ -130,6 +130,8 @@ class TemplateFileCreator:
 
     def create_case_in_database(self):
         connection_string = os.getenv("RDR_DATABASE_URL") or "rdr@localhost:3306/RDR"
+        database_name = connection_string.split("/")[-1]
+        connection_string = connection_string.replace(f"/{database_name}", "")
         engine = sqlalchemy.create_engine("mysql+pymysql://" + connection_string)
         session = sqlalchemy.orm.Session(engine)
 
@@ -139,10 +141,13 @@ class TemplateFileCreator:
         # from ormatic import *
         module = importlib.import_module("ripple_down_rules.orm_interface")
         print(f"Module: {module}")
-        database_name = connection_string.split("/")[-1]
         with engine.connect() as conn:
-            conn.execute(text(f"DROP DATABASE {database_name}"))
+            try:
+                conn.execute(text(f"DROP DATABASE {database_name}"))
+            except sqlalchemy.exc.OperationalError as e:
+                pass
             conn.execute(text(f"CREATE DATABASE {database_name}"))
+        connection_string = connection_string + f"/{database_name}"
         engine = sqlalchemy.create_engine("mysql+pymysql://" + connection_string)
         session = sqlalchemy.orm.Session(engine)
         module.Base.metadata.create_all(engine)
@@ -572,7 +577,7 @@ class TemplateFileCreator:
             print_func(f"{Fore.RED}ERROR:: Function `{func_name}` not found.{Style.RESET_ALL}")
             return None, None
 
-    def __del__(self):
-        if hasattr(self, 'process') and self.process is not None and self.process.poll() is None:
-            self.process.terminate()  # Graceful shutdown
-            self.process.wait()  # Ensure cleanup
+    # def __del__(self):
+    #     if hasattr(self, 'process') and self.process is not None and self.process.poll() is None:
+    #         self.process.terminate()  # Graceful shutdown
+    #         self.process.wait()  # Ensure cleanup

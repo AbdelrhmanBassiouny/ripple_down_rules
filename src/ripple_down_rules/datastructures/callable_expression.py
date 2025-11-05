@@ -160,7 +160,10 @@ class CallableExpression(SubclassJSONSerializer):
                 scope = {'case': case, **self.scope}
                 output = eval(self.code, scope)
                 if output is None:
-                    output = scope['_get_value'](case)
+                    if self.user_defined_name and self.user_defined_name in scope:
+                        output = scope[self.user_defined_name](case)
+                    else:
+                        output = scope[self.encapsulating_function_name](case)
                 if self.conclusion_type is not None:
                     if self.mutually_exclusive and issubclass(type(output), (list, set)):
                         raise ValueError(f"Mutually exclusive types cannot be lists or sets, got {type(output)}")
@@ -317,7 +320,7 @@ def parse_string_to_expression(expression_str: str) -> AST:
     :param expression_str: The string which will be parsed.
     :return: The parsed expression.
     """
-    if not expression_str.startswith(f"def {CallableExpression.encapsulating_function_name}"):
+    if not expression_str.startswith(f"def"): #not expression_str.startswith(f"def {CallableExpression.encapsulating_function_name}"):
         expression_str = encapsulate_user_input(expression_str, CallableExpression.get_encapsulating_function())
     mode = 'exec' if expression_str.startswith('def') else 'eval'
     tree = ast.parse(expression_str, mode=mode)

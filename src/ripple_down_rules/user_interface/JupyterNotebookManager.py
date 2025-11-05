@@ -240,7 +240,8 @@ class JupyterNotebookManager:
             env['PYTHONPATH'] = f"{project_root}:{python_path}" if python_path else project_root
 
             self.process = subprocess.Popen(
-                ['jupyter', 'notebook', self.notebook_path],
+                # ['jupyter', 'notebook', self.notebook_path],
+                  ['pycharm', self.notebook_path],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env
             )
         except FileNotFoundError:
@@ -251,9 +252,9 @@ class JupyterNotebookManager:
         """Waits for the communication file from the notebook or for the server to close."""
         start_time = time.time()
         while time.time() - start_time < timeout:
-            if self.process and self.process.poll() is not None:
-                print("Jupyter process terminated.")
-                return None
+            # if self.process and self.process.poll() is not None:
+            #     print("Jupyter process terminated.")
+            #     return None
             if os.path.exists(self.communication_file):
                 with open(self.communication_file, 'r') as f:
                     data = json.load(f)
