@@ -926,7 +926,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                     rule.conclusion_name = conclusion_name
                 user_input = functions_source[rule.generated_conclusion_function_name]
                 split_user_input = user_input.split("\n")
-                user_input = '\n'.join(split_user_input[1:])
+                tree = ast.parse(user_input)
+                user_input = ast.unparse(tree.body[0].body)
                 conclusion_func = defs_module.__dict__.get(rule.generated_conclusion_function_name)
                 if conclusion_func is None:
                     function_signature = split_user_input[0]
