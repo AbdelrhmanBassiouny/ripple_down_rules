@@ -113,6 +113,10 @@ class RDRDecorator:
     """
     Metadata that contains the case factory method, and the scenario that is being run during the case query.
     """
+    generated_classifier: Optional[Callable] = field(init=False, default=None)
+    """
+    The generated classifier file of the rdr model, this is used when `use_generated_classifier` is set to `True`.
+    """
 
     def decorator(self, func: Callable) -> Callable:
 
@@ -149,10 +153,11 @@ class RDRDecorator:
                     scenario=self.case_factory_metadata.scenario,
                     this_case_target_value=self.case_factory_metadata.this_case_target_value)
                 output = self.rdr.fit_case(case_query, expert=self.expert,
-                                           update_existing_rules=self.update_existing_rules)
+                                           update_existing_rules=self.update_existing_rules,
+                                           ask_now=self.ask_now)
                 return output
 
-            if self.fit and not self.use_generated_classifier and self.ask_now(case_dict):
+            if self.fit and not self.use_generated_classifier:
                 output = fit()
             else:
                 if self.use_generated_classifier:

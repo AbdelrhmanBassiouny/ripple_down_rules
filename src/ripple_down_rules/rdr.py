@@ -404,8 +404,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         if case_query.target is None:
             case_query_cp = copy(case_query)
             conclusions = self.classify(case_query_cp.case, modify_case=True, case_query=case_query_cp)
-            if (self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp, update_existing_rules)
-                    and ask_now(case_query_cp.case)):
+            should_ask = self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp, update_existing_rules)
+            if should_ask or ask_now(case_query_cp.case):
                 expert.ask_for_conclusion(case_query_cp)
                 case_query.target = case_query_cp.target
             if case_query.target is None:
@@ -442,8 +442,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             if case_query.attribute_name not in conclusions:
                 return True
             conclusions = conclusions[case_query.attribute_name]
-        conclusion_types = map(type, make_list(conclusions))
-        if not any(ct in case_query.core_attribute_type for ct in conclusion_types):
+        conclusion_values = make_list(conclusions)
+        if any(not isinstance(cv, case_query.core_attribute_type) for cv in conclusion_values):
             return True
         elif update_existing:
             return True
