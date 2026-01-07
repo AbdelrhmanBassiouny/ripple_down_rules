@@ -1420,7 +1420,7 @@ class MultiClassRDR(RDRWithCodeWriter):
 
     def _get_types_to_import(self) -> Tuple[Set[Union[Type, Callable]], Set[Type], Set[Type]]:
         main_types, defs_types, cases_types = super()._get_types_to_import()
-        main_types.add(get_an_updated_case_copy)
+        main_types.update({get_an_updated_case_copy, update_case_with_conclusion_output})
         main_types.update({Set, make_set})
         defs_types.update({List, Set})
         return main_types, defs_types, cases_types
