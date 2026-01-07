@@ -454,7 +454,7 @@ def conclusion_to_str(conclusion_: Any) -> str:
         return str(conclusion_)
 
 
-def update_case(case_query: CaseQuery, conclusions: Dict[str, Any]):
+def update_case_in_case_query(case_query: CaseQuery, conclusions: Dict[str, Any]):
     """
     Update the case with the conclusions.
 
@@ -465,6 +465,8 @@ def update_case(case_query: CaseQuery, conclusions: Dict[str, Any]):
         return
     if len(conclusions) == 0:
         return
+    if not isinstance(conclusions, dict):
+        conclusions = {case_query.attribute_name: conclusions}
     if isinstance(case_query.original_case, SQLTable) or is_dataclass(case_query.original_case):
         for conclusion_name, conclusion in conclusions.items():
             attribute = getattr(case_query.case, conclusion_name)

@@ -14,7 +14,7 @@ from typing_extensions import Type, Optional, Callable, Any, Dict, TYPE_CHECKING
 from .datastructures.case import create_case, Case
 from .datastructures.dataclasses import CaseQuery
 from .utils import calculate_precision_and_recall, get_method_args_as_dict, get_func_rdr_model_name
-from .utils import get_func_rdr_model_name, copy_case, make_set, update_case
+from .utils import get_func_rdr_model_name, copy_case, make_set, update_case_in_case_query
 
 if TYPE_CHECKING:
     from .rdr import RippleDownRules
@@ -58,7 +58,7 @@ def general_rdr_classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDow
                     conclusions[attribute_name].update(pred_atts)
             if attribute_name in new_conclusions:
                 temp_case_query = CaseQuery(case_cp, attribute_name, rdr.conclusion_type, rdr.mutually_exclusive)
-                update_case(temp_case_query, new_conclusions)
+                update_case_in_case_query(temp_case_query, new_conclusions)
         if len(new_conclusions) == 0 or len(classifiers_dict) == 1 and list(classifiers_dict.values())[
             0].mutually_exclusive:
             break
@@ -103,6 +103,22 @@ def load_or_create_func_rdr_model(func, model_dir: str, rdr_type: Type[RippleDow
     return rdr
 
 
+def update_case_with_conclusion_output(case: Case, output: Callable, attribute_name: str, conclusion_type: Tuple[Type, ...],
+                             mutually_exclusive: bool) -> None:
+    """
+    :param case: The case to update.
+    :param output: The output of the conclusion to add to the case.
+    :param attribute_name: The name of the attribute to update.
+    :param conclusion_type: The type of the conclusion to update.
+    :param mutually_exclusive: Whether the rule belongs to a mutually exclusive RDR.
+    """
+    temp_case_query = CaseQuery(case, attribute_name, conclusion_type,
+                                mutually_exclusive=mutually_exclusive)
+    if not isinstance(output, Dict):
+        output = {attribute_name: output}
+    update_case_in_case_query(temp_case_query, output)
+
+
 def get_an_updated_case_copy(case: Case, conclusion: Callable, attribute_name: str, conclusion_type: Tuple[Type, ...],
                              mutually_exclusive: bool) -> Case:
     """
@@ -119,7 +135,7 @@ def get_an_updated_case_copy(case: Case, conclusion: Callable, attribute_name: s
     output = conclusion(case_cp)
     if not isinstance(output, Dict):
         output = {attribute_name: output}
-    update_case(temp_case_query, output)
+    update_case_in_case_query(temp_case_query, output)
     return case_cp
 
 def enable_gui():

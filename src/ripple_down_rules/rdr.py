@@ -34,7 +34,7 @@ from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode, RDREdge
 from .experts import Expert, Human
-from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy
+from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy, update_case_with_conclusion_output
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule, MultiClassRefinementRule, \
     MultiClassFilterRule
 
@@ -47,7 +47,7 @@ from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_t
     is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree, \
     get_types_to_import_from_func_type_hints, get_function_return_type, get_file_that_ends_with, \
     get_and_import_python_module, get_and_import_python_modules_in_a_package, get_type_from_type_hint, \
-    are_results_subclass_of_types
+    are_results_subclass_of_types, update_case_in_case_query, copy_case
 
 
 class RippleDownRules(SubclassJSONSerializer, ABC):
@@ -1316,10 +1316,13 @@ class MultiClassRDR(RDRWithCodeWriter):
                   case_query: Optional[CaseQuery] = None) -> Set[Any]:
         evaluated_rule = self.start_rule
         self.conclusions = []
+        case_cp = copy_case(case) if not modify_case else case
         while evaluated_rule:
-            next_rule = evaluated_rule(case)
+            next_rule = evaluated_rule(case_cp)
             if evaluated_rule.fired:
-                rule_conclusion = evaluated_rule.conclusion(case)
+                rule_conclusion = evaluated_rule.conclusion(case_cp)
+                if rule_conclusion:
+                    rule_conclusion = make_set(rule_conclusion) - make_set(self.conclusions)
                 if evaluated_rule.corner_case_metadata is None and case_query is not None:
                     if rule_conclusion is not None and len(make_list(rule_conclusion)) > 0 \
                             and any(
@@ -1333,6 +1336,11 @@ class MultiClassRDR(RDRWithCodeWriter):
                         if are_results_subclass_of_types(rule_conclusion_types, case_query.core_attribute_type):
                             evaluated_rule.contributed_to_case_query = True
                 self.add_conclusion(rule_conclusion)
+                if rule_conclusion:
+                    if case_query and modify_case:
+                        update_case_in_case_query(case_query, rule_conclusion)
+                    else:
+                        update_case_with_conclusion_output(case_cp, rule_conclusion, self.attribute_name, self.conclusion_type, self.mutually_exclusive)
             evaluated_rule = next_rule
         return make_set(self.conclusions)
 
