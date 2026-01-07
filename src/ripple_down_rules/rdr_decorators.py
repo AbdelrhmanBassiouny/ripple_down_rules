@@ -78,6 +78,10 @@ class RDRDecorator:
     Whether to generate a dynamic dot file representing the state of the rule tree each time the rdr is queried, showing
     which rules fired and which rules didn't get evaluated, ...etc.
     """
+    regenerate_model: bool = field(default=False)
+    """
+    Whether to regenerate the rdr model from scratch or not, this is useful when rdr package has been updated.
+    """
     model_name: Optional[str] = field(default=None)
     """
     The name of the rdr model, this gets auto generated from the function signature and the class/file it is contained
@@ -189,6 +193,8 @@ class RDRDecorator:
     def initialize_rdr_model_name_and_load(self, func: Callable) -> None:
         self.model_name = get_func_rdr_model_name(func, include_file_name=True)
         self.load()
+        if self.regenerate_model:
+            self.rdr.save(self.models_dir, self.model_name)
 
     def parse_output_type(self, func: Callable, output_type: Any, *args) -> List[Type]:
         parsed_output_type = []

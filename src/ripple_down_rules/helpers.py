@@ -9,7 +9,7 @@ from types import ModuleType
 
 from typing_extensions import Tuple, Callable, Dict, Any, Optional, Sequence, get_type_hints
 
-from typing_extensions import Type, Optional, Callable, Any, Dict, TYPE_CHECKING, Union
+from typing_extensions import Type, Optional, Callable, Any, Dict, TYPE_CHECKING, Union, Iterable
 
 from .datastructures.case import create_case, Case
 from .datastructures.dataclasses import CaseQuery
@@ -103,7 +103,7 @@ def load_or_create_func_rdr_model(func, model_dir: str, rdr_type: Type[RippleDow
     return rdr
 
 
-def update_case_with_conclusion_output(case: Case, output: Callable, attribute_name: str, conclusion_type: Tuple[Type, ...],
+def update_case_with_conclusion_output(case: Case, output: Iterable[Any], attribute_name: str, conclusion_type: Tuple[Type, ...],
                              mutually_exclusive: bool) -> None:
     """
     :param case: The case to update.
