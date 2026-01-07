@@ -704,12 +704,13 @@ class MultiClassTopRule(Rule, HasRefinementRule, HasAlternativeRule):
         func, func_call = super().get_conclusion_as_source_code(str(conclusion), parent_indent=parent_indent)
         conclusion_str = func_call.replace("return ", "").strip()
         indent = parent_indent + " " * 4
-        rule_conclusion_statement = f"{indent}rule_conclusion = make_set({conclusion_str})\n"
-        new_conclusions_statement = f"{indent}new_conclusions = rule_conclusion - conclusions\n"
-        update_if_statement = f"{indent}if new_conclusions:\n"
-        conclusions_update_statement = f"{indent}    conclusions.update(new_conclusions)\n"
-        case_update_statement = f"{indent}    update_case_with_conclusion_output(case, new_conclusions, attribute_name, conclusion_type, mutually_exclusive)\n"
-        statement = rule_conclusion_statement + new_conclusions_statement + update_if_statement + conclusions_update_statement + case_update_statement
+        statement = (f"{indent}update_case_and_conclusions_with_rule_output(case, conclusions, {conclusion_str},"
+                                     f"attribute_name, conclusion_type, mutually_exclusive)\n")
+        # new_conclusions_statement = f"{indent}new_conclusions = rule_conclusion - conclusions\n"
+        # update_if_statement = f"{indent}if new_conclusions:\n"
+        # conclusions_update_statement = f"{indent}    conclusions.update(new_conclusions)\n"
+        # case_update_statement = f"{indent}    update_case_with_conclusion_output(case, new_conclusions, attribute_name, conclusion_type, mutually_exclusive)\n"
+        # statement = rule_conclusion_statement + new_conclusions_statement + update_if_statement + conclusions_update_statement + case_update_statement
         return func, statement
 
     def _if_statement_source_code_clause(self) -> str:

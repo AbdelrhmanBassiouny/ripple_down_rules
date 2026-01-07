@@ -2,23 +2,21 @@ from __future__ import annotations
 
 import ast
 import importlib
-import json
 import os
-import sys
 from abc import ABC, abstractmethod
 from copy import copy
-from dataclasses import is_dataclass
 from io import TextIOWrapper
-from os.path import dirname
 from pathlib import Path
 from types import NoneType, ModuleType
 
 from ripple_down_rules.datastructures.dataclasses import CaseFactoryMetaData
+
 from . import logger
 from .failures import RDRLoadError
 
 try:
     from matplotlib import pyplot as plt
+
     Figure = plt.Figure
 except ImportError as e:
     logger.debug(f"{e}: matplotlib is not installed")
@@ -34,7 +32,8 @@ from .datastructures.case import Case, CaseAttribute, create_case
 from .datastructures.dataclasses import CaseQuery
 from .datastructures.enums import MCRDRMode, RDREdge
 from .experts import Expert, Human
-from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy, update_case_with_conclusion_output
+from .helpers import is_matching, general_rdr_classify, get_an_updated_case_copy, \
+    update_case_and_conclusions_with_rule_output, update_case_with_conclusion_output
 from .rules import Rule, SingleClassRule, MultiClassTopRule, MultiClassStopRule, MultiClassRefinementRule, \
     MultiClassFilterRule
 
@@ -45,7 +44,7 @@ except ImportError as e:
 from .utils import draw_tree, make_set, SubclassJSONSerializer, make_list, get_type_from_string, \
     is_value_conflicting, extract_function_or_class_file, extract_imports, get_full_class_name, \
     is_iterable, str_to_snake_case, get_import_path_from_path, get_imports_from_types, render_tree, \
-    get_types_to_import_from_func_type_hints, get_function_return_type, get_file_that_ends_with, \
+    get_function_return_type, get_file_that_ends_with, \
     get_and_import_python_module, get_and_import_python_modules_in_a_package, get_type_from_type_hint, \
     are_results_subclass_of_types, update_case_in_case_query, copy_case
 
@@ -101,7 +100,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         self.save_dir: Optional[str] = save_dir
         self.start_rule: Optional[Rule] = start_rule
         self.fig: Optional[Figure] = None
-        self.viewer: Optional[RDRCaseViewer] = RDRCaseViewer.instances[0]\
+        self.viewer: Optional[RDRCaseViewer] = RDRCaseViewer.instances[0] \
             if RDRCaseViewer and any(RDRCaseViewer.instances) else None
         self.input_node: Optional[Rule] = None
         self.update_model()
@@ -137,7 +136,8 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         try:
             self.name = module.name if hasattr(module, "name") else self.start_rule.conclusion_name
             self.case_type = module.case_type
-            self.case_name = module.case_name if hasattr(module, "case_name") else f"{self.case_type.__name__}.{self.name}"
+            self.case_name = module.case_name if hasattr(module,
+                                                         "case_name") else f"{self.case_type.__name__}.{self.name}"
         except AttributeError as e:
             logger.warning(f"Could not update the RDR metadata from the module {module.__name__}. "
                            f"Make sure the module has the required attributes: {e}")
@@ -400,7 +400,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         case_query.rdr = self
 
         expert = expert or Human(answers_save_path=self.save_dir + '/expert_answers'
-                                 if self.save_dir else None)
+        if self.save_dir else None)
         if case_query.target is None:
             case_query_cp = copy(case_query)
             conclusions = self.classify(case_query_cp.case, modify_case=True, case_query=case_query_cp)
@@ -649,7 +649,7 @@ class TreeBuilder(ast.NodeVisitor, ABC):
         for stmt in node.orelse:
             self.current_edge = self.get_alternative_edge(node)
             self.current_parent = new_node
-            if isinstance(stmt, ast.If): # elif case
+            if isinstance(stmt, ast.If):  # elif case
                 self.visit_If(stmt)
             else:  # else case (return)
                 self.process_else_statement(stmt)
@@ -714,6 +714,7 @@ class TreeBuilder(ast.NodeVisitor, ABC):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             return node.func.id
         return None
+
 
 class SingleClassTreeBuilder(TreeBuilder):
     """Parses an AST of generated SingleClassRDR classifier and reconstructs the rdr tree."""
@@ -818,6 +819,7 @@ class MultiClassTreeBuilder(TreeBuilder):
         """Handles the else statement in the if-elif-else block."""
         pass
 
+
 class RDRWithCodeWriter(RippleDownRules, ABC):
 
     @classmethod
@@ -881,9 +883,9 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         all_func_names = condition_func_names + conclusion_func_names
 
         main_module, defs_module, cases_module = self.get_and_import_model_python_modules(
-                                                        model_dir,
-                                                        python_file_path=python_file_path,
-                                                        parent_package_name=parent_package_name)
+            model_dir,
+            python_file_path=python_file_path,
+            parent_package_name=parent_package_name)
         self.generated_python_file_name = Path(main_module.__file__).name.replace(".py", "")
 
         self.update_rdr_metadata_from_python(main_module)
@@ -916,7 +918,8 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
                     try:
                         rule.corner_case_metadata = cases_module.__dict__[rule.generated_corner_case_object_name]
                     except KeyError:
-                        case_def_lines = [l for l in cases_source.split('\n') if rule.generated_corner_case_object_name in l]
+                        case_def_lines = [l for l in cases_source.split('\n') if
+                                          rule.generated_corner_case_object_name in l]
                         if len(case_def_lines) > 0:
                             case_def_line = case_def_lines[0].split('=')[-1].strip()
                             rule.corner_case_metadata = eval(case_def_line, cases_scope)
@@ -942,7 +945,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
     @classmethod
     def get_and_import_model_python_modules(cls, model_dir: str,
                                             python_file_path: Optional[str] = None,
-                                            parent_package_name: Optional[str] = None)\
+                                            parent_package_name: Optional[str] = None) \
             -> Tuple[ModuleType, ModuleType, ModuleType]:
         """
         Get and import the python modules that contain the RDR classifier function, definitions, and corner cases.
@@ -1171,7 +1174,8 @@ class SingleClassRDR(RDRWithCodeWriter):
             self.default_conclusion = case_query.default_value
 
         pred = self.evaluate(case_query.case)
-        if (not pred.fired and self.default_conclusion is None) or pred.conclusion(case_query.case) != case_query.target_value:
+        if (not pred.fired and self.default_conclusion is None) or pred.conclusion(
+                case_query.case) != case_query.target_value:
             expert.ask_for_conditions(case_query, pred)
             pred.fit_rule(case_query)
 
@@ -1340,7 +1344,8 @@ class MultiClassRDR(RDRWithCodeWriter):
                     if case_query and modify_case:
                         update_case_in_case_query(case_query, rule_conclusion)
                     else:
-                        update_case_with_conclusion_output(case_cp, rule_conclusion, self.attribute_name, self.conclusion_type, self.mutually_exclusive)
+                        update_case_with_conclusion_output(case_cp, rule_conclusion, self.attribute_name,
+                                                           self.conclusion_type, self.mutually_exclusive)
             evaluated_rule = next_rule
         return make_set(self.conclusions)
 
@@ -1420,7 +1425,7 @@ class MultiClassRDR(RDRWithCodeWriter):
 
     def _get_types_to_import(self) -> Tuple[Set[Union[Type, Callable]], Set[Type], Set[Type]]:
         main_types, defs_types, cases_types = super()._get_types_to_import()
-        main_types.update({get_an_updated_case_copy, update_case_with_conclusion_output})
+        main_types.update({get_an_updated_case_copy, update_case_and_conclusions_with_rule_output})
         main_types.update({Set, make_set})
         defs_types.update({List, Set})
         return main_types, defs_types, cases_types
