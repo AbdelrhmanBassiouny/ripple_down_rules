@@ -373,7 +373,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                  expert: Optional[Expert] = None,
                  update_existing_rules: bool = True,
                  scenario: Optional[Callable] = None,
-                 ask_now: Callable = lambda _: True,
+                 ask_now: Callable = lambda _: False,
                  clear_expert_answers: bool = True,
                  **kwargs) \
             -> Union[CallableExpression, Dict[str, CallableExpression]]:

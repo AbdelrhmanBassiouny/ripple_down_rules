@@ -60,7 +60,7 @@ class RDRDecorator:
     Whether to use the generated classifier files of the rdr model instead of the RDR instance itself, this is useful
     when you want to debug inside the rules.
     """
-    ask_now: Callable[Dict[str, Any], bool] = field(default=lambda _: True)
+    ask_now: Callable[Dict[str, Any], bool] = field(default=lambda _: False)
     """
     A user provided callable function that outputs a boolean indicating when to ask the expert for an answer. The input
     to the `ask_now` function is a dictionary with the original function arguments, while arguments like `self` and
