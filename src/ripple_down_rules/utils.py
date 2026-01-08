@@ -1523,10 +1523,9 @@ def copy_case(case: Union[Case, SQLTable]) -> Union[Case, SQLTable, Any]:
         return copy_orm_instance_with_relationships(case)
     else:
         # copy the case recursively for 1 level
-        # try:
-        #     case_copy = deepcopy(case)
-        # except Exception as e:
         case_copy = copy(case)
+        if isinstance(case, (dict, UserDict)):
+            return case_copy
         for attr in dir(case):
             if attr.startswith("_") or callable(getattr(case, attr)):
                 continue

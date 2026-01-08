@@ -48,7 +48,7 @@ def general_rdr_classify(classifiers_dict: Dict[str, Union[ModuleType, RippleDow
             else:
                 pred_atts = make_set(pred_atts)
                 if attribute_name in conclusions:
-                    pred_atts = {p for p in pred_atts if p not in conclusions[attribute_name]}
+                    pred_atts = pred_atts - conclusions[attribute_name]
                 if len(pred_atts) > 0:
                     new_conclusions[attribute_name] = pred_atts
                     if attribute_name not in conclusions:
@@ -115,29 +115,33 @@ def update_case_and_conclusions_with_rule_output(case: Case, conclusions: Set[An
     :param mutually_exclusive: Whether the rule belongs to a mutually exclusive RDR.
     """
     output = make_set(output)
-    new_conclusions = output - conclusions
-    if new_conclusions:
+    new_conclusions = update_case_with_conclusion_output(
+        case, output, attribute_name, conclusion_type, mutually_exclusive
+    )
+    if len(new_conclusions) > 0:
         conclusions.update(new_conclusions)
-        update_case_with_conclusion_output(
-            case, new_conclusions, attribute_name, conclusion_type, mutually_exclusive
-        )
 
 
 def update_case_with_conclusion_output(case: Case, output: Iterable[Any], attribute_name: str,
                                        conclusion_type: Tuple[Type, ...],
-                                       mutually_exclusive: bool) -> None:
+                                       mutually_exclusive: bool) -> Set[Any]:
     """
     :param case: The case to update.
     :param output: The output of the conclusion to add to the case.
     :param attribute_name: The name of the attribute to update.
     :param conclusion_type: The type of the conclusion to update.
     :param mutually_exclusive: Whether the rule belongs to a mutually exclusive RDR.
+    :return: Whether the case was updated or not.
     """
+    new_conclusions = make_set(output) - make_set(getattr(case, attribute_name, []))
+    if len(new_conclusions) == 0:
+        return new_conclusions
     temp_case_query = CaseQuery(case, attribute_name, conclusion_type,
                                 mutually_exclusive=mutually_exclusive)
     if not isinstance(output, Dict):
         output = {attribute_name: output}
     update_case_in_case_query(temp_case_query, output)
+    return new_conclusions
 
 
 def get_an_updated_case_copy(case: Case, conclusion: Callable, attribute_name: str, conclusion_type: Tuple[Type, ...],

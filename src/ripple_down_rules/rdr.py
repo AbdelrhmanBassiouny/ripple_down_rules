@@ -1035,7 +1035,9 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             self.write_rdr_metadata_to_pyton_file(f)
             f.write(f"\n\n{func_def}")
             f.write(f"{' ' * 4}if not isinstance(case, Case):\n"
-                    f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n""")
+                    f"{' ' * 4}    case = create_case(case, max_recursion_idx=3)\n"
+                    f"{' ' * 4}else:\n"
+                    f"{' ' * 4}    case = copy_case(case)\n")
 
         # Write the rules as source code to the main file
         self.write_rules_as_source_code_to_file(self.start_rule, file_name, " " * 4, defs_file=defs_file_name,
@@ -1071,7 +1073,7 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
         main_types.update(make_set(self.conclusion_type))
         main_types.update({Union, Optional})
         defs_types.add(Union)
-        main_types.update({Case, create_case})
+        main_types.update({Case, create_case, copy_case})
         # main_types = main_types.difference(defs_types)
         return main_types, defs_types, cases_types
 
