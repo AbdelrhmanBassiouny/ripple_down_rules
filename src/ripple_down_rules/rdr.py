@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import importlib
 import os
+import sys
 from abc import ABC, abstractmethod
 from copy import copy
 from io import TextIOWrapper
@@ -601,8 +602,11 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :return: The module that contains the rdr classifier function.
         """
         # remove from imports if exists first
-        package_name = get_import_path_from_path(package_name)
-        name = f"{package_name}.{self.generated_python_file_name}" if package_name else self.generated_python_file_name
+        package_name_importable = get_import_path_from_path(package_name)
+        generated_file_name = self.generated_python_file_name
+        if generated_file_name is None:
+            generated_file_name = Path(self.get_generated_python_file_path(package_name)).name
+        name = f"{package_name_importable}.{generated_file_name}" if package_name_importable else generated_file_name
         module = importlib.import_module(name)
         importlib.reload(module)
         return module.classify
