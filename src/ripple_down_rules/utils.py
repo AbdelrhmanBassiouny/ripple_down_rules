@@ -435,7 +435,12 @@ def build_user_input_from_conclusion(conclusion: Any) -> str:
     """
 
     # set user_input to the string representation of the conclusion
-    if isinstance(conclusion, set):
+    if isinstance(conclusion, Callable):
+        user_input = inspect.getsource(conclusion)
+        ast_code = ast.parse(dedent(user_input))
+        function_body = ast.unparse(ast_code.body[0].body)
+        user_input = function_body
+    elif isinstance(conclusion, set):
         user_input = '{' + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + '}'
     elif isinstance(conclusion, list):
         user_input = '[' + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + ']'
@@ -450,6 +455,8 @@ def build_user_input_from_conclusion(conclusion: Any) -> str:
 def conclusion_to_str(conclusion_: Any) -> str:
     if isinstance(conclusion_, Enum):
         return type(conclusion_).__name__ + '.' + conclusion_.name
+    elif isinstance(conclusion_, type):
+        return conclusion_.__name__
     else:
         return str(conclusion_)
 
@@ -478,7 +485,9 @@ def update_case_in_case_query(case_query: CaseQuery, conclusions: Dict[str, Any]
                 for c in conclusion:
                     attribute.update(make_set(c))
             elif isinstance(attribute, list):
-                attribute.extend(conclusion)
+                for c in conclusion:
+                    if c not in attribute:
+                        attribute.append(c)
             elif any(at in {List, list} for at in attribute_type):
                 attribute = [] if attribute is None else attribute
                 attribute.extend(conclusion)

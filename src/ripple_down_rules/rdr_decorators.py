@@ -66,6 +66,10 @@ class RDRDecorator:
     to the `ask_now` function is a dictionary with the original function arguments, while arguments like `self` and
     `cls` are passed as a special key `self_` or `cls_` respectively.
     """
+    ask_now_target: Optional[Any] = field(default=None)
+    """
+    A target for the case that triggers the ask now function.
+    """
     fitting_decorator: Optional[Callable] = field(default=lambda f: f)
     """
     A user provided decorator that wraps the `py:meth:ripple_down_rules.rdr.RippleDownRules.fit_case` method which is 
@@ -158,7 +162,7 @@ class RDRDecorator:
                     this_case_target_value=self.case_factory_metadata.this_case_target_value)
                 output = self.rdr.fit_case(case_query, expert=self.expert,
                                            update_existing_rules=self.update_existing_rules,
-                                           ask_now=self.ask_now)
+                                           ask_now=self.ask_now, ask_now_target=self.ask_now_target)
                 return output
 
             if self.fit and not self.use_generated_classifier:

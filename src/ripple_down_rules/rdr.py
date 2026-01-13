@@ -376,6 +376,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
                  scenario: Optional[Callable] = None,
                  ask_now: Callable = lambda _: False,
                  clear_expert_answers: bool = True,
+                 ask_now_target: Optional[Any] = None,
                  **kwargs) \
             -> Union[CallableExpression, Dict[str, CallableExpression]]:
         """
@@ -389,6 +390,7 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
         :param scenario: The scenario at which the case was created, this is used to recreate the case if needed.
         :param ask_now: Whether to ask the expert for refinements or alternatives.
         :param clear_expert_answers: Whether to clear expert answers after saving the new rule.
+        :param ask_now_target: The target output for the case that is triggers the ask_now function to return True.
         :return: The category that the case belongs to.
         """
         if case_query is None:
@@ -406,7 +408,10 @@ class RippleDownRules(SubclassJSONSerializer, ABC):
             case_query_cp = copy(case_query)
             conclusions = self.classify(case_query_cp.case, modify_case=True, case_query=case_query_cp)
             should_ask = self.should_i_ask_the_expert_for_a_target(conclusions, case_query_cp, update_existing_rules)
-            if should_ask or ask_now(case_query_cp.case):
+            ask_now_value = ask_now(case_query_cp.case)
+            if ask_now_value and ask_now_target:
+                case_query.target = CallableExpression(conclusion=ask_now_target, conclusion_type=case_query.attribute_type, mutually_exclusive=self.mutually_exclusive)
+            elif should_ask or ask_now_value:
                 expert.ask_for_conclusion(case_query_cp)
                 case_query.target = case_query_cp.target
             if case_query.target is None:
@@ -1067,7 +1072,14 @@ class RDRWithCodeWriter(RippleDownRules, ABC):
             for scope in [rule.conditions.scope, rule.conclusion.scope]:
                 if scope is None:
                     continue
-                defs_types.update(make_set(scope.values()))
+                scope_values = set()
+                for scope_value in scope.values():
+                    try:
+                        hash(scope_value)
+                        scope_values.add(scope_value)
+                    except TypeError:
+                        continue
+                defs_types.update(scope_values)
             corner_case_types = rule.get_corner_case_types_to_import()
             if corner_case_types is not None:
                 cases_types.update(corner_case_types)
@@ -1371,9 +1383,8 @@ class MultiClassRDR(RDRWithCodeWriter):
         target_value = make_set(case_query.target_value)
         while evaluated_rule:
             next_rule = evaluated_rule(case_query.case)
-            rule_conclusion = evaluated_rule.conclusion(case_query.case)
-
             if evaluated_rule.fired:
+                rule_conclusion = evaluated_rule.conclusion(case_query.case)
                 if not make_set(rule_conclusion).issubset(target_value):
                     # Rule fired and conclusion is different from target
                     self.stop_wrong_conclusion_else_add_it(case_query, expert, evaluated_rule)
